@@ -1,0 +1,7 @@
+name,category,use_case,build_or_buy,cost_signal,url,notes
+Google Forms / Typeform,validacion,"Capturar entrevistas, demanda y solicitudes de turno sin construir app.",buy/free,bajo,https://www.google.com/forms/about/,Suficiente para etapa concierge.
+Calendly / Google Calendar,agenda,Coordinar disponibilidad inicial con profesionales.,buy/free,bajo,https://calendly.com/,Evita construir agenda propia al inicio.
+Mercado Pago,pagos,Cobrar consultas privadas/coseguros y emitir comprobante operativo.,buy,variable por transaccion,https://www.mercadopago.com.ar/,Revisar split payments y obligaciones fiscales.
+WhatsApp Business,concierge,"Atencion humana, orientacion inicial y coordinacion de beta.",buy/free,bajo,https://www.whatsapp.com/business/,Canal natural para MVP manual.
+Jitsi Meet,teleconsulta,Videollamada simple para beta sin construir video propio.,buy/free/open,bajo,https://jitsi.org/,Validar privacidad y consentimiento antes de uso clinico.
+n8n,automatizacion,"Automatizar carga de formularios, recordatorios y reportes.",buy/open,bajo/medio,https://n8n.io/,Util para operar solo.
