@@ -353,7 +353,7 @@ el primer error obliga al cliente a corregir de a uno.
 
 ## 5. Servicio
 
-Tres reglas que necesitan consultar el repositorio, y por eso no pueden vivir en
+Dos reglas que necesitan consultar el repositorio, y por eso no pueden vivir en
 el dominio:
 
 1. **La matrícula es única.** Es la única identidad real de una persona en este
@@ -362,10 +362,13 @@ el dominio:
    `martin-gonzalez-2`, después `martin-gonzalez-3`. El sufijo se resuelve en el
    servicio, no en el dominio. Una colisión de slug **nunca es un error para el
    cliente**: se resuelve sola incrementando el sufijo hasta encontrar uno libre.
-3. **Cambiar la matrícula o la especialidad devuelve `Verification` a `pending`.**
-   Sale directo de `research/program.md`: *"toda orientación, agenda o cobro
-   debería depender de un profesional verificado"*. Si se edita el dato sobre el
-   que se apoya la verificación, la verificación deja de valer.
+Hay una tercera regla —**cambiar la matrícula o la especialidad devuelve
+`Verification` a `pending`**— que sale directo de `research/program.md`: *"toda
+orientación, agenda o cobro debería depender de un profesional verificado"*. Si
+se edita el dato sobre el que se apoya la verificación, la verificación deja de
+valer. Pero esa regla solo necesita comparar el profesional viejo contra el
+nuevo, no el repositorio: **vive en el dominio**, en
+`Professional.ApplyUpdate`.
 
 ```go
 type ProfessionalService struct {
