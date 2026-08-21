@@ -3697,7 +3697,273 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-## Task 10: Handlers y router
+## Task 10: Middleware
+
+**Files:**
+- Create: `apps/api/internal/handler/middleware.go`
+- Test: `apps/api/internal/handler/middleware_test.go`
+
+**Interfaces:**
+- Consumes: `problem.go` (Task 9). No depende de los handlers: por eso va antes.
+- Produces:
+  - `func handler.Chain(http.Handler, ...func(http.Handler) http.Handler) http.Handler`
+  - `func handler.RequestID(http.Handler) http.Handler`
+  - `func handler.LogRequests(http.Handler) http.Handler`
+  - `func handler.RecoverPanic(http.Handler) http.Handler`
+
+- [ ] **Step 1: Escribir los tests**
+
+Archivo `apps/api/internal/handler/middleware_test.go`:
+
+```go
+package handler
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+func TestRequestIDGeneraUnoSiNoViene(t *testing.T) {
+	var seen string
+	h := RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = RequestIDFrom(r.Context())
+	}))
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if seen == "" {
+		t.Error("no se generó un request id")
+	}
+	if rec.Header().Get("X-Request-ID") != seen {
+		t.Error("el request id tenía que volver en el header de la respuesta")
+	}
+}
+
+func TestRequestIDRespetaElQueViene(t *testing.T) {
+	var seen string
+	h := RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = RequestIDFrom(r.Context())
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Request-ID", "trae-el-suyo")
+
+	h.ServeHTTP(httptest.NewRecorder(), req)
+
+	// permite seguir un request a través de varios servicios
+	if seen != "trae-el-suyo" {
+		t.Errorf("request id = %q, se esperaba el que vino en el header", seen)
+	}
+}
+
+func TestRecoverPanicDevuelve500(t *testing.T) {
+	h := RecoverPanic(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("algo explotó")
+	}))
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, se esperaba 500", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != problemContentType {
+		t.Errorf("Content-Type = %q, se esperaba %q", ct, problemContentType)
+	}
+	// el mensaje del panic no puede llegarle al cliente
+	if strings.Contains(rec.Body.String(), "algo explotó") {
+		t.Error("el mensaje del panic se filtró al cliente")
+	}
+}
+
+func TestChainAplicaEnOrden(t *testing.T) {
+	var order []string
+
+	mark := func(name string) func(http.Handler) http.Handler {
+		return func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				order = append(order, name)
+				next.ServeHTTP(w, r)
+			})
+		}
+	}
+
+	final := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		order = append(order, "handler")
+	})
+
+	Chain(final, mark("primero"), mark("segundo")).
+		ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+
+	want := []string{"primero", "segundo", "handler"}
+	if len(order) != len(want) {
+		t.Fatalf("orden = %v, se esperaba %v", order, want)
+	}
+	for i := range want {
+		if order[i] != want[i] {
+			t.Fatalf("orden = %v, se esperaba %v", order, want)
+		}
+	}
+}
+```
+
+- [ ] **Step 2: Correr los tests y verificar que fallan**
+
+Run: `cd apps/api && go test ./internal/handler/ -run 'TestRequestID|TestRecover|TestChain' -v`
+Expected: FAIL con `undefined: RequestID`
+
+- [ ] **Step 3: Implementar el middleware**
+
+Archivo `apps/api/internal/handler/middleware.go`:
+
+```go
+package handler
+
+import (
+	"context"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+const requestIDHeader = "X-Request-ID"
+
+type contextKey string
+
+const requestIDKey contextKey = "requestID"
+
+// Chain envuelve el handler. El primer middleware de la lista es el más
+// externo: el primero en ver el request y el último en ver la respuesta.
+func Chain(h http.Handler, mw ...func(http.Handler) http.Handler) http.Handler {
+	for i := len(mw) - 1; i >= 0; i-- {
+		h = mw[i](h)
+	}
+	return h
+}
+
+// RequestID asegura que todo request tenga un identificador. Si el cliente
+// manda uno, se respeta: permite seguir una operación a través de varios
+// servicios en los logs.
+func RequestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.Header.Get(requestIDHeader)
+		if id == "" {
+			id = uuid.NewString()
+		}
+
+		w.Header().Set(requestIDHeader, id)
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestIDKey, id)))
+	})
+}
+
+// RequestIDFrom devuelve el identificador del request, o cadena vacía si el
+// middleware no corrió.
+func RequestIDFrom(ctx context.Context) string {
+	id, _ := ctx.Value(requestIDKey).(string)
+	return id
+}
+
+// statusRecorder captura el código de estado para poder loguearlo: el
+// http.ResponseWriter no lo expone.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+	bytes  int
+}
+
+func (w *statusRecorder) WriteHeader(code int) {
+	w.status = code
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *statusRecorder) Write(b []byte) (int, error) {
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	n, err := w.ResponseWriter.Write(b)
+	w.bytes += n
+	return n, err
+}
+
+func LogRequests(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+
+		next.ServeHTTP(rec, r)
+
+		slog.InfoContext(r.Context(), "request",
+			"requestId", RequestIDFrom(r.Context()),
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", rec.status,
+			"bytes", rec.bytes,
+			"durationMs", time.Since(start).Milliseconds(),
+		)
+	})
+}
+
+// RecoverPanic evita que un panic en un handler tire el proceso entero.
+//
+// Va por dentro de LogRequests para que el log registre el 500 resultante.
+func RecoverPanic(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			rec := recover()
+			if rec == nil {
+				return
+			}
+
+			// el detalle del panic va al log, nunca al cliente
+			slog.ErrorContext(r.Context(), "panic recuperado",
+				"requestId", RequestIDFrom(r.Context()),
+				"panic", rec,
+				"method", r.Method,
+				"path", r.URL.Path,
+			)
+
+			writeProblem(w, Problem{
+				Type:   typeInternal,
+				Title:  "Error interno",
+				Status: http.StatusInternalServerError,
+				Detail: "Ocurrió un error inesperado. Volvé a intentar.",
+			})
+		}()
+
+		next.ServeHTTP(w, r)
+	})
+}
+```
+
+- [ ] **Step 4: Correr toda la suite del paquete handler**
+
+Run: `cd apps/api && go test ./internal/handler/ -v`
+Expected: PASS en los tests del middleware y en los de `problem.go` y `dto.go` de la Task 9.
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd "c:/Users/gianl/Desktop/Salud"
+git add apps/api/internal/handler/
+git commit -m "feat(handler): middleware de request id, logging y recover
+
+RequestID respeta el que manda el cliente: permite seguir una operación
+a través de varios servicios en los logs.
+
+RecoverPanic evita que un handler tire el proceso, y el detalle del
+panic va al log y nunca al cliente.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+```
+
+---
+
+## Task 11: Handlers y router
 
 **Files:**
 - Create: `apps/api/internal/handler/professional.go`
@@ -3705,7 +3971,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Test: `apps/api/internal/handler/professional_test.go`
 
 **Interfaces:**
-- Consumes: `service.Professional` (Tasks 6-7), `problem.go` y `dto.go` (Task 9)
+- Consumes: `service.Professional` (Tasks 6-7), `problem.go` y `dto.go` (Task 9), el middleware (Task 10)
 - Produces:
   - `func handler.NewProfessional(*service.Professional) *handler.ProfessionalHandler`
   - Métodos `Create`, `List`, `GetByID`, `GetBySlug`, `Update`, `Deactivate`, `Reactivate`
@@ -4296,12 +4562,17 @@ func healthz(w http.ResponseWriter, _ *http.Request) {
 }
 ```
 
-- [ ] **Step 5: Correr los tests y verificar que fallan por el middleware**
+- [ ] **Step 5: Correr los tests y verificar que pasan**
 
 Run: `cd apps/api && go test ./internal/handler/ -v`
-Expected: FAIL con `undefined: Chain`, `undefined: RequestID`. El middleware es la Task 11.
+Expected: PASS en todos los tests del paquete, incluidos los del middleware de la Task 10.
 
-- [ ] **Step 6: Commit parcial**
+- [ ] **Step 6: Correr toda la suite con detector de carreras**
+
+Run: `cd apps/api && go test ./... -race`
+Expected: PASS en `domain`, `repository/memory`, `service` y `handler`.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 cd "c:/Users/gianl/Desktop/Salud"
@@ -4314,279 +4585,6 @@ no un recurso que falta.
 
 El ServeMux de la stdlib alcanza: desde Go 1.22 entiende método y
 parámetros de ruta.
-
-Falta el middleware para que compile.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
-```
-
----
-
-## Task 11: Middleware
-
-**Files:**
-- Create: `apps/api/internal/handler/middleware.go`
-- Test: `apps/api/internal/handler/middleware_test.go`
-
-**Interfaces:**
-- Consumes: `problem.go` (Task 9)
-- Produces:
-  - `func handler.Chain(http.Handler, ...func(http.Handler) http.Handler) http.Handler`
-  - `func handler.RequestID(http.Handler) http.Handler`
-  - `func handler.LogRequests(http.Handler) http.Handler`
-  - `func handler.RecoverPanic(http.Handler) http.Handler`
-
-- [ ] **Step 1: Escribir los tests**
-
-Archivo `apps/api/internal/handler/middleware_test.go`:
-
-```go
-package handler
-
-import (
-	"net/http"
-	"net/http/httptest"
-	"strings"
-	"testing"
-)
-
-func TestRequestIDGeneraUnoSiNoViene(t *testing.T) {
-	var seen string
-	h := RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seen = RequestIDFrom(r.Context())
-	}))
-
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-
-	if seen == "" {
-		t.Error("no se generó un request id")
-	}
-	if rec.Header().Get("X-Request-ID") != seen {
-		t.Error("el request id tenía que volver en el header de la respuesta")
-	}
-}
-
-func TestRequestIDRespetaElQueViene(t *testing.T) {
-	var seen string
-	h := RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seen = RequestIDFrom(r.Context())
-	}))
-
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("X-Request-ID", "trae-el-suyo")
-
-	h.ServeHTTP(httptest.NewRecorder(), req)
-
-	// permite seguir un request a través de varios servicios
-	if seen != "trae-el-suyo" {
-		t.Errorf("request id = %q, se esperaba el que vino en el header", seen)
-	}
-}
-
-func TestRecoverPanicDevuelve500(t *testing.T) {
-	h := RecoverPanic(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		panic("algo explotó")
-	}))
-
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("status = %d, se esperaba 500", rec.Code)
-	}
-	if ct := rec.Header().Get("Content-Type"); ct != problemContentType {
-		t.Errorf("Content-Type = %q, se esperaba %q", ct, problemContentType)
-	}
-	// el mensaje del panic no puede llegarle al cliente
-	if strings.Contains(rec.Body.String(), "algo explotó") {
-		t.Error("el mensaje del panic se filtró al cliente")
-	}
-}
-
-func TestChainAplicaEnOrden(t *testing.T) {
-	var order []string
-
-	mark := func(name string) func(http.Handler) http.Handler {
-		return func(next http.Handler) http.Handler {
-			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				order = append(order, name)
-				next.ServeHTTP(w, r)
-			})
-		}
-	}
-
-	final := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		order = append(order, "handler")
-	})
-
-	Chain(final, mark("primero"), mark("segundo")).
-		ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
-
-	want := []string{"primero", "segundo", "handler"}
-	if len(order) != len(want) {
-		t.Fatalf("orden = %v, se esperaba %v", order, want)
-	}
-	for i := range want {
-		if order[i] != want[i] {
-			t.Fatalf("orden = %v, se esperaba %v", order, want)
-		}
-	}
-}
-```
-
-- [ ] **Step 2: Correr los tests y verificar que fallan**
-
-Run: `cd apps/api && go test ./internal/handler/ -run 'TestRequestID|TestRecover|TestChain' -v`
-Expected: FAIL con `undefined: RequestID`
-
-- [ ] **Step 3: Implementar el middleware**
-
-Archivo `apps/api/internal/handler/middleware.go`:
-
-```go
-package handler
-
-import (
-	"context"
-	"log/slog"
-	"net/http"
-	"time"
-
-	"github.com/google/uuid"
-)
-
-const requestIDHeader = "X-Request-ID"
-
-type contextKey string
-
-const requestIDKey contextKey = "requestID"
-
-// Chain envuelve el handler. El primer middleware de la lista es el más
-// externo: el primero en ver el request y el último en ver la respuesta.
-func Chain(h http.Handler, mw ...func(http.Handler) http.Handler) http.Handler {
-	for i := len(mw) - 1; i >= 0; i-- {
-		h = mw[i](h)
-	}
-	return h
-}
-
-// RequestID asegura que todo request tenga un identificador. Si el cliente
-// manda uno, se respeta: permite seguir una operación a través de varios
-// servicios en los logs.
-func RequestID(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := r.Header.Get(requestIDHeader)
-		if id == "" {
-			id = uuid.NewString()
-		}
-
-		w.Header().Set(requestIDHeader, id)
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestIDKey, id)))
-	})
-}
-
-// RequestIDFrom devuelve el identificador del request, o cadena vacía si el
-// middleware no corrió.
-func RequestIDFrom(ctx context.Context) string {
-	id, _ := ctx.Value(requestIDKey).(string)
-	return id
-}
-
-// statusRecorder captura el código de estado para poder loguearlo: el
-// http.ResponseWriter no lo expone.
-type statusRecorder struct {
-	http.ResponseWriter
-	status int
-	bytes  int
-}
-
-func (w *statusRecorder) WriteHeader(code int) {
-	w.status = code
-	w.ResponseWriter.WriteHeader(code)
-}
-
-func (w *statusRecorder) Write(b []byte) (int, error) {
-	if w.status == 0 {
-		w.status = http.StatusOK
-	}
-	n, err := w.ResponseWriter.Write(b)
-	w.bytes += n
-	return n, err
-}
-
-func LogRequests(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
-
-		next.ServeHTTP(rec, r)
-
-		slog.InfoContext(r.Context(), "request",
-			"requestId", RequestIDFrom(r.Context()),
-			"method", r.Method,
-			"path", r.URL.Path,
-			"status", rec.status,
-			"bytes", rec.bytes,
-			"durationMs", time.Since(start).Milliseconds(),
-		)
-	})
-}
-
-// RecoverPanic evita que un panic en un handler tire el proceso entero.
-//
-// Va por dentro de LogRequests para que el log registre el 500 resultante.
-func RecoverPanic(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer func() {
-			rec := recover()
-			if rec == nil {
-				return
-			}
-
-			// el detalle del panic va al log, nunca al cliente
-			slog.ErrorContext(r.Context(), "panic recuperado",
-				"requestId", RequestIDFrom(r.Context()),
-				"panic", rec,
-				"method", r.Method,
-				"path", r.URL.Path,
-			)
-
-			writeProblem(w, Problem{
-				Type:   typeInternal,
-				Title:  "Error interno",
-				Status: http.StatusInternalServerError,
-				Detail: "Ocurrió un error inesperado. Volvé a intentar.",
-			})
-		}()
-
-		next.ServeHTTP(w, r)
-	})
-}
-```
-
-- [ ] **Step 4: Correr toda la suite del paquete handler**
-
-Run: `cd apps/api && go test ./internal/handler/ -v`
-Expected: PASS en todos, incluidos los de la Task 10 que hasta ahora no compilaban.
-
-- [ ] **Step 5: Correr toda la suite del proyecto con detector de carreras**
-
-Run: `cd apps/api && go test ./... -race`
-Expected: PASS en `domain`, `repository/memory`, `service` y `handler`.
-
-- [ ] **Step 6: Commit**
-
-```bash
-cd "c:/Users/gianl/Desktop/Salud"
-git add apps/api/internal/handler/
-git commit -m "feat(handler): middleware de request id, logging y recover
-
-RequestID respeta el que manda el cliente: permite seguir una operación
-a través de varios servicios en los logs.
-
-RecoverPanic evita que un handler tire el proceso, y el detalle del
-panic va al log y nunca al cliente.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
