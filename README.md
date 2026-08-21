@@ -1,16 +1,27 @@
-# React + Vite
+# Salud
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Plataforma de salud digital. Monorepo.
 
-Currently, two official plugins are available:
+## Estructura
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| Carpeta | Qué es |
+|---|---|
+| `apps/api` | Backend en Go. Ver su README. |
+| `apps/web` | Frontend en Next.js. Todavía no existe. |
+| `research/` | Lab de investigación en Python y el relevamiento de mercado. No es producto. |
+| `legacy/prototype/` | Prototipo React + Vite, mockeado. Es la especificación visual de los flujos. Se elimina cuando `apps/web` lo reemplace. |
+| `docs/superpowers/` | Specs de diseño y planes de implementación. |
 
-## React Compiler
+## Backend
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+cd apps/api
+go run ./cmd/api
+```
 
-## Expanding the ESLint configuration
+## Prototipo (referencia visual)
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```bash
+cd legacy/prototype
+npm install && npm run dev
+```
