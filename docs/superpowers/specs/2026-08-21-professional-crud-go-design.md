@@ -1,4 +1,4 @@
-# Diseño — CRUD de Professional en Go
+# Diseño — CRUD de Profesional en Go
 
 - **Fecha:** 2026-08-21
 - **Rama:** `refactor-gian`
@@ -51,19 +51,59 @@ Todo lo demás sale de la biblioteca estándar: `net/http`, `log/slog`, `testing
 
 ### Idioma del código
 
-Inglés para todo lo técnico. Español para los términos del dominio que no tienen
-traducción fiel, y para todo lo que ve el usuario final.
+**Todo lo que escribimos nosotros va en español.** Tipos, funciones, campos,
+constantes, comentarios, mensajes de error y los nombres de campo del JSON. Sin
+híbridos: nada de `Matricula.Type` ni de `NewProfesional`.
 
-| En español | Por qué no se traduce |
+El motivo es que el dominio es argentino de punta a punta. `ObraSocial` no es
+*health plan* ni *insurance*; `Coseguro` no es exactamente *copay*; `Matricula`
+pierde la carga institucional si se vuelve *license number*. Una vez que la mitad
+del vocabulario tiene que quedar en español, mezclarlo con la otra mitad en
+inglés obliga a decidir el idioma campo por campo, y esa decisión se resuelve mal
+en cada archivo nuevo.
+
+**Los paquetes son la excepción, y quedan en inglés:** `domain`, `repository`,
+`memory`, `service`, `handler`, `config`. No son vocabulario del negocio sino
+nombres de patrones arquitectónicos, y funcionan como señalización para cualquiera
+que abra el repo — incluido el que viene de Spring o de ASP.NET.
+
+#### Lo que queda en inglés por contrato externo
+
+No es estilo, es que algo de afuera lo exige:
+
+| Qué | Por qué no se puede traducir |
 |---|---|
-| `ObraSocial` | No es *health plan*, ni *insurance*, ni *HMO*. Es una figura del derecho argentino sin equivalente. |
-| `Coseguro` | *Copay* es parecido pero no igual. |
-| `Matricula` | *License number* pierde la carga institucional (colegio, jurisdicción, habilitación). |
-| `Especialidad`, `Modalidad`, `Zona` | Forman parte del mismo vocabulario del negocio. |
+| `String()`, `Error()` | Métodos de `fmt.Stringer` y de la interfaz `error`. Renombrarlos hace que Go deje de reconocer el tipo. |
+| `PORT`, `APP_ENV`, `LOG_LEVEL` y sus valores | Variables de entorno. Docker, el sistema y cualquier orquestador las esperan así. |
+| `type`, `title`, `status`, `detail` en los errores JSON | Los define RFC 7807. El array de errores por campo sí es nuestro y va en español. |
+| `id`, `slug`, `bio` | Préstamos ya naturalizados. `Slug` no tiene traducción usable y `ID` es una sigla. |
 
-El resto —`Professional`, `Appointment`, `Patient`, `Create`, `Repository`— en
-inglés, que es lo idiomático en Go y lo que espera cualquier desarrollador que se
-sume.
+#### Glosario
+
+La referencia para no volver a decidirlo:
+
+| Concepto | Nombre |
+|---|---|
+| Entidad principal | `Profesional`, con `EntradaProfesional` como struct de entrada |
+| Dinero | `Dinero` (int64 en centavos) |
+| Estado en la plataforma | `Estado`: `EstadoActivo`, `EstadoInactivo` → `"activo"`, `"inactivo"` |
+| Estado de verificación | `EstadoVerificacion`: `VerificacionPendiente`, `VerificacionVerificada`, `VerificacionRechazada` |
+| Errores centinela | `ErrNoEncontrado`, `ErrMatriculaEnUso` |
+| Error de validación | `ErrorValidacion` con `[]ErrorCampo{Campo, Mensaje}` |
+| Constructor del dominio | `NuevoProfesional`, `ParsearMatricula` |
+| Transiciones | `AplicarCambios`, `DarDeBaja`, `Reactivar`, `Clonar` |
+| Texto | `Normalizar`, `GenerarSlug` |
+| Validez de un enum | `EsValida()` en femenino, `EsValido()` en masculino. Es la concordancia natural del español y cada llamada se lee bien: `esp.EsValida()`, `estado.EsValido()`. |
+| Repositorio | `Crear`, `ObtenerPorID`, `ObtenerPorSlug`, `ObtenerPorMatricula`, `Listar`, `Actualizar` |
+| Filtro | `Filtro{Especialidad, Zona, Estado, Busqueda, Limite, Desplazamiento}` |
+| Handler | `ManejadorProfesional`, `escribirJSON`, `escribirError`, `decodificarJSON` |
+| Middleware | `Encadenar`, `IDPeticion`, `RegistrarPeticiones`, `RecuperarPanic` |
+
+Los campos del JSON siguen el mismo vocabulario: `nombre`, `apellido`,
+`matricula`, `especialidad`, `precioConsultaCentavos`, `modalidades`, `zona`,
+`obrasSociales`, `estado`, `verificacion`, `creadoEn`, `actualizadoEn`,
+`dadoDeBajaEn`. El listado devuelve `datos` y `paginacion{total, limite,
+desplazamiento}`.
 
 ### Estructura del monorepo
 
@@ -123,8 +163,9 @@ apps/api/
 │   ├── domain/                  # entidades, value objects, reglas, errores
 │   │   ├── professional.go
 │   │   ├── matricula.go
+│   │   ├── enums.go
 │   │   ├── money.go
-│   │   ├── slug.go
+│   │   ├── text.go              # Normalizar y GenerarSlug
 │   │   └── errors.go
 │   ├── repository/
 │   │   ├── professional.go      # la INTERFAZ
@@ -133,12 +174,14 @@ apps/api/
 │   │       └── seed.go
 │   ├── service/
 │   │   └── professional.go      # casos de uso
-│   └── handler/
-│       ├── router.go
-│       ├── professional.go      # controllers
-│       ├── dto.go
-│       ├── problem.go           # errores de dominio → HTTP
-│       └── middleware.go
+│   ├── handler/
+│   │   ├── router.go
+│   │   ├── professional.go      # controllers
+│   │   ├── dto.go
+│   │   ├── problem.go           # errores de dominio → HTTP
+│   │   └── middleware.go
+│   └── config/
+│       └── config.go            # variables de entorno
 ├── api/openapi.yaml
 ├── Dockerfile
 ├── Makefile
@@ -173,18 +216,18 @@ No hay anotaciones ni contenedor de inyección de dependencias. El cableado es
 explícito y se lee de arriba abajo:
 
 ```go
-repo := memory.NewProfessional()
-svc  := service.NewProfessional(repo)
-h    := handler.NewProfessional(svc)
+repo := memory.NuevoProfesional()
+svc  := service.NuevoProfesional(repo)
+h    := handler.NuevoProfesional(svc)
 ```
 
 ### El punto de cambio a PostgreSQL
 
-La interfaz `repository.Professional` y una línea de `main.go`:
+La interfaz `repository.Profesional` y una línea de `main.go`:
 
 ```go
-repo := memory.NewProfessional()              // hoy
-// repo := postgres.NewProfessional(db)       // mañana
+repo := memory.NuevoProfesional()              // hoy
+// repo := postgres.NuevoProfesional(db)       // mañana
 ```
 
 **Todos los métodos del repositorio reciben `context.Context` desde el día 1**,
@@ -194,65 +237,65 @@ todas las firmas.
 ```go
 package repository
 
-type Professional interface {
-    Create(ctx context.Context, p domain.Professional) error
-    GetByID(ctx context.Context, id uuid.UUID) (domain.Professional, error)
-    GetBySlug(ctx context.Context, slug string) (domain.Professional, error)
-    GetByMatricula(ctx context.Context, m domain.Matricula) (domain.Professional, error)
-    List(ctx context.Context, f Filter) ([]domain.Professional, int, error)
-    Update(ctx context.Context, p domain.Professional) error
+type Profesional interface {
+    Crear(ctx context.Context, p domain.Profesional) error
+    ObtenerPorID(ctx context.Context, id uuid.UUID) (domain.Profesional, error)
+    ObtenerPorSlug(ctx context.Context, slug string) (domain.Profesional, error)
+    ObtenerPorMatricula(ctx context.Context, m domain.Matricula) (domain.Profesional, error)
+    Listar(ctx context.Context, f Filtro) ([]domain.Profesional, int, error)
+    Actualizar(ctx context.Context, p domain.Profesional) error
 }
 
-type Filter struct {
-    Especialidad *domain.Especialidad
-    Zona         *string
-    Status       *domain.Status
-    Query        *string   // busca en nombre y apellido
-    Limit        int
-    Offset       int
+type Filtro struct {
+    Especialidad   *domain.Especialidad
+    Zona           *string
+    Estado         *domain.Estado
+    Busqueda       *string   // busca en nombre y apellido
+    Limite         int
+    Desplazamiento int
 }
 ```
 
-No hay `Delete` en la interfaz: la baja es un `Update` que cambia el estado.
+No hay borrado en la interfaz: la baja es un `Actualizar` que cambia el estado.
 Ver sección 6.
 
 ---
 
 ## 4. Modelo de dominio
 
-**Invariante central: no se puede construir un `Professional` inválido.** No hay
+**Invariante central: no se puede construir un `Profesional` inválido.** No hay
 setters públicos ni structs armados a mano fuera del paquete `domain`. Hay un
 constructor que valida y devuelve la entidad o un error.
 
 ```go
-type Professional struct {
-    ID            uuid.UUID
-    Slug          string
-    FirstName     string
-    LastName      string
-    Matricula     Matricula
-    Especialidad  Especialidad
-    Bio           string
-    ConsultaPrice Money
-    Modalidades   []Modalidad
-    Zona          string
-    ObrasSociales []string
-    Status        Status
-    Verification  VerificationStatus
-    CreatedAt     time.Time
-    UpdatedAt     time.Time
-    DeactivatedAt *time.Time
+type Profesional struct {
+    ID             uuid.UUID
+    Slug           string
+    Nombre         string
+    Apellido       string
+    Matricula      Matricula
+    Especialidad   Especialidad
+    Bio            string
+    PrecioConsulta Dinero
+    Modalidades    []Modalidad
+    Zona           string
+    ObrasSociales  []string
+    Estado         Estado
+    Verificacion   EstadoVerificacion
+    CreadoEn       time.Time
+    ActualizadoEn  time.Time
+    DadoDeBajaEn   *time.Time
 }
 
-func NewProfessional(in NewProfessionalInput) (Professional, error)
+func NuevoProfesional(entrada EntradaProfesional, ahora time.Time) (Profesional, error)
 ```
 
 ### Value objects
 
 ```go
-type Money int64   // centavos, SIEMPRE. Money(1200000) == $12.000,00
+type Dinero int64   // centavos, SIEMPRE. Dinero(1200000) == $12.000,00
 
-func (m Money) String() string   // "$12.000,00" — formato argentino
+func (m Dinero) String() string   // "$12.000,00" — formato argentino
 ```
 
 Un `float64` no representa 0,10 exactamente. En un sistema que va a cobrar
@@ -267,7 +310,7 @@ type Matricula struct {
     Numero string
 }
 
-func ParseMatricula(s string) (Matricula, error)
+func ParsearMatricula(s string) (Matricula, error)
 ```
 
 Validación **laxa y con normalización**. Las matrículas argentinas varían por
@@ -280,14 +323,14 @@ llega con la integración a REFEPS.
 ```go
 type Especialidad string  // psicologia | kinesiologia | odontologia
 type Modalidad    string  // telemedicina | presencial | domicilio
-type Status       string  // active | inactive
-type VerificationStatus string  // pending | verified | rejected
+type Estado       string  // activo | inactivo
+type EstadoVerificacion string  // pendiente | verificada | rechazada
 ```
 
 Los tres verticales del enum salen de `research/data/vertical_scores.csv`. Agregar
 un cuarto es una línea y recompilar.
 
-`Status` y `Verification` son **dos ejes distintos y no se mezclan**: uno dice si
+`Estado` y `Verificacion` son **dos ejes distintos y no se mezclan**: uno dice si
 la matrícula está verificada en el mundo real, el otro si el profesional opera hoy
 en la plataforma. Un profesional puede estar verificado y de licencia, o recién
 anotado y sin verificar.
@@ -307,9 +350,9 @@ Normaliza acentos y eñes, pasa a minúsculas, colapsa espacios, une con guiones
 descarta todo lo que no sea `[a-z0-9-]`. La unicidad no es responsabilidad del
 dominio (ver sección 5).
 
-La normalización de base (`domain.Normalize`) se reutiliza en el filtro `q` del
-listado, para que buscar `gonzalez` encuentre a `González`. Una sola función, dos
-usos, un solo lugar donde arreglarla.
+La normalización de base (`domain.Normalizar`) se reutiliza en el filtro
+`busqueda` del listado, para que buscar `gonzalez` encuentre a `González`. Una
+sola función, dos usos, un solo lugar donde arreglarla.
 
 ### Reglas de validación
 
@@ -317,11 +360,11 @@ Todas viven en `domain`, ninguna en el handler.
 
 | Campo | Regla |
 |---|---|
-| `FirstName`, `LastName` | No vacíos tras recortar espacios, máximo 100 caracteres |
-| `Matricula` | Parseable por `ParseMatricula` |
+| `Nombre`, `Apellido` | No vacíos tras recortar espacios, máximo 100 caracteres |
+| `Matricula` | Parseable por `ParsearMatricula` |
 | `Especialidad` | Dentro del enum |
 | `Bio` | Máximo 2000 caracteres, puede estar vacía |
-| `ConsultaPrice` | Mayor o igual a cero |
+| `PrecioConsulta` | Mayor o igual a cero |
 | `Modalidades` | Al menos una, todas válidas, sin repetidas |
 | `Zona` | No vacía, máximo 100 caracteres |
 | `ObrasSociales` | Puede estar vacía, sin repetidas |
@@ -330,23 +373,23 @@ Todas viven en `domain`, ninguna en el handler.
 
 ```go
 var (
-    ErrNotFound       = errors.New("professional not found")
-    ErrMatriculaTaken = errors.New("matricula already registered")
+    ErrNoEncontrado   = errors.New("profesional no encontrado")
+    ErrMatriculaEnUso = errors.New("matricula ya registrada")
 )
 
-type FieldError struct {
-    Field   string
-    Message string
+type ErrorCampo struct {
+    Campo   string
+    Mensaje string
 }
 
-type ValidationError struct {
-    Fields []FieldError
+type ErrorValidacion struct {
+    Campos []ErrorCampo
 }
 
-func (e ValidationError) Error() string
+func (e ErrorValidacion) Error() string
 ```
 
-`ValidationError` acumula **todos** los campos inválidos en una pasada. Devolver
+`ErrorValidacion` acumula **todos** los campos inválidos en una pasada. Devolver
 el primer error obliga al cliente a corregir de a uno.
 
 ---
@@ -357,40 +400,42 @@ Dos reglas que necesitan consultar el repositorio, y por eso no pueden vivir en
 el dominio:
 
 1. **La matrícula es única.** Es la única identidad real de una persona en este
-   sistema. Colisión → `ErrMatriculaTaken` → HTTP 409.
+   sistema. Colisión → `ErrMatriculaEnUso` → HTTP 409.
 2. **El slug es único.** Si `martin-gonzalez` ya existe, el siguiente es
    `martin-gonzalez-2`, después `martin-gonzalez-3`. El sufijo se resuelve en el
    servicio, no en el dominio. Una colisión de slug **nunca es un error para el
    cliente**: se resuelve sola incrementando el sufijo hasta encontrar uno libre.
 Hay una tercera regla —**cambiar la matrícula o la especialidad devuelve
-`Verification` a `pending`**— que sale directo de `research/program.md`: *"toda
+`Verificacion` a `pendiente`**— que sale directo de `research/program.md`: *"toda
 orientación, agenda o cobro debería depender de un profesional verificado"*. Si
 se edita el dato sobre el que se apoya la verificación, la verificación deja de
 valer. Pero esa regla solo necesita comparar el profesional viejo contra el
 nuevo, no el repositorio: **vive en el dominio**, en
-`Professional.ApplyUpdate`.
+`Profesional.AplicarCambios`.
 
 ```go
-type ProfessionalService struct {
-    repo repository.Professional
+package service
+
+type Profesional struct {
+    repo repository.Profesional
 }
 
-func (s *ProfessionalService) Create(ctx context.Context, in CreateInput) (domain.Professional, error)
-func (s *ProfessionalService) GetByID(ctx context.Context, id uuid.UUID) (domain.Professional, error)
-func (s *ProfessionalService) GetBySlug(ctx context.Context, slug string) (domain.Professional, error)
-func (s *ProfessionalService) List(ctx context.Context, f repository.Filter) ([]domain.Professional, int, error)
-func (s *ProfessionalService) Update(ctx context.Context, id uuid.UUID, in UpdateInput) (domain.Professional, error)
-func (s *ProfessionalService) Deactivate(ctx context.Context, id uuid.UUID) error
-func (s *ProfessionalService) Reactivate(ctx context.Context, id uuid.UUID) (domain.Professional, error)
+func (s *Profesional) Crear(ctx context.Context, entrada domain.EntradaProfesional) (domain.Profesional, error)
+func (s *Profesional) ObtenerPorID(ctx context.Context, id uuid.UUID) (domain.Profesional, error)
+func (s *Profesional) ObtenerPorSlug(ctx context.Context, slug string) (domain.Profesional, error)
+func (s *Profesional) Listar(ctx context.Context, f repository.Filtro) ([]domain.Profesional, int, error)
+func (s *Profesional) Actualizar(ctx context.Context, id uuid.UUID, entrada domain.EntradaProfesional) (domain.Profesional, error)
+func (s *Profesional) DarDeBaja(ctx context.Context, id uuid.UUID) error
+func (s *Profesional) Reactivar(ctx context.Context, id uuid.UUID) (domain.Profesional, error)
 ```
 
-`CreateInput` y `UpdateInput` son structs propios, **no la entidad**. Es la
-frontera que impide que un cliente mande `CreatedAt`, `Verification` o `Status` y
-se los guarde.
+`EntradaProfesional` es un struct propio, **no la entidad**, y lo comparten el
+alta y la edición. Es la frontera que impide que un cliente mande `CreadoEn`,
+`Verificacion` o `Estado` y se los guarde.
 
-`Update` es reemplazo total (semántica de `PUT`) de los campos editables:
+`Actualizar` es reemplazo total (semántica de `PUT`) de los campos editables:
 nombre, apellido, matrícula, especialidad, bio, precio, modalidades, zona y obras
-sociales. `ID`, `Slug`, `Status`, `Verification` y las marcas de tiempo no son
+sociales. `ID`, `Slug`, `Estado`, `Verificacion` y las marcas de tiempo no son
 editables por esta vía. El slug **no** se regenera al cambiar el nombre: es una
 URL pública y romperla rompe enlaces y posicionamiento.
 
@@ -402,33 +447,34 @@ Prefijo `/api/v1`.
 
 | Método | Ruta | Qué hace |
 |---|---|---|
-| `GET` | `/professionals` | Lista con filtros y paginación |
-| `POST` | `/professionals` | Crea |
-| `GET` | `/professionals/{id}` | Trae por ID |
-| `GET` | `/professionals/by-slug/{slug}` | Trae por slug — es lo que usará `/p/:slug` en el front |
-| `PUT` | `/professionals/{id}` | Reemplaza los campos editables |
-| `DELETE` | `/professionals/{id}` | Baja lógica |
-| `POST` | `/professionals/{id}/reactivate` | Revierte la baja |
+| `GET` | `/profesionales` | Lista con filtros y paginación |
+| `POST` | `/profesionales` | Crea |
+| `GET` | `/profesionales/{id}` | Trae por ID |
+| `GET` | `/profesionales/por-slug/{slug}` | Trae por slug — es lo que usará `/p/:slug` en el front |
+| `PUT` | `/profesionales/{id}` | Reemplaza los campos editables |
+| `DELETE` | `/profesionales/{id}` | Baja lógica |
+| `POST` | `/profesionales/{id}/reactivar` | Revierte la baja |
 | `GET` | `/healthz` | Sin prefijo de versión |
 
-Parámetros del listado: `especialidad`, `zona`, `status`, `q` (busca en nombre y
-apellido), `limit` (por defecto 20, máximo 100), `offset` (por defecto 0).
+Parámetros del listado: `especialidad`, `zona`, `estado`, `busqueda` (busca en
+nombre y apellido), `limite` (por defecto 20, máximo 100), `desplazamiento` (por
+defecto 0).
 
-El parámetro `q` compara **sin distinguir mayúsculas ni acentos**, reutilizando el
+El parámetro `busqueda` compara **sin distinguir mayúsculas ni acentos**, reutilizando el
 mismo normalizador del slug: buscar `gonzalez` tiene que encontrar a `González`.
 En un producto argentino, lo contrario es una búsqueda rota.
 
-Por defecto el listado devuelve **solo los activos**. `?status=inactive` muestra
+Por defecto el listado devuelve **solo los activos**. `?estado=inactivo` muestra
 los dados de baja.
 
 **Comportamiento sobre profesionales inactivos**, para que no quede librado a la
 implementación:
 
-- `GET` por ID o por slug: `200` con `status: "inactive"`. El recurso existe.
+- `GET` por ID o por slug: `200` con `estado: "inactivo"`. El recurso existe.
 - `PUT`: permitido. Editar los datos de alguien dado de baja no tiene por qué
   bloquearse, y no cambia su estado.
 - `DELETE` sobre alguien ya inactivo: `204`, idempotente. No es un error.
-- `POST /reactivate`: `200` con el profesional activo y `deactivatedAt` en null.
+- `POST /reactivar`: `200` con el profesional activo y `dadoDeBajaEn` en null.
   Sobre alguien ya activo, `200` sin cambios.
 
 ### La baja lógica, y por qué no es un borrado
@@ -449,9 +495,9 @@ Además, un turno pasado apunta a un profesional: si el registro se evapora, ese
 turno queda huérfano, y con él el comprobante que el paciente presentó para pedir
 un reintegro.
 
-Por eso `DELETE /professionals/{id}` conserva ese nombre —es lo que espera
-cualquiera que lea un CRUD— pero por dentro pone `Status = inactive` y sella
-`DeactivatedAt`. Devuelve `204`. Un `GET` por ID de un profesional inactivo
+Por eso `DELETE /profesionales/{id}` conserva el verbo —es lo que espera
+cualquiera que lea un CRUD— pero por dentro pone `Estado = inactivo` y sella
+`DadoDeBajaEn`. Devuelve `204`. Un `GET` por ID de un profesional inactivo
 devuelve `200` con su estado: el recurso existe, simplemente no opera.
 
 ### Códigos de estado
@@ -474,7 +520,7 @@ perfecto y está mal"* son problemas distintos, y el front los maneja distinto.
 
 - **camelCase.** El único consumidor va a ser TypeScript; así no hace falta capa
   de traducción de nombres.
-- **`consultaPriceCents: 1200000`**, entero de centavos, con el nombre explícito.
+- **`precioConsultaCentavos: 1200000`**, entero de centavos, con el nombre explícito.
   Un `12000.50` viajando como número de JSON se convierte en `float64` del otro
   lado, y ahí empiezan los centavos que no cierran.
 - Fechas en RFC 3339 UTC.
@@ -486,20 +532,20 @@ Ejemplo de respuesta:
 {
   "id": "3f2a1b4c-...",
   "slug": "martin-gonzalez",
-  "firstName": "Martín",
-  "lastName": "González",
+  "nombre": "Martín",
+  "apellido": "González",
   "matricula": "MN 98234",
   "especialidad": "psicologia",
   "bio": "Psicólogo clínico con orientación cognitivo-conductual.",
-  "consultaPriceCents": 1200000,
+  "precioConsultaCentavos": 1200000,
   "modalidades": ["telemedicina", "presencial"],
   "zona": "CABA",
   "obrasSociales": ["OSDE", "Swiss Medical"],
-  "status": "active",
-  "verification": "pending",
-  "createdAt": "2026-08-21T14:02:11Z",
-  "updatedAt": "2026-08-21T14:02:11Z",
-  "deactivatedAt": null
+  "estado": "activo",
+  "verificacion": "pendiente",
+  "creadoEn": "2026-08-21T14:02:11Z",
+  "actualizadoEn": "2026-08-21T14:02:11Z",
+  "dadoDeBajaEn": null
 }
 ```
 
@@ -507,8 +553,8 @@ Listado:
 
 ```json
 {
-  "data": [ ... ],
-  "pagination": { "total": 42, "limit": 20, "offset": 0 }
+  "datos": [ ... ],
+  "paginacion": { "total": 42, "limite": 20, "desplazamiento": 0 }
 }
 ```
 
@@ -520,9 +566,9 @@ Listado:
   "title": "Datos inválidos",
   "status": 422,
   "detail": "El profesional no pudo ser creado",
-  "errors": [
-    { "field": "matricula",   "message": "formato inválido" },
-    { "field": "modalidades", "message": "se requiere al menos una" }
+  "errores": [
+    { "campo": "matricula",   "mensaje": "formato inválido" },
+    { "campo": "modalidades", "mensaje": "se requiere al menos una" }
   ]
 }
 ```
@@ -545,13 +591,13 @@ Se valida en CI. Si el YAML y los handlers se separan, el build falla.
 ## 7. Repositorio en memoria
 
 ```go
-type Professional struct {
-    mu   sync.RWMutex
-    data map[uuid.UUID]domain.Professional
+type Profesional struct {
+    mu    sync.RWMutex
+    datos map[uuid.UUID]domain.Profesional
 }
 ```
 
-**Se guardan y se devuelven copias, nunca punteros.** Y como `Professional`
+**Se guardan y se devuelven copias, nunca punteros.** Y como `Profesional`
 contiene slices (`Modalidades`, `ObrasSociales`), una copia superficial comparte
 el array subyacente: quien reciba el profesional puede mutar el store desde afuera
 sin enterarse. Los slices se copian explícitamente, y hay un test que lo verifica.
@@ -561,7 +607,7 @@ El filtrado del listado es un scan lineal, marcado en el código:
 
 ```go
 // ponytail: scan O(n), correcto para un store en memoria. La implementación
-// Postgres resuelve esto con índices sobre especialidad, zona y status.
+// Postgres resuelve esto con índices sobre especialidad, zona y estado.
 ```
 
 El **seed** son los cuatro profesionales de
@@ -578,9 +624,9 @@ escrita: si un test necesita un mock, la frontera está mal dibujada.
 
 | Capa | Contra qué corre | Qué prueba |
 |---|---|---|
-| `domain` | Nada, funciones puras | Validaciones campo por campo, `ParseMatricula` con formatos reales, normalización de slug y búsqueda con acentos y eñes, formato de `Money` |
+| `domain` | Nada, funciones puras | Validaciones campo por campo, `ParsearMatricula` con formatos reales, normalización de slug y búsqueda con acentos y eñes, formato de `Dinero` |
 | `repository/memory` | Sí mismo | Que las copias sean copias de verdad (mutar lo devuelto no toca el store), filtros, paginación |
-| `service` | El repositorio en memoria real | Matrícula duplicada → `ErrMatriculaTaken`; unicidad de slug con sufijo; cambio de matrícula → `Verification` vuelve a `pending`; baja → sale del listado por defecto; baja y reactivación → vuelve a aparecer |
+| `service` | El repositorio en memoria real | Matrícula duplicada → `ErrMatriculaEnUso`; unicidad de slug con sufijo; cambio de matrícula → `Verificacion` vuelve a `pendiente`; baja → sale del listado por defecto; baja y reactivación → vuelve a aparecer |
 | `handler` | El stack completo por `httptest` | Códigos de estado, forma del `problem+json`, header `Location`, JSON malformado → 400 |
 | Concurrencia | `go test -race` | N goroutines escribiendo el store en paralelo |
 
@@ -623,10 +669,10 @@ Lo que **no** entra en esta etapa, con el disparador que lo va a activar:
 | Autenticación y autorización | Spec propia. Obligatorio antes de exponer la API a internet. |
 | Entidades `Patient` y `Appointment` | Después de que este esqueleto esté cerrado |
 | Migración a PostgreSQL | Cuando el modelo de dominio deje de moverse |
-| Integración real con REFEPS | Spec propia. Hoy `Verification` queda en `pending`. |
-| `StatusSuspended` | Cuando exista REFEPS y algo pueda disparar una suspensión |
+| Integración real con REFEPS | Spec propia. Hoy `Verificacion` queda en `pendiente`. |
+| `EstadoSuspendido` | Cuando exista REFEPS y algo pueda disparar una suspensión |
 | Endpoint de purga (Ley 25.326 art. 16) | Cuando el abogado sanitario defina qué se está obligado a conservar |
-| Rating, reseñas, horarios, coseguros | Son entidades propias, no campos de `Professional` |
+| Rating, reseñas, horarios, coseguros | Son entidades propias, no campos de `Profesional` |
 | CORS | Cuando exista `apps/web` |
 | `apps/web`, `packages/ui`, `packages/api-client` | Etapa del frontend |
 | Auditoría de accesos a datos sensibles | Cuando haya datos de pacientes y autenticación |
@@ -650,10 +696,10 @@ La etapa está terminada cuando:
 
 1. `make test-race` pasa en verde.
 2. `make lint` pasa sin advertencias.
-3. Los seis endpoints responden según el `openapi.yaml`, verificable desde
+3. Los siete endpoints responden según el `openapi.yaml`, verificable desde
    Swagger UI.
 4. `docker build` produce una imagen que arranca y responde `GET /healthz`.
-5. Cambiar `memory.NewProfessional()` por otra implementación de
-   `repository.Professional` en `main.go` es el **único** cambio necesario para
+5. Cambiar `memory.NuevoProfesional()` por otra implementación de
+   `repository.Profesional` en `main.go` es el **único** cambio necesario para
    migrar de almacenamiento.
 6. `internal/domain` no importa ningún otro paquete del proyecto.

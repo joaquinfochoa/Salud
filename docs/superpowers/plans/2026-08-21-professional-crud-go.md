@@ -1,8 +1,8 @@
-# CRUD de Professional en Go — Plan de Implementación
+# CRUD de Profesional en Go — Plan de Implementación
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Construir el backend en Go con un CRUD completo de `Professional`, sin base de datos, con arquitectura en capas y el punto de cambio a PostgreSQL aislado en una interfaz.
+**Goal:** Construir el backend en Go con un CRUD completo de `Profesional`, sin base de datos, con arquitectura en capas y el punto de cambio a PostgreSQL aislado en una interfaz.
 
 **Architecture:** Cuatro capas — `handler → service → repository → domain` — donde `domain` no importa nada del proyecto. El repositorio en memoria implementa una interfaz que después implementará PostgreSQL sin tocar el resto del código. El cableado de dependencias es explícito en `cmd/api/main.go`, sin contenedor de inyección.
 
@@ -13,9 +13,9 @@
 - **Module path:** `github.com/joaquinfochoa/Salud/apps/api`
 - **Go mínimo:** 1.24 (el `ServeMux` con `"GET /path/{id}"` requiere 1.22+)
 - **Dependencias externas permitidas:** únicamente `github.com/google/uuid`. Cualquier otro `go get` es un error del plan — preguntar antes.
-- **Idioma del código:** identificadores, funciones y comentarios técnicos en inglés. En español solo los términos del dominio sin traducción fiel: `Matricula`, `Especialidad`, `Modalidad`, `ObraSocial`, `Zona`, `Coseguro`. Los mensajes de error que ve el usuario, siempre en español.
-- **Dinero:** `int64` en centavos, tipo `domain.Money`. Nunca `float64`, nunca en ningún lugar.
-- **JSON:** camelCase. El precio viaja como `consultaPriceCents` (entero).
+- **Idioma del código:** todo lo que escribimos nosotros va en español — tipos, funciones, campos, constantes, comentarios, mensajes y los nombres de campo del JSON. Los paquetes quedan en inglés (`domain`, `repository`, `memory`, `service`, `handler`, `config`), porque nombran patrones arquitectónicos, no el negocio. Quedan en inglés por contrato externo: `String()` y `Error()` (interfaces de Go), las variables de entorno y sus valores, y las claves `type`/`title`/`status`/`detail` del RFC 7807. Sin híbridos.
+- **Dinero:** `int64` en centavos, tipo `domain.Dinero`. Nunca `float64`, nunca en ningún lugar.
+- **JSON:** camelCase. El precio viaja como `precioConsultaCentavos` (entero).
 - **Errores HTTP:** `application/problem+json` (RFC 7807).
 - **Sin mocks.** El repositorio en memoria es el doble de test. Si un test parece necesitar un mock, la frontera está mal dibujada — parar y preguntar.
 - **`internal/domain` no importa ningún otro paquete del proyecto.** Es verificable y es criterio de aceptación.
@@ -28,20 +28,20 @@
 | Archivo | Responsabilidad |
 |---|---|
 | `apps/api/go.mod` | Módulo y dependencias |
-| `apps/api/internal/domain/money.go` | Tipo `Money` y su formato |
-| `apps/api/internal/domain/text.go` | `Normalize` y `Slugify` — compartidos por slug y búsqueda |
-| `apps/api/internal/domain/enums.go` | `Especialidad`, `Modalidad`, `Status`, `VerificationStatus` |
+| `apps/api/internal/domain/money.go` | Tipo `Dinero` y su formato |
+| `apps/api/internal/domain/text.go` | `Normalizar` y `GenerarSlug` — compartidos por slug y búsqueda |
+| `apps/api/internal/domain/enums.go` | `Especialidad`, `Modalidad`, `Estado`, `EstadoVerificacion` |
 | `apps/api/internal/domain/matricula.go` | Value object `Matricula` y su parser |
-| `apps/api/internal/domain/errors.go` | Errores centinela y `ValidationError` |
+| `apps/api/internal/domain/errors.go` | Errores centinela y `ErrorValidacion` |
 | `apps/api/internal/domain/professional.go` | La entidad, su constructor y sus transiciones |
-| `apps/api/internal/repository/professional.go` | La interfaz y el `Filter` |
+| `apps/api/internal/repository/professional.go` | La interfaz y el `Filtro` |
 | `apps/api/internal/repository/memory/professional.go` | Implementación en memoria |
 | `apps/api/internal/repository/memory/seed.go` | Datos de desarrollo |
 | `apps/api/internal/service/professional.go` | Casos de uso |
 | `apps/api/internal/handler/problem.go` | Errores de dominio → HTTP |
 | `apps/api/internal/handler/dto.go` | Structs de request y response |
 | `apps/api/internal/handler/professional.go` | Controllers |
-| `apps/api/internal/handler/middleware.go` | Request ID, logging, recover |
+| `apps/api/internal/handler/middleware.go` | `IDPeticion`, logging, recover |
 | `apps/api/internal/handler/router.go` | Tabla de rutas |
 | `apps/api/internal/config/config.go` | Configuración por variables de entorno |
 | `apps/api/cmd/api/main.go` | Composition root |
@@ -179,7 +179,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-## Task 2: `Money` y normalización de texto
+## Task 2: `Dinero` y normalización de texto
 
 Dos piezas puras, sin dependencias, que el resto del dominio usa.
 
@@ -192,11 +192,11 @@ Dos piezas puras, sin dependencias, que el resto del dominio usa.
 **Interfaces:**
 - Consumes: nada
 - Produces:
-  - `domain.Money` (`int64`), `func (Money) String() string`
-  - `func domain.Normalize(string) string`
-  - `func domain.Slugify(string) string`
+  - `domain.Dinero` (`int64`), `func (Dinero) String() string`
+  - `func domain.Normalizar(string) string`
+  - `func domain.GenerarSlug(string) string`
 
-- [ ] **Step 1: Escribir los tests de `Money`**
+- [ ] **Step 1: Escribir los tests de `Dinero`**
 
 Archivo `apps/api/internal/domain/money_test.go`:
 
@@ -205,11 +205,11 @@ package domain
 
 import "testing"
 
-func TestMoneyString(t *testing.T) {
-	tests := []struct {
-		name string
-		in   Money
-		want string
+func TestDineroString(t *testing.T) {
+	casos := []struct {
+		nombre   string
+		entrada  Dinero
+		esperado string
 	}{
 		{"cero", 0, "$0,00"},
 		{"un peso", 100, "$1,00"},
@@ -221,10 +221,10 @@ func TestMoneyString(t *testing.T) {
 		{"negativo", -50, "-$0,50"},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.in.String(); got != tt.want {
-				t.Errorf("Money(%d).String() = %q, se esperaba %q", int64(tt.in), got, tt.want)
+	for _, caso := range casos {
+		t.Run(caso.nombre, func(t *testing.T) {
+			if obtenido := caso.entrada.String(); obtenido != caso.esperado {
+				t.Errorf("Dinero(%d).String() = %q, se esperaba %q", int64(caso.entrada), obtenido, caso.esperado)
 			}
 		})
 	}
@@ -233,10 +233,10 @@ func TestMoneyString(t *testing.T) {
 
 - [ ] **Step 2: Correr el test y verificar que falla**
 
-Run: `cd apps/api && go test ./internal/domain/ -run TestMoneyString -v`
-Expected: FAIL con `undefined: Money`
+Run: `cd apps/api && go test ./internal/domain/ -run TestDineroString -v`
+Expected: FAIL con `undefined: Dinero`
 
-- [ ] **Step 3: Implementar `Money`**
+- [ ] **Step 3: Implementar `Dinero`**
 
 Archivo `apps/api/internal/domain/money.go`:
 
@@ -248,49 +248,49 @@ import (
 	"strings"
 )
 
-// Money representa un monto en centavos.
+// Dinero representa un monto en centavos.
 //
 // Nunca usar float para dinero: float64 no puede representar 0,10 de forma
 // exacta, y este sistema va a cobrar consultas y liquidar honorarios. El tipo
 // propio además impide sumar un precio con una cantidad por accidente.
-type Money int64
+type Dinero int64
 
 // String formatea el monto con la convención argentina: punto para miles,
-// coma para decimales. Money(1200000) → "$12.000,00"
-func (m Money) String() string {
-	negative := m < 0
-	if negative {
+// coma para decimales. Dinero(1200000) → "$12.000,00"
+func (m Dinero) String() string {
+	negativo := m < 0
+	if negativo {
 		m = -m
 	}
 
 	pesos := int64(m) / 100
-	cents := int64(m) % 100
+	centavos := int64(m) % 100
 
-	digits := strconv.FormatInt(pesos, 10)
+	digitos := strconv.FormatInt(pesos, 10)
 	var b strings.Builder
-	for i := range digits {
-		if i > 0 && (len(digits)-i)%3 == 0 {
+	for i := range digitos {
+		if i > 0 && (len(digitos)-i)%3 == 0 {
 			b.WriteByte('.')
 		}
-		b.WriteByte(digits[i])
+		b.WriteByte(digitos[i])
 	}
 
-	centsStr := strconv.FormatInt(cents, 10)
-	if cents < 10 {
-		centsStr = "0" + centsStr
+	centavosStr := strconv.FormatInt(centavos, 10)
+	if centavos < 10 {
+		centavosStr = "0" + centavosStr
 	}
 
-	out := "$" + b.String() + "," + centsStr
-	if negative {
-		return "-" + out
+	salida := "$" + b.String() + "," + centavosStr
+	if negativo {
+		return "-" + salida
 	}
-	return out
+	return salida
 }
 ```
 
 - [ ] **Step 4: Correr el test y verificar que pasa**
 
-Run: `cd apps/api && go test ./internal/domain/ -run TestMoneyString -v`
+Run: `cd apps/api && go test ./internal/domain/ -run TestDineroString -v`
 Expected: PASS, los ocho subtests en verde.
 
 - [ ] **Step 5: Escribir los tests de normalización**
@@ -302,11 +302,11 @@ package domain
 
 import "testing"
 
-func TestNormalize(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want string
+func TestNormalizar(t *testing.T) {
+	casos := []struct {
+		nombre   string
+		entrada  string
+		esperado string
 	}{
 		{"minusculas", "GONZÁLEZ", "gonzalez"},
 		{"acentos", "Martín González", "martin gonzalez"},
@@ -317,20 +317,20 @@ func TestNormalize(t *testing.T) {
 		{"vacio", "", ""},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := Normalize(tt.in); got != tt.want {
-				t.Errorf("Normalize(%q) = %q, se esperaba %q", tt.in, got, tt.want)
+	for _, caso := range casos {
+		t.Run(caso.nombre, func(t *testing.T) {
+			if obtenido := Normalizar(caso.entrada); obtenido != caso.esperado {
+				t.Errorf("Normalizar(%q) = %q, se esperaba %q", caso.entrada, obtenido, caso.esperado)
 			}
 		})
 	}
 }
 
-func TestSlugify(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want string
+func TestGenerarSlug(t *testing.T) {
+	casos := []struct {
+		nombre   string
+		entrada  string
+		esperado string
 	}{
 		{"nombre simple", "Martín González", "martin-gonzalez"},
 		{"acentos y enies", "Íñigo Muñoz Ríos", "inigo-munoz-rios"},
@@ -342,10 +342,10 @@ func TestSlugify(t *testing.T) {
 		{"vacio", "", ""},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := Slugify(tt.in); got != tt.want {
-				t.Errorf("Slugify(%q) = %q, se esperaba %q", tt.in, got, tt.want)
+	for _, caso := range casos {
+		t.Run(caso.nombre, func(t *testing.T) {
+			if obtenido := GenerarSlug(caso.entrada); obtenido != caso.esperado {
+				t.Errorf("GenerarSlug(%q) = %q, se esperaba %q", caso.entrada, obtenido, caso.esperado)
 			}
 		})
 	}
@@ -354,8 +354,8 @@ func TestSlugify(t *testing.T) {
 
 - [ ] **Step 6: Correr los tests y verificar que fallan**
 
-Run: `cd apps/api && go test ./internal/domain/ -run 'TestNormalize|TestSlugify' -v`
-Expected: FAIL con `undefined: Normalize` y `undefined: Slugify`
+Run: `cd apps/api && go test ./internal/domain/ -run 'TestNormalizar|TestGenerarSlug' -v`
+Expected: FAIL con `undefined: Normalizar` y `undefined: GenerarSlug`
 
 - [ ] **Step 7: Implementar la normalización**
 
@@ -369,13 +369,13 @@ import (
 	"unicode"
 )
 
-// Normalize baja a minúsculas y saca acentos y eñes, para poder comparar
+// Normalizar baja a minúsculas y saca acentos y eñes, para poder comparar
 // "González" con "gonzalez".
 //
 // Lo usan dos cosas: la generación del slug y el filtro de búsqueda del
 // listado. Una sola función, un solo lugar donde arreglarla. En un producto
 // argentino, una búsqueda que distingue acentos es una búsqueda rota.
-func Normalize(s string) string {
+func Normalizar(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
 
@@ -402,26 +402,26 @@ func Normalize(s string) string {
 	return b.String()
 }
 
-// Slugify genera la parte legible de la URL pública del profesional.
+// GenerarSlug genera la parte legible de la URL pública del profesional.
 // "Íñigo Muñoz Ríos" → "inigo-munoz-rios"
 //
 // No se ocupa de la unicidad: eso necesita mirar los demás profesionales y
 // por lo tanto vive en el servicio.
-func Slugify(s string) string {
+func GenerarSlug(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
 
-	pendingHyphen := false
-	for _, r := range Normalize(s) {
+	guionPendiente := false
+	for _, r := range Normalizar(s) {
 		switch {
 		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
-			if pendingHyphen && b.Len() > 0 {
+			if guionPendiente && b.Len() > 0 {
 				b.WriteByte('-')
 			}
-			pendingHyphen = false
+			guionPendiente = false
 			b.WriteRune(r)
 		case unicode.IsSpace(r), r == '-', r == '_':
-			pendingHyphen = true
+			guionPendiente = true
 		}
 		// el resto (puntos, comas, símbolos) se descarta sin separar
 	}
@@ -432,7 +432,7 @@ func Slugify(s string) string {
 - [ ] **Step 8: Correr los tests y verificar que pasan**
 
 Run: `cd apps/api && go test ./internal/domain/ -v`
-Expected: PASS en `TestMoneyString`, `TestNormalize` y `TestSlugify`.
+Expected: PASS en `TestDineroString`, `TestNormalizar` y `TestGenerarSlug`.
 
 Verificar el caso `"Dr. Juan Pérez"`: el punto se descarta sin marcar separación, pero el espacio que le sigue sí la marca. Resultado `dr-juan-perez`, no `dr--juan-perez`.
 
@@ -441,9 +441,9 @@ Verificar el caso `"Dr. Juan Pérez"`: el punto se descarta sin marcar separaci�
 ```bash
 cd "c:/Users/gianl/Desktop/Salud"
 git add apps/api/internal/domain/
-git commit -m "feat(domain): Money en centavos y normalización de texto
+git commit -m "feat(domain): Dinero en centavos y normalización de texto
 
-Money es int64 de centavos con formato argentino. Normalize y Slugify
+Dinero es int64 de centavos con formato argentino. Normalizar y GenerarSlug
 comparten la misma normalización de acentos: la usa el slug público y
 el filtro de búsqueda del listado.
 
@@ -465,15 +465,15 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Produces:
   - `domain.MatriculaTipo` con `MatriculaNacional` (`"MN"`) y `MatriculaProvincial` (`"MP"`)
   - `domain.Matricula{Tipo MatriculaTipo; Numero string}`
-  - `func domain.ParseMatricula(string) (Matricula, error)`
-  - `func (Matricula) String() string`, `func (Matricula) IsZero() bool`
+  - `func domain.ParsearMatricula(string) (Matricula, error)`
+  - `func (Matricula) String() string`, `func (Matricula) EsCero() bool`
   - `domain.Especialidad` con `EspecialidadPsicologia`, `EspecialidadKinesiologia`, `EspecialidadOdontologia`
   - `domain.Modalidad` con `ModalidadTelemedicina`, `ModalidadPresencial`, `ModalidadDomicilio`
-  - `domain.Status` con `StatusActive`, `StatusInactive`
-  - `domain.VerificationStatus` con `VerificationPending`, `VerificationVerified`, `VerificationRejected`
-  - Cada uno con método `Valid() bool`
+  - `domain.Estado` con `EstadoActivo`, `EstadoInactivo`
+  - `domain.EstadoVerificacion` con `VerificacionPendiente`, `VerificacionVerificada`, `VerificacionRechazada`
+  - Cada uno con método `EsValida() bool` (`EsValido() bool` en `Estado` y `EstadoVerificacion`)
 
-- [ ] **Step 1: Escribir los tests de `ParseMatricula`**
+- [ ] **Step 1: Escribir los tests de `ParsearMatricula`**
 
 Archivo `apps/api/internal/domain/matricula_test.go`:
 
@@ -482,12 +482,12 @@ package domain
 
 import "testing"
 
-func TestParseMatriculaValida(t *testing.T) {
-	tests := []struct {
-		name       string
-		in         string
-		wantTipo   MatriculaTipo
-		wantNumero string
+func TestParsearMatriculaValida(t *testing.T) {
+	casos := []struct {
+		nombre         string
+		entrada        string
+		tipoEsperado   MatriculaTipo
+		numeroEsperado string
 	}{
 		{"formato canonico", "MN 98234", MatriculaNacional, "98234"},
 		{"con puntos de miles", "MN 98.234", MatriculaNacional, "98234"},
@@ -500,26 +500,26 @@ func TestParseMatriculaValida(t *testing.T) {
 		{"diez digitos", "MN 1234567890", MatriculaNacional, "1234567890"},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			m, err := ParseMatricula(tt.in)
+	for _, caso := range casos {
+		t.Run(caso.nombre, func(t *testing.T) {
+			m, err := ParsearMatricula(caso.entrada)
 			if err != nil {
-				t.Fatalf("ParseMatricula(%q) devolvió error: %v", tt.in, err)
+				t.Fatalf("ParsearMatricula(%q) devolvió error: %v", caso.entrada, err)
 			}
-			if m.Tipo != tt.wantTipo {
-				t.Errorf("tipo = %q, se esperaba %q", m.Tipo, tt.wantTipo)
+			if m.Tipo != caso.tipoEsperado {
+				t.Errorf("tipo = %q, se esperaba %q", m.Tipo, caso.tipoEsperado)
 			}
-			if m.Numero != tt.wantNumero {
-				t.Errorf("numero = %q, se esperaba %q", m.Numero, tt.wantNumero)
+			if m.Numero != caso.numeroEsperado {
+				t.Errorf("numero = %q, se esperaba %q", m.Numero, caso.numeroEsperado)
 			}
 		})
 	}
 }
 
-func TestParseMatriculaInvalida(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
+func TestParsearMatriculaInvalida(t *testing.T) {
+	casos := []struct {
+		nombre  string
+		entrada string
 	}{
 		{"vacia", ""},
 		{"solo el tipo", "MN"},
@@ -530,36 +530,36 @@ func TestParseMatriculaInvalida(t *testing.T) {
 		{"solo espacios", "   "},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if _, err := ParseMatricula(tt.in); err == nil {
-				t.Errorf("ParseMatricula(%q) debía fallar y no falló", tt.in)
+	for _, caso := range casos {
+		t.Run(caso.nombre, func(t *testing.T) {
+			if _, err := ParsearMatricula(caso.entrada); err == nil {
+				t.Errorf("ParsearMatricula(%q) debía fallar y no falló", caso.entrada)
 			}
 		})
 	}
 }
 
 func TestMatriculaString(t *testing.T) {
-	m, err := ParseMatricula("m.n. 98.234")
+	m, err := ParsearMatricula("m.n. 98.234")
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
 	// distintas formas de escribir la misma matrícula tienen que converger
 	// a una sola representación, o la unicidad no sirve de nada
-	if got := m.String(); got != "MN 98234" {
-		t.Errorf("String() = %q, se esperaba %q", got, "MN 98234")
+	if obtenido := m.String(); obtenido != "MN 98234" {
+		t.Errorf("String() = %q, se esperaba %q", obtenido, "MN 98234")
 	}
 }
 
-func TestMatriculaIsZero(t *testing.T) {
-	var zero Matricula
-	if !zero.IsZero() {
-		t.Error("la matrícula vacía debía ser IsZero")
+func TestMatriculaEsCero(t *testing.T) {
+	var cero Matricula
+	if !cero.EsCero() {
+		t.Error("la matrícula vacía debía ser EsCero")
 	}
 
-	m, _ := ParseMatricula("MN 1")
-	if m.IsZero() {
-		t.Error("una matrícula parseada no debía ser IsZero")
+	m, _ := ParsearMatricula("MN 1")
+	if m.EsCero() {
+		t.Error("una matrícula parseada no debía ser EsCero")
 	}
 }
 ```
@@ -567,7 +567,7 @@ func TestMatriculaIsZero(t *testing.T) {
 - [ ] **Step 2: Correr los tests y verificar que fallan**
 
 Run: `cd apps/api && go test ./internal/domain/ -run TestMatricula -v`
-Expected: FAIL con `undefined: ParseMatricula`
+Expected: FAIL con `undefined: ParsearMatricula`
 
 - [ ] **Step 3: Implementar `Matricula`**
 
@@ -588,7 +588,7 @@ const (
 	MatriculaProvincial MatriculaTipo = "MP"
 )
 
-const maxMatriculaDigits = 10
+const maxDigitosMatricula = 10
 
 // Matricula es la identidad profesional de una persona: es el único dato que
 // la ata a una habilitación real y es sobre lo que se apoya toda la confianza
@@ -598,29 +598,29 @@ type Matricula struct {
 	Numero string
 }
 
-var matriculaCleaner = strings.NewReplacer(".", "", " ", "", "-", "", "/", "")
+var limpiadorMatricula = strings.NewReplacer(".", "", " ", "", "-", "", "/", "")
 
-// ParseMatricula acepta las formas que se usan en la práctica —"MN 98.234",
+// ParsearMatricula acepta las formas que se usan en la práctica —"MN 98.234",
 // "M.N. 45321", "mn98234", "MP 12345"— y las normaliza a "MN 98234".
 //
 // La validación es deliberadamente laxa. Las matrículas argentinas varían por
 // jurisdicción y por profesión, y rechazar a un profesional real es peor error
 // que aceptar un número raro: el que queda afuera no vuelve. La verificación
 // seria llega cuando exista la integración con REFEPS.
-func ParseMatricula(s string) (Matricula, error) {
-	clean := matriculaCleaner.Replace(strings.ToUpper(s))
+func ParsearMatricula(s string) (Matricula, error) {
+	limpia := limpiadorMatricula.Replace(strings.ToUpper(s))
 
-	if len(clean) < 3 {
+	if len(limpia) < 3 {
 		return Matricula{}, errors.New("debe tener tipo (MN o MP) y número")
 	}
 
-	tipo := MatriculaTipo(clean[:2])
+	tipo := MatriculaTipo(limpia[:2])
 	if tipo != MatriculaNacional && tipo != MatriculaProvincial {
 		return Matricula{}, errors.New("el tipo debe ser MN (nacional) o MP (provincial)")
 	}
 
-	numero := clean[2:]
-	if len(numero) > maxMatriculaDigits {
+	numero := limpia[2:]
+	if len(numero) > maxDigitosMatricula {
 		return Matricula{}, errors.New("el número no puede tener más de 10 dígitos")
 	}
 	for i := range numero {
@@ -638,7 +638,7 @@ func (m Matricula) String() string {
 	return string(m.Tipo) + " " + m.Numero
 }
 
-func (m Matricula) IsZero() bool {
+func (m Matricula) EsCero() bool {
 	return m.Tipo == "" && m.Numero == ""
 }
 ```
@@ -657,67 +657,67 @@ package domain
 
 import "testing"
 
-func TestEspecialidadValid(t *testing.T) {
+func TestEspecialidadEsValida(t *testing.T) {
 	validas := []Especialidad{
 		EspecialidadPsicologia,
 		EspecialidadKinesiologia,
 		EspecialidadOdontologia,
 	}
 	for _, e := range validas {
-		if !e.Valid() {
+		if !e.EsValida() {
 			t.Errorf("Especialidad(%q) debía ser válida", e)
 		}
 	}
 
 	invalidas := []Especialidad{"", "cardiologia", "Psicologia", "PSICOLOGIA"}
 	for _, e := range invalidas {
-		if e.Valid() {
+		if e.EsValida() {
 			t.Errorf("Especialidad(%q) no debía ser válida", e)
 		}
 	}
 }
 
-func TestModalidadValid(t *testing.T) {
+func TestModalidadEsValida(t *testing.T) {
 	validas := []Modalidad{ModalidadTelemedicina, ModalidadPresencial, ModalidadDomicilio}
 	for _, m := range validas {
-		if !m.Valid() {
+		if !m.EsValida() {
 			t.Errorf("Modalidad(%q) debía ser válida", m)
 		}
 	}
 
 	invalidas := []Modalidad{"", "online", "Presencial"}
 	for _, m := range invalidas {
-		if m.Valid() {
+		if m.EsValida() {
 			t.Errorf("Modalidad(%q) no debía ser válida", m)
 		}
 	}
 }
 
-func TestStatusValid(t *testing.T) {
-	if !StatusActive.Valid() || !StatusInactive.Valid() {
-		t.Error("active e inactive debían ser válidos")
+func TestEstadoEsValido(t *testing.T) {
+	if !EstadoActivo.EsValido() || !EstadoInactivo.EsValido() {
+		t.Error("activo e inactivo debían ser válidos")
 	}
-	if Status("suspended").Valid() {
-		t.Error("suspended todavía no existe: no debía ser válido")
+	if Estado("suspendido").EsValido() {
+		t.Error("suspendido todavía no existe: no debía ser válido")
 	}
 }
 
-func TestVerificationStatusValid(t *testing.T) {
-	validos := []VerificationStatus{VerificationPending, VerificationVerified, VerificationRejected}
+func TestEstadoVerificacionEsValido(t *testing.T) {
+	validos := []EstadoVerificacion{VerificacionPendiente, VerificacionVerificada, VerificacionRechazada}
 	for _, v := range validos {
-		if !v.Valid() {
-			t.Errorf("VerificationStatus(%q) debía ser válido", v)
+		if !v.EsValido() {
+			t.Errorf("EstadoVerificacion(%q) debía ser válido", v)
 		}
 	}
-	if VerificationStatus("unknown").Valid() {
-		t.Error("unknown no debía ser válido")
+	if EstadoVerificacion("desconocido").EsValido() {
+		t.Error("desconocido no debía ser válido")
 	}
 }
 ```
 
 - [ ] **Step 6: Correr los tests y verificar que fallan**
 
-Run: `cd apps/api && go test ./internal/domain/ -run 'TestEspecialidad|TestModalidad|TestStatus|TestVerification' -v`
+Run: `cd apps/api && go test ./internal/domain/ -run 'TestEspecialidad|TestModalidad|TestEstado' -v`
 Expected: FAIL con `undefined: Especialidad`
 
 - [ ] **Step 7: Implementar los enums**
@@ -732,7 +732,7 @@ package domain
 // libre terminás con "Psicología", "psicologia" y "Psicólogo clínico" como tres
 // especialidades distintas, y los filtros dejan de servir.
 //
-// Agregar una cuarta es una constante y un caso más en Valid().
+// Agregar una cuarta es una constante y un caso más en EsValida().
 type Especialidad string
 
 const (
@@ -741,7 +741,7 @@ const (
 	EspecialidadOdontologia  Especialidad = "odontologia"
 )
 
-func (e Especialidad) Valid() bool {
+func (e Especialidad) EsValida() bool {
 	switch e {
 	case EspecialidadPsicologia, EspecialidadKinesiologia, EspecialidadOdontologia:
 		return true
@@ -757,7 +757,7 @@ const (
 	ModalidadDomicilio    Modalidad = "domicilio"
 )
 
-func (m Modalidad) Valid() bool {
+func (m Modalidad) EsValida() bool {
 	switch m {
 	case ModalidadTelemedicina, ModalidadPresencial, ModalidadDomicilio:
 		return true
@@ -765,39 +765,39 @@ func (m Modalidad) Valid() bool {
 	return false
 }
 
-// Status dice si el profesional opera hoy en la plataforma.
+// Estado dice si el profesional opera hoy en la plataforma.
 //
-// No confundir con VerificationStatus: son dos ejes distintos. Un profesional
+// No confundir con EstadoVerificacion: son dos ejes distintos. Un profesional
 // puede estar verificado y de licencia, o recién anotado y sin verificar.
-type Status string
+type Estado string
 
 const (
-	StatusActive   Status = "active"
-	StatusInactive Status = "inactive"
+	EstadoActivo   Estado = "activo"
+	EstadoInactivo Estado = "inactivo"
 )
 
-func (s Status) Valid() bool {
+func (s Estado) EsValido() bool {
 	switch s {
-	case StatusActive, StatusInactive:
+	case EstadoActivo, EstadoInactivo:
 		return true
 	}
 	return false
 }
 
-// VerificationStatus dice si la matrícula fue verificada contra el mundo real.
-// Por ahora todos nacen en pending: la integración con REFEPS es una etapa
+// EstadoVerificacion dice si la matrícula fue verificada contra el mundo real.
+// Por ahora todos nacen en pendiente: la integración con REFEPS es una etapa
 // posterior y nada la mueve automáticamente todavía.
-type VerificationStatus string
+type EstadoVerificacion string
 
 const (
-	VerificationPending  VerificationStatus = "pending"
-	VerificationVerified VerificationStatus = "verified"
-	VerificationRejected VerificationStatus = "rejected"
+	VerificacionPendiente  EstadoVerificacion = "pendiente"
+	VerificacionVerificada EstadoVerificacion = "verificada"
+	VerificacionRechazada  EstadoVerificacion = "rechazada"
 )
 
-func (v VerificationStatus) Valid() bool {
+func (v EstadoVerificacion) EsValido() bool {
 	switch v {
-	case VerificationPending, VerificationVerified, VerificationRejected:
+	case VerificacionPendiente, VerificacionVerificada, VerificacionRechazada:
 		return true
 	}
 	return false
@@ -816,7 +816,7 @@ cd "c:/Users/gianl/Desktop/Salud"
 git add apps/api/internal/domain/
 git commit -m "feat(domain): value object Matricula y enums del dominio
 
-ParseMatricula acepta los formatos reales del mercado argentino y los
+ParsearMatricula acepta los formatos reales del mercado argentino y los
 normaliza a una forma canónica. La validación es laxa a propósito:
 rechazar a un profesional real es peor que aceptar un número raro.
 
@@ -825,7 +825,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-## Task 4: Errores del dominio y la entidad `Professional`
+## Task 4: Errores del dominio y la entidad `Profesional`
 
 El corazón del dominio: la invariante de que no se puede construir un profesional inválido.
 
@@ -835,19 +835,19 @@ El corazón del dominio: la invariante de que no se puede construir un profesion
 - Test: `apps/api/internal/domain/professional_test.go`
 
 **Interfaces:**
-- Consumes: `Matricula`, `Especialidad`, `Modalidad`, `Status`, `VerificationStatus`, `Money`, `Slugify`, `Normalize` (Tasks 2 y 3)
+- Consumes: `Matricula`, `Especialidad`, `Modalidad`, `Estado`, `EstadoVerificacion`, `Dinero`, `GenerarSlug`, `Normalizar` (Tasks 2 y 3)
 - Produces:
-  - `domain.ErrNotFound`, `domain.ErrMatriculaTaken`
-  - `domain.FieldError{Field, Message string}`
-  - `domain.ValidationError{Fields []FieldError}` con método `Error() string`
-  - `domain.ProfessionalInput` — struct de entrada con todo en tipos primitivos
-  - `domain.Professional` — la entidad
-  - `func domain.NewProfessional(ProfessionalInput, time.Time) (Professional, error)`
-  - `func (Professional) ApplyUpdate(ProfessionalInput, time.Time) (Professional, error)`
-  - `func (Professional) Deactivate(time.Time) Professional`
-  - `func (Professional) Reactivate(time.Time) Professional`
-  - `func (Professional) Clone() Professional`
-  - `func (Professional) FullName() string`
+  - `domain.ErrNoEncontrado`, `domain.ErrMatriculaEnUso`
+  - `domain.ErrorCampo{Campo, Mensaje string}`
+  - `domain.ErrorValidacion{Campos []ErrorCampo}` con método `Error() string`
+  - `domain.EntradaProfesional` — struct de entrada con todo en tipos primitivos
+  - `domain.Profesional` — la entidad
+  - `func domain.NuevoProfesional(EntradaProfesional, time.Time) (Profesional, error)`
+  - `func (Profesional) AplicarCambios(EntradaProfesional, time.Time) (Profesional, error)`
+  - `func (Profesional) DarDeBaja(time.Time) Profesional`
+  - `func (Profesional) Reactivar(time.Time) Profesional`
+  - `func (Profesional) Clonar() Profesional`
+  - `func (Profesional) NombreCompleto() string`
 
 - [ ] **Step 1: Escribir `errors.go`**
 
@@ -864,42 +864,42 @@ import (
 )
 
 var (
-	// ErrNotFound lo devuelve el repositorio cuando no existe el registro.
-	ErrNotFound = errors.New("professional not found")
+	// ErrNoEncontrado lo devuelve el repositorio cuando no existe el registro.
+	ErrNoEncontrado = errors.New("profesional no encontrado")
 
-	// ErrMatriculaTaken lo devuelve el servicio: la matrícula es la única
+	// ErrMatriculaEnUso lo devuelve el servicio: la matrícula es la única
 	// identidad real de una persona en este sistema y no puede repetirse.
-	ErrMatriculaTaken = errors.New("matricula already registered")
+	ErrMatriculaEnUso = errors.New("matricula ya registrada")
 )
 
-// FieldError señala un campo puntual. Las etiquetas JSON coinciden con el
+// ErrorCampo señala un campo puntual. Las etiquetas JSON coinciden con el
 // formato problem+json que espera el cliente.
-type FieldError struct {
-	Field   string `json:"field"`
-	Message string `json:"message"`
+type ErrorCampo struct {
+	Campo   string `json:"campo"`
+	Mensaje string `json:"mensaje"`
 }
 
-// ValidationError junta todos los campos inválidos de una sola pasada.
+// ErrorValidacion junta todos los campos inválidos de una sola pasada.
 // Devolver solo el primero obliga al cliente a corregir de a uno, que es una
 // experiencia horrible en un formulario de alta con nueve campos.
-type ValidationError struct {
-	Fields []FieldError
+type ErrorValidacion struct {
+	Campos []ErrorCampo
 }
 
-func (e ValidationError) Error() string {
-	parts := make([]string, 0, len(e.Fields))
-	for _, f := range e.Fields {
-		parts = append(parts, f.Field+": "+f.Message)
+func (e ErrorValidacion) Error() string {
+	partes := make([]string, 0, len(e.Campos))
+	for _, f := range e.Campos {
+		partes = append(partes, f.Campo+": "+f.Mensaje)
 	}
-	return "validación fallida — " + strings.Join(parts, "; ")
+	return "validación fallida — " + strings.Join(partes, "; ")
 }
 
-func (e *ValidationError) add(field, message string) {
-	e.Fields = append(e.Fields, FieldError{Field: field, Message: message})
+func (e *ErrorValidacion) agregar(campo, mensaje string) {
+	e.Campos = append(e.Campos, ErrorCampo{Campo: campo, Mensaje: mensaje})
 }
 
-func (e ValidationError) hasErrors() bool {
-	return len(e.Fields) > 0
+func (e ErrorValidacion) tieneErrores() bool {
+	return len(e.Campos) > 0
 }
 ```
 
@@ -917,26 +917,26 @@ import (
 	"time"
 )
 
-var testNow = time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
+var ahoraDePrueba = time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
 
-// validInput devuelve una entrada correcta. Cada test la copia y rompe un
+// entradaValida devuelve una entrada correcta. Cada test la copia y rompe un
 // solo campo, así el que falla es siempre el campo bajo prueba.
-func validInput() ProfessionalInput {
-	return ProfessionalInput{
-		FirstName:     "Martín",
-		LastName:      "González",
-		Matricula:     "MN 98.234",
-		Especialidad:  "psicologia",
-		Bio:           "Psicólogo clínico con orientación cognitivo-conductual.",
-		ConsultaPrice: 1200000,
-		Modalidades:   []string{"telemedicina", "presencial"},
-		Zona:          "CABA",
-		ObrasSociales: []string{"OSDE", "Swiss Medical"},
+func entradaValida() EntradaProfesional {
+	return EntradaProfesional{
+		Nombre:         "Martín",
+		Apellido:       "González",
+		Matricula:      "MN 98.234",
+		Especialidad:   "psicologia",
+		Bio:            "Psicólogo clínico con orientación cognitivo-conductual.",
+		PrecioConsulta: 1200000,
+		Modalidades:    []string{"telemedicina", "presencial"},
+		Zona:           "CABA",
+		ObrasSociales:  []string{"OSDE", "Swiss Medical"},
 	}
 }
 
-func TestNewProfessionalValido(t *testing.T) {
-	p, err := NewProfessional(validInput(), testNow)
+func TestNuevoProfesionalValido(t *testing.T) {
+	p, err := NuevoProfesional(entradaValida(), ahoraDePrueba)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
@@ -950,102 +950,102 @@ func TestNewProfessionalValido(t *testing.T) {
 	if p.Matricula.String() != "MN 98234" {
 		t.Errorf("Matricula = %q, se esperaba %q", p.Matricula, "MN 98234")
 	}
-	if p.ConsultaPrice != Money(1200000) {
-		t.Errorf("ConsultaPrice = %d, se esperaba 1200000", p.ConsultaPrice)
+	if p.PrecioConsulta != Dinero(1200000) {
+		t.Errorf("PrecioConsulta = %d, se esperaba 1200000", p.PrecioConsulta)
 	}
-	if p.Status != StatusActive {
-		t.Errorf("Status = %q, se esperaba active", p.Status)
+	if p.Estado != EstadoActivo {
+		t.Errorf("Estado = %q, se esperaba activo", p.Estado)
 	}
 	// nadie nace verificado: la verificación es un acto contra REFEPS
-	if p.Verification != VerificationPending {
-		t.Errorf("Verification = %q, se esperaba pending", p.Verification)
+	if p.Verificacion != VerificacionPendiente {
+		t.Errorf("Verificacion = %q, se esperaba pendiente", p.Verificacion)
 	}
-	if !p.CreatedAt.Equal(testNow) || !p.UpdatedAt.Equal(testNow) {
-		t.Error("las marcas de tiempo debían ser el now recibido")
+	if !p.CreadoEn.Equal(ahoraDePrueba) || !p.ActualizadoEn.Equal(ahoraDePrueba) {
+		t.Error("las marcas de tiempo debían ser el ahora recibido")
 	}
-	if p.DeactivatedAt != nil {
-		t.Error("DeactivatedAt debía ser nil")
+	if p.DadoDeBajaEn != nil {
+		t.Error("DadoDeBajaEn debía ser nil")
 	}
 }
 
-func TestNewProfessionalCamposInvalidos(t *testing.T) {
-	tests := []struct {
-		name      string
-		mutate    func(*ProfessionalInput)
-		wantField string
+func TestNuevoProfesionalCamposInvalidos(t *testing.T) {
+	casos := []struct {
+		nombre        string
+		mutar         func(*EntradaProfesional)
+		campoEsperado string
 	}{
-		{"nombre vacio", func(in *ProfessionalInput) { in.FirstName = "   " }, "firstName"},
-		{"nombre muy largo", func(in *ProfessionalInput) { in.FirstName = strings.Repeat("a", 101) }, "firstName"},
-		{"apellido vacio", func(in *ProfessionalInput) { in.LastName = "" }, "lastName"},
-		{"matricula invalida", func(in *ProfessionalInput) { in.Matricula = "XX 123" }, "matricula"},
-		{"especialidad desconocida", func(in *ProfessionalInput) { in.Especialidad = "cardiologia" }, "especialidad"},
-		{"bio muy larga", func(in *ProfessionalInput) { in.Bio = strings.Repeat("a", 2001) }, "bio"},
-		{"precio negativo", func(in *ProfessionalInput) { in.ConsultaPrice = -1 }, "consultaPriceCents"},
-		{"sin modalidades", func(in *ProfessionalInput) { in.Modalidades = nil }, "modalidades"},
-		{"modalidad desconocida", func(in *ProfessionalInput) { in.Modalidades = []string{"online"} }, "modalidades"},
-		{"modalidad repetida", func(in *ProfessionalInput) { in.Modalidades = []string{"presencial", "presencial"} }, "modalidades"},
-		{"zona vacia", func(in *ProfessionalInput) { in.Zona = "" }, "zona"},
-		{"obra social repetida", func(in *ProfessionalInput) { in.ObrasSociales = []string{"OSDE", "osde"} }, "obrasSociales"},
+		{"nombre vacio", func(entrada *EntradaProfesional) { entrada.Nombre = "   " }, "nombre"},
+		{"nombre muy largo", func(entrada *EntradaProfesional) { entrada.Nombre = strings.Repeat("a", 101) }, "nombre"},
+		{"apellido vacio", func(entrada *EntradaProfesional) { entrada.Apellido = "" }, "apellido"},
+		{"matricula invalida", func(entrada *EntradaProfesional) { entrada.Matricula = "XX 123" }, "matricula"},
+		{"especialidad desconocida", func(entrada *EntradaProfesional) { entrada.Especialidad = "cardiologia" }, "especialidad"},
+		{"bio muy larga", func(entrada *EntradaProfesional) { entrada.Bio = strings.Repeat("a", 2001) }, "bio"},
+		{"precio negativo", func(entrada *EntradaProfesional) { entrada.PrecioConsulta = -1 }, "precioConsultaCentavos"},
+		{"sin modalidades", func(entrada *EntradaProfesional) { entrada.Modalidades = nil }, "modalidades"},
+		{"modalidad desconocida", func(entrada *EntradaProfesional) { entrada.Modalidades = []string{"online"} }, "modalidades"},
+		{"modalidad repetida", func(entrada *EntradaProfesional) { entrada.Modalidades = []string{"presencial", "presencial"} }, "modalidades"},
+		{"zona vacia", func(entrada *EntradaProfesional) { entrada.Zona = "" }, "zona"},
+		{"obra social repetida", func(entrada *EntradaProfesional) { entrada.ObrasSociales = []string{"OSDE", "osde"} }, "obrasSociales"},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			in := validInput()
-			tt.mutate(&in)
+	for _, caso := range casos {
+		t.Run(caso.nombre, func(t *testing.T) {
+			entrada := entradaValida()
+			caso.mutar(&entrada)
 
-			_, err := NewProfessional(in, testNow)
+			_, err := NuevoProfesional(entrada, ahoraDePrueba)
 			if err == nil {
 				t.Fatal("se esperaba un error de validación")
 			}
 
-			var verr ValidationError
+			var verr ErrorValidacion
 			if !errors.As(err, &verr) {
-				t.Fatalf("se esperaba ValidationError, se obtuvo %T", err)
+				t.Fatalf("se esperaba ErrorValidacion, se obtuvo %T", err)
 			}
 
-			found := false
-			for _, f := range verr.Fields {
-				if f.Field == tt.wantField {
-					found = true
+			encontrado := false
+			for _, f := range verr.Campos {
+				if f.Campo == caso.campoEsperado {
+					encontrado = true
 				}
 			}
-			if !found {
-				t.Errorf("se esperaba un error en %q, se obtuvo %+v", tt.wantField, verr.Fields)
+			if !encontrado {
+				t.Errorf("se esperaba un error en %q, se obtuvo %+v", caso.campoEsperado, verr.Campos)
 			}
 		})
 	}
 }
 
-func TestNewProfessionalAcumulaErrores(t *testing.T) {
-	in := validInput()
-	in.FirstName = ""
-	in.Matricula = "roto"
-	in.Zona = ""
+func TestNuevoProfesionalAcumulaErrores(t *testing.T) {
+	entrada := entradaValida()
+	entrada.Nombre = ""
+	entrada.Matricula = "roto"
+	entrada.Zona = ""
 
-	_, err := NewProfessional(in, testNow)
+	_, err := NuevoProfesional(entrada, ahoraDePrueba)
 
-	var verr ValidationError
+	var verr ErrorValidacion
 	if !errors.As(err, &verr) {
-		t.Fatalf("se esperaba ValidationError, se obtuvo %T", err)
+		t.Fatalf("se esperaba ErrorValidacion, se obtuvo %T", err)
 	}
 	// el punto de acumular: el cliente corrige los tres de una
-	if len(verr.Fields) != 3 {
-		t.Errorf("se esperaban 3 campos con error, se obtuvieron %d: %+v", len(verr.Fields), verr.Fields)
+	if len(verr.Campos) != 3 {
+		t.Errorf("se esperaban 3 campos con error, se obtuvieron %d: %+v", len(verr.Campos), verr.Campos)
 	}
 }
 
-func TestNewProfessionalNormalizaEntrada(t *testing.T) {
-	in := validInput()
-	in.FirstName = "  Martín  "
-	in.Especialidad = "  PSICOLOGIA  "
-	in.Modalidades = []string{" Telemedicina "}
+func TestNuevoProfesionalNormalizaEntrada(t *testing.T) {
+	entrada := entradaValida()
+	entrada.Nombre = "  Martín  "
+	entrada.Especialidad = "  PSICOLOGIA  "
+	entrada.Modalidades = []string{" Telemedicina "}
 
-	p, err := NewProfessional(in, testNow)
+	p, err := NuevoProfesional(entrada, ahoraDePrueba)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
-	if p.FirstName != "Martín" {
-		t.Errorf("FirstName = %q, se esperaba sin espacios", p.FirstName)
+	if p.Nombre != "Martín" {
+		t.Errorf("Nombre = %q, se esperaba sin espacios", p.Nombre)
 	}
 	if p.Especialidad != EspecialidadPsicologia {
 		t.Errorf("Especialidad = %q, se esperaba psicologia", p.Especialidad)
@@ -1055,131 +1055,131 @@ func TestNewProfessionalNormalizaEntrada(t *testing.T) {
 	}
 }
 
-func TestApplyUpdateResetaVerificacion(t *testing.T) {
-	base, err := NewProfessional(validInput(), testNow)
+func TestAplicarCambiosResetaVerificacion(t *testing.T) {
+	base, err := NuevoProfesional(entradaValida(), ahoraDePrueba)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
-	base.Verification = VerificationVerified
+	base.Verificacion = VerificacionVerificada
 
-	later := testNow.Add(time.Hour)
+	masTarde := ahoraDePrueba.Add(time.Hour)
 
 	t.Run("cambiar la matricula resetea", func(t *testing.T) {
-		in := validInput()
-		in.Matricula = "MN 11111"
+		entrada := entradaValida()
+		entrada.Matricula = "MN 11111"
 
-		updated, err := base.ApplyUpdate(in, later)
+		actualizado, err := base.AplicarCambios(entrada, masTarde)
 		if err != nil {
 			t.Fatalf("error inesperado: %v", err)
 		}
-		if updated.Verification != VerificationPending {
-			t.Error("cambiar la matrícula tenía que volver la verificación a pending")
+		if actualizado.Verificacion != VerificacionPendiente {
+			t.Error("cambiar la matrícula tenía que volver la verificación a pendiente")
 		}
 	})
 
 	t.Run("cambiar la especialidad resetea", func(t *testing.T) {
-		in := validInput()
-		in.Especialidad = "odontologia"
+		entrada := entradaValida()
+		entrada.Especialidad = "odontologia"
 
-		updated, err := base.ApplyUpdate(in, later)
+		actualizado, err := base.AplicarCambios(entrada, masTarde)
 		if err != nil {
 			t.Fatalf("error inesperado: %v", err)
 		}
-		if updated.Verification != VerificationPending {
-			t.Error("cambiar la especialidad tenía que volver la verificación a pending")
+		if actualizado.Verificacion != VerificacionPendiente {
+			t.Error("cambiar la especialidad tenía que volver la verificación a pendiente")
 		}
 	})
 
 	t.Run("cambiar la bio no resetea", func(t *testing.T) {
-		in := validInput()
-		in.Bio = "Otra bio."
+		entrada := entradaValida()
+		entrada.Bio = "Otra bio."
 
-		updated, err := base.ApplyUpdate(in, later)
+		actualizado, err := base.AplicarCambios(entrada, masTarde)
 		if err != nil {
 			t.Fatalf("error inesperado: %v", err)
 		}
-		if updated.Verification != VerificationVerified {
+		if actualizado.Verificacion != VerificacionVerificada {
 			t.Error("editar la bio no tenía por qué tocar la verificación")
 		}
 	})
 }
 
-func TestApplyUpdatePreservaCamposNoEditables(t *testing.T) {
-	base, err := NewProfessional(validInput(), testNow)
+func TestAplicarCambiosPreservaCamposNoEditables(t *testing.T) {
+	base, err := NuevoProfesional(entradaValida(), ahoraDePrueba)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
 
-	in := validInput()
-	in.FirstName = "Otro"
-	in.LastName = "Nombre"
+	entrada := entradaValida()
+	entrada.Nombre = "Otro"
+	entrada.Apellido = "Nombre"
 
-	later := testNow.Add(time.Hour)
-	updated, err := base.ApplyUpdate(in, later)
+	masTarde := ahoraDePrueba.Add(time.Hour)
+	actualizado, err := base.AplicarCambios(entrada, masTarde)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
 
-	if updated.ID != base.ID {
+	if actualizado.ID != base.ID {
 		t.Error("el ID no es editable")
 	}
 	// el slug es una URL pública: regenerarlo al cambiar el nombre rompe
 	// enlaces y posicionamiento
-	if updated.Slug != base.Slug {
-		t.Errorf("el slug no debía cambiar: %q → %q", base.Slug, updated.Slug)
+	if actualizado.Slug != base.Slug {
+		t.Errorf("el slug no debía cambiar: %q → %q", base.Slug, actualizado.Slug)
 	}
-	if !updated.CreatedAt.Equal(base.CreatedAt) {
-		t.Error("CreatedAt no es editable")
+	if !actualizado.CreadoEn.Equal(base.CreadoEn) {
+		t.Error("CreadoEn no es editable")
 	}
-	if !updated.UpdatedAt.Equal(later) {
-		t.Error("UpdatedAt debía avanzar")
+	if !actualizado.ActualizadoEn.Equal(masTarde) {
+		t.Error("ActualizadoEn debía avanzar")
 	}
 }
 
-func TestDeactivateReactivate(t *testing.T) {
-	p, err := NewProfessional(validInput(), testNow)
+func TestDarDeBajaReactivar(t *testing.T) {
+	p, err := NuevoProfesional(entradaValida(), ahoraDePrueba)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
 
-	later := testNow.Add(time.Hour)
-	off := p.Deactivate(later)
+	masTarde := ahoraDePrueba.Add(time.Hour)
+	baja := p.DarDeBaja(masTarde)
 
-	if off.Status != StatusInactive {
-		t.Errorf("Status = %q, se esperaba inactive", off.Status)
+	if baja.Estado != EstadoInactivo {
+		t.Errorf("Estado = %q, se esperaba inactivo", baja.Estado)
 	}
-	if off.DeactivatedAt == nil || !off.DeactivatedAt.Equal(later) {
-		t.Error("DeactivatedAt debía sellarse con el momento de la baja")
+	if baja.DadoDeBajaEn == nil || !baja.DadoDeBajaEn.Equal(masTarde) {
+		t.Error("DadoDeBajaEn debía sellarse con el momento de la baja")
 	}
-	// value receiver: el original no se toca
-	if p.Status != StatusActive {
-		t.Error("Deactivate no debía mutar el receptor")
+	// valor receiver: el original no se toca
+	if p.Estado != EstadoActivo {
+		t.Error("DarDeBaja no debía mutar el receptor")
 	}
 
 	// idempotente: dar de baja algo ya dado de baja no es un error ni
 	// corre la fecha original
-	evenLater := later.Add(time.Hour)
-	again := off.Deactivate(evenLater)
-	if !again.DeactivatedAt.Equal(later) {
+	muchoMasTarde := masTarde.Add(time.Hour)
+	otraVez := baja.DarDeBaja(muchoMasTarde)
+	if !otraVez.DadoDeBajaEn.Equal(masTarde) {
 		t.Error("una segunda baja no debía correr la fecha de la primera")
 	}
 
-	back := off.Reactivate(evenLater)
-	if back.Status != StatusActive {
-		t.Errorf("Status = %q, se esperaba active", back.Status)
+	reactivado := baja.Reactivar(muchoMasTarde)
+	if reactivado.Estado != EstadoActivo {
+		t.Errorf("Estado = %q, se esperaba activo", reactivado.Estado)
 	}
-	if back.DeactivatedAt != nil {
-		t.Error("reactivar debía limpiar DeactivatedAt")
+	if reactivado.DadoDeBajaEn != nil {
+		t.Error("reactivar debía limpiar DadoDeBajaEn")
 	}
 }
 
-func TestCloneEsCopiaProfunda(t *testing.T) {
-	p, err := NewProfessional(validInput(), testNow)
+func TestClonarEsCopiaProfunda(t *testing.T) {
+	p, err := NuevoProfesional(entradaValida(), ahoraDePrueba)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
 
-	c := p.Clone()
+	c := p.Clonar()
 	c.Modalidades[0] = ModalidadDomicilio
 	c.ObrasSociales[0] = "MUTADA"
 
@@ -1190,29 +1190,29 @@ func TestCloneEsCopiaProfunda(t *testing.T) {
 		t.Error("mutar el clon alteró las obras sociales del original")
 	}
 
-	off := p.Deactivate(testNow)
-	offClone := off.Clone()
-	*offClone.DeactivatedAt = testNow.Add(time.Hour)
-	if off.DeactivatedAt.Equal(testNow.Add(time.Hour)) {
-		t.Error("mutar el clon alteró el DeactivatedAt del original")
+	baja := p.DarDeBaja(ahoraDePrueba)
+	clonBaja := baja.Clonar()
+	*clonBaja.DadoDeBajaEn = ahoraDePrueba.Add(time.Hour)
+	if baja.DadoDeBajaEn.Equal(ahoraDePrueba.Add(time.Hour)) {
+		t.Error("mutar el clon alteró el DadoDeBajaEn del original")
 	}
 }
 
-func TestFullName(t *testing.T) {
-	p, err := NewProfessional(validInput(), testNow)
+func TestNombreCompleto(t *testing.T) {
+	p, err := NuevoProfesional(entradaValida(), ahoraDePrueba)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
-	if got := p.FullName(); got != "Martín González" {
-		t.Errorf("FullName() = %q, se esperaba %q", got, "Martín González")
+	if obtenido := p.NombreCompleto(); obtenido != "Martín González" {
+		t.Errorf("NombreCompleto() = %q, se esperaba %q", obtenido, "Martín González")
 	}
 }
 ```
 
 - [ ] **Step 3: Correr los tests y verificar que fallan**
 
-Run: `cd apps/api && go test ./internal/domain/ -run TestNewProfessional -v`
-Expected: FAIL con `undefined: ProfessionalInput` y `undefined: NewProfessional`
+Run: `cd apps/api && go test ./internal/domain/ -run TestNuevoProfesional -v`
+Expected: FAIL con `undefined: EntradaProfesional` y `undefined: NuevoProfesional`
 
 - [ ] **Step 4: Implementar la entidad**
 
@@ -1232,255 +1232,255 @@ import (
 )
 
 const (
-	maxNameLen = 100
-	maxBioLen  = 2000
-	maxZonaLen = 100
+	maxLargoNombre = 100
+	maxLargoBio    = 2000
+	maxLargoZona   = 100
 )
 
-// Professional es un profesional de la salud dado de alta en la plataforma.
+// Profesional es un profesional de la salud dado de alta en la plataforma.
 //
 // Invariante del paquete: no se puede construir uno inválido desde afuera.
-// No hay setters públicos; la única puerta de entrada es NewProfessional, y la
-// única forma de modificarlo es ApplyUpdate, que revalida todo.
-type Professional struct {
-	ID            uuid.UUID
-	Slug          string
-	FirstName     string
-	LastName      string
-	Matricula     Matricula
-	Especialidad  Especialidad
-	Bio           string
-	ConsultaPrice Money
-	Modalidades   []Modalidad
-	Zona          string
-	ObrasSociales []string
-	Status        Status
-	Verification  VerificationStatus
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-	DeactivatedAt *time.Time
+// No hay setters públicos; la única puerta de entrada es NuevoProfesional, y la
+// única forma de modificarlo es AplicarCambios, que revalida todo.
+type Profesional struct {
+	ID             uuid.UUID
+	Slug           string
+	Nombre         string
+	Apellido       string
+	Matricula      Matricula
+	Especialidad   Especialidad
+	Bio            string
+	PrecioConsulta Dinero
+	Modalidades    []Modalidad
+	Zona           string
+	ObrasSociales  []string
+	Estado         Estado
+	Verificacion   EstadoVerificacion
+	CreadoEn       time.Time
+	ActualizadoEn  time.Time
+	DadoDeBajaEn   *time.Time
 }
 
-// ProfessionalInput es la entrada cruda, en tipos primitivos. Que sea primitiva
+// EntradaProfesional es la entrada cruda, en tipos primitivos. Que sea primitiva
 // no es descuido: obliga a que todo el parseo y toda la validación ocurran acá
 // adentro, y no repartidos por los handlers.
-type ProfessionalInput struct {
-	FirstName     string
-	LastName      string
-	Matricula     string
-	Especialidad  string
-	Bio           string
-	ConsultaPrice int64
-	Modalidades   []string
-	Zona          string
-	ObrasSociales []string
+type EntradaProfesional struct {
+	Nombre         string
+	Apellido       string
+	Matricula      string
+	Especialidad   string
+	Bio            string
+	PrecioConsulta int64
+	Modalidades    []string
+	Zona           string
+	ObrasSociales  []string
 }
 
-// NewProfessional valida la entrada y devuelve un profesional consistente o un
-// ValidationError con todos los campos que fallaron.
-func NewProfessional(in ProfessionalInput, now time.Time) (Professional, error) {
-	p, verr := build(in)
-	if verr.hasErrors() {
-		return Professional{}, verr
+// NuevoProfesional valida la entrada y devuelve un profesional consistente o un
+// ErrorValidacion con todos los campos que fallaron.
+func NuevoProfesional(entrada EntradaProfesional, ahora time.Time) (Profesional, error) {
+	p, verr := construir(entrada)
+	if verr.tieneErrores() {
+		return Profesional{}, verr
 	}
 
 	p.ID = uuid.New()
-	p.Slug = Slugify(p.FullName())
+	p.Slug = GenerarSlug(p.NombreCompleto())
 	if p.Slug == "" {
 		// el nombre pasó la validación pero no dejó ningún carácter usable
 		// (por ejemplo "..."). Sin esto quedaría un slug vacío y la URL
 		// pública del profesional colisionaría con la de cualquier otro.
 		p.Slug = p.ID.String()
 	}
-	p.Status = StatusActive
-	p.Verification = VerificationPending
-	p.CreatedAt = now
-	p.UpdatedAt = now
+	p.Estado = EstadoActivo
+	p.Verificacion = VerificacionPendiente
+	p.CreadoEn = ahora
+	p.ActualizadoEn = ahora
 
 	return p, nil
 }
 
-// ApplyUpdate reemplaza los campos editables y devuelve el resultado sin tocar
-// el receptor. ID, Slug, Status, CreatedAt y DeactivatedAt no son editables.
-func (p Professional) ApplyUpdate(in ProfessionalInput, now time.Time) (Professional, error) {
-	updated, verr := build(in)
-	if verr.hasErrors() {
-		return Professional{}, verr
+// AplicarCambios reemplaza los campos editables y devuelve el resultado sin tocar
+// el receptor. ID, Slug, Estado, CreadoEn y DadoDeBajaEn no son editables.
+func (p Profesional) AplicarCambios(entrada EntradaProfesional, ahora time.Time) (Profesional, error) {
+	actualizado, verr := construir(entrada)
+	if verr.tieneErrores() {
+		return Profesional{}, verr
 	}
 
-	updated.ID = p.ID
-	updated.Slug = p.Slug
-	updated.Status = p.Status
-	updated.CreatedAt = p.CreatedAt
-	updated.DeactivatedAt = p.DeactivatedAt
-	updated.UpdatedAt = now
+	actualizado.ID = p.ID
+	actualizado.Slug = p.Slug
+	actualizado.Estado = p.Estado
+	actualizado.CreadoEn = p.CreadoEn
+	actualizado.DadoDeBajaEn = p.DadoDeBajaEn
+	actualizado.ActualizadoEn = ahora
 
 	// La verificación se hizo sobre una matrícula y una especialidad
 	// concretas. Si cambian, deja de valer: toda orientación, agenda o cobro
 	// depende de que el profesional esté verificado.
-	if updated.Matricula != p.Matricula || updated.Especialidad != p.Especialidad {
-		updated.Verification = VerificationPending
+	if actualizado.Matricula != p.Matricula || actualizado.Especialidad != p.Especialidad {
+		actualizado.Verificacion = VerificacionPendiente
 	} else {
-		updated.Verification = p.Verification
+		actualizado.Verificacion = p.Verificacion
 	}
 
-	return updated, nil
+	return actualizado, nil
 }
 
-// Deactivate da de baja al profesional. No es un borrado: los turnos y
+// DarDeBaja da de baja al profesional. No es un borrado: los turnos y
 // comprobantes históricos siguen apuntando a este registro. Es idempotente y
 // no corre la fecha de la primera baja.
-func (p Professional) Deactivate(now time.Time) Professional {
-	if p.Status == StatusInactive {
+func (p Profesional) DarDeBaja(ahora time.Time) Profesional {
+	if p.Estado == EstadoInactivo {
 		return p
 	}
-	p.Status = StatusInactive
-	p.DeactivatedAt = &now
-	p.UpdatedAt = now
+	p.Estado = EstadoInactivo
+	p.DadoDeBajaEn = &ahora
+	p.ActualizadoEn = ahora
 	return p
 }
 
-// Reactivate revierte la baja. Idempotente.
-func (p Professional) Reactivate(now time.Time) Professional {
-	if p.Status == StatusActive {
+// Reactivar revierte la baja. Idempotente.
+func (p Profesional) Reactivar(ahora time.Time) Profesional {
+	if p.Estado == EstadoActivo {
 		return p
 	}
-	p.Status = StatusActive
-	p.DeactivatedAt = nil
-	p.UpdatedAt = now
+	p.Estado = EstadoActivo
+	p.DadoDeBajaEn = nil
+	p.ActualizadoEn = ahora
 	return p
 }
 
-// Clone devuelve una copia profunda.
+// Clonar devuelve una copia profunda.
 //
 // Una copia superficial comparte el array que hay debajo de los slices, y deja
 // que quien la reciba mute el original desde afuera sin enterarse. Es el bug
 // número uno de un repositorio en memoria.
-func (p Professional) Clone() Professional {
+func (p Profesional) Clonar() Profesional {
 	c := p
 	c.Modalidades = slices.Clone(p.Modalidades)
 	c.ObrasSociales = slices.Clone(p.ObrasSociales)
-	if p.DeactivatedAt != nil {
-		t := *p.DeactivatedAt
-		c.DeactivatedAt = &t
+	if p.DadoDeBajaEn != nil {
+		t := *p.DadoDeBajaEn
+		c.DadoDeBajaEn = &t
 	}
 	return c
 }
 
-func (p Professional) FullName() string {
-	return p.FirstName + " " + p.LastName
+func (p Profesional) NombreCompleto() string {
+	return p.Nombre + " " + p.Apellido
 }
 
-// build parsea y valida la entrada, acumulando todos los errores. Es la única
+// construir parsea y valida la entrada, acumulando todos los errores. Es la única
 // implementación de las reglas: la comparten el alta y la edición.
-func build(in ProfessionalInput) (Professional, ValidationError) {
-	var p Professional
-	var verr ValidationError
+func construir(entrada EntradaProfesional) (Profesional, ErrorValidacion) {
+	var p Profesional
+	var verr ErrorValidacion
 
-	p.FirstName = validateName(in.FirstName, "firstName", &verr)
-	p.LastName = validateName(in.LastName, "lastName", &verr)
+	p.Nombre = validarNombre(entrada.Nombre, "nombre", &verr)
+	p.Apellido = validarNombre(entrada.Apellido, "apellido", &verr)
 
-	if m, err := ParseMatricula(in.Matricula); err != nil {
-		verr.add("matricula", err.Error())
+	if m, err := ParsearMatricula(entrada.Matricula); err != nil {
+		verr.agregar("matricula", err.Error())
 	} else {
 		p.Matricula = m
 	}
 
-	esp := Especialidad(strings.ToLower(strings.TrimSpace(in.Especialidad)))
-	if !esp.Valid() {
-		verr.add("especialidad", "debe ser psicologia, kinesiologia u odontologia")
+	esp := Especialidad(strings.ToLower(strings.TrimSpace(entrada.Especialidad)))
+	if !esp.EsValida() {
+		verr.agregar("especialidad", "debe ser psicologia, kinesiologia u odontologia")
 	} else {
 		p.Especialidad = esp
 	}
 
-	p.Bio = strings.TrimSpace(in.Bio)
-	if utf8.RuneCountInString(p.Bio) > maxBioLen {
-		verr.add("bio", fmt.Sprintf("no puede superar los %d caracteres", maxBioLen))
+	p.Bio = strings.TrimSpace(entrada.Bio)
+	if utf8.RuneCountInString(p.Bio) > maxLargoBio {
+		verr.agregar("bio", fmt.Sprintf("no puede superar los %d caracteres", maxLargoBio))
 	}
 
-	if in.ConsultaPrice < 0 {
-		verr.add("consultaPriceCents", "no puede ser negativo")
+	if entrada.PrecioConsulta < 0 {
+		verr.agregar("precioConsultaCentavos", "no puede ser negativo")
 	} else {
-		p.ConsultaPrice = Money(in.ConsultaPrice)
+		p.PrecioConsulta = Dinero(entrada.PrecioConsulta)
 	}
 
-	p.Modalidades = buildModalidades(in.Modalidades, &verr)
+	p.Modalidades = construirModalidades(entrada.Modalidades, &verr)
 
-	p.Zona = strings.TrimSpace(in.Zona)
+	p.Zona = strings.TrimSpace(entrada.Zona)
 	switch {
 	case p.Zona == "":
-		verr.add("zona", "es obligatoria")
-	case utf8.RuneCountInString(p.Zona) > maxZonaLen:
-		verr.add("zona", fmt.Sprintf("no puede superar los %d caracteres", maxZonaLen))
+		verr.agregar("zona", "es obligatoria")
+	case utf8.RuneCountInString(p.Zona) > maxLargoZona:
+		verr.agregar("zona", fmt.Sprintf("no puede superar los %d caracteres", maxLargoZona))
 	}
 
-	p.ObrasSociales = buildObrasSociales(in.ObrasSociales, &verr)
+	p.ObrasSociales = construirObrasSociales(entrada.ObrasSociales, &verr)
 
 	return p, verr
 }
 
-func validateName(raw, field string, verr *ValidationError) string {
-	name := strings.TrimSpace(raw)
+func validarNombre(crudo, campo string, verr *ErrorValidacion) string {
+	nombre := strings.TrimSpace(crudo)
 	switch {
-	case name == "":
-		verr.add(field, "es obligatorio")
-	case utf8.RuneCountInString(name) > maxNameLen:
-		verr.add(field, fmt.Sprintf("no puede superar los %d caracteres", maxNameLen))
+	case nombre == "":
+		verr.agregar(campo, "es obligatorio")
+	case utf8.RuneCountInString(nombre) > maxLargoNombre:
+		verr.agregar(campo, fmt.Sprintf("no puede superar los %d caracteres", maxLargoNombre))
 	}
-	return name
+	return nombre
 }
 
-func buildModalidades(raw []string, verr *ValidationError) []Modalidad {
-	if len(raw) == 0 {
-		verr.add("modalidades", "se requiere al menos una")
+func construirModalidades(crudo []string, verr *ErrorValidacion) []Modalidad {
+	if len(crudo) == 0 {
+		verr.agregar("modalidades", "se requiere al menos una")
 		return nil
 	}
 
-	seen := make(map[Modalidad]bool, len(raw))
-	out := make([]Modalidad, 0, len(raw))
+	visto := make(map[Modalidad]bool, len(crudo))
+	salida := make([]Modalidad, 0, len(crudo))
 
-	for _, r := range raw {
+	for _, r := range crudo {
 		m := Modalidad(strings.ToLower(strings.TrimSpace(r)))
 		switch {
-		case !m.Valid():
-			verr.add("modalidades", fmt.Sprintf("%q no es una modalidad válida", r))
-		case seen[m]:
-			verr.add("modalidades", fmt.Sprintf("%q está repetida", r))
+		case !m.EsValida():
+			verr.agregar("modalidades", fmt.Sprintf("%q no es una modalidad válida", r))
+		case visto[m]:
+			verr.agregar("modalidades", fmt.Sprintf("%q está repetida", r))
 		default:
-			seen[m] = true
-			out = append(out, m)
+			visto[m] = true
+			salida = append(salida, m)
 		}
 	}
-	return out
+	return salida
 }
 
-func buildObrasSociales(raw []string, verr *ValidationError) []string {
+func construirObrasSociales(crudo []string, verr *ErrorValidacion) []string {
 	// puede estar vacía: un profesional que solo atiende privado es válido
-	seen := make(map[string]bool, len(raw))
-	out := make([]string, 0, len(raw))
+	visto := make(map[string]bool, len(crudo))
+	salida := make([]string, 0, len(crudo))
 
-	for _, r := range raw {
+	for _, r := range crudo {
 		v := strings.TrimSpace(r)
 		if v == "" {
 			continue
 		}
 		// "OSDE" y "osde" son la misma obra social
-		key := Normalize(v)
-		if seen[key] {
-			verr.add("obrasSociales", fmt.Sprintf("%q está repetida", v))
+		clave := Normalizar(v)
+		if visto[clave] {
+			verr.agregar("obrasSociales", fmt.Sprintf("%q está repetida", v))
 			continue
 		}
-		seen[key] = true
-		out = append(out, v)
+		visto[clave] = true
+		salida = append(salida, v)
 	}
-	return out
+	return salida
 }
 ```
 
 - [ ] **Step 5: Correr los tests y verificar que pasan**
 
 Run: `cd apps/api && go test ./internal/domain/ -v`
-Expected: PASS en todos. Prestar atención a `TestCloneEsCopiaProfunda`: si falla, `Clone` está haciendo copia superficial y todo el repositorio en memoria de la Task 5 va a estar roto.
+Expected: PASS en todos. Prestar atención a `TestClonarEsCopiaProfunda`: si falla, `Clonar` está haciendo copia superficial y todo el repositorio en memoria de la Task 5 va a estar roto.
 
 - [ ] **Step 6: Verificar que el dominio no importa nada del proyecto**
 
@@ -1492,13 +1492,13 @@ Expected: una sola línea, `github.com/joaquinfochoa/Salud/apps/api/internal/dom
 ```bash
 cd "c:/Users/gianl/Desktop/Salud"
 git add apps/api/internal/domain/
-git commit -m "feat(domain): entidad Professional con validación acumulativa
+git commit -m "feat(domain): entidad Profesional con validación acumulativa
 
-No se puede construir un Professional inválido desde fuera del paquete.
-ValidationError junta todos los campos que fallan de una pasada.
+No se puede construir un Profesional inválido desde fuera del paquete.
+ErrorValidacion junta todos los campos que fallan de una pasada.
 
 Cambiar la matrícula o la especialidad devuelve la verificación a
-pending: la verificación se hizo sobre esos datos y deja de valer si
+pendiente: la verificación se hizo sobre esos datos y deja de valer si
 cambian.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
@@ -1516,9 +1516,9 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Consumes: todo el paquete `domain` (Tasks 2-4)
 - Produces:
-  - `repository.Filter{Especialidad *domain.Especialidad; Zona *string; Status *domain.Status; Query *string; Limit int; Offset int}`
-  - `repository.Professional` — la interfaz con `Create`, `GetByID`, `GetBySlug`, `GetByMatricula`, `List`, `Update`
-  - `func memory.NewProfessional() *memory.Professional` — implementa `repository.Professional`
+  - `repository.Filtro{Especialidad *domain.Especialidad; Zona *string; Estado *domain.Estado; Busqueda *string; Limite int; Desplazamiento int}`
+  - `repository.Profesional` — la interfaz con `Crear`, `ObtenerPorID`, `ObtenerPorSlug`, `ObtenerPorMatricula`, `Listar`, `Actualizar`
+  - `func memory.NuevoProfesional() *memory.Profesional` — implementa `repository.Profesional`
 
 - [ ] **Step 1: Escribir la interfaz**
 
@@ -1537,33 +1537,33 @@ import (
 	"github.com/joaquinfochoa/Salud/apps/api/internal/domain"
 )
 
-// Filter son los criterios del listado. Los punteros distinguen "no filtrar
+// Filtro son los criterios del listado. Los punteros distinguen "no filtrar
 // por este campo" de "filtrar por el valor cero", que con valores planos no se
-// puede: un Status("") sería indistinguible de "sin filtro".
-type Filter struct {
-	Especialidad *domain.Especialidad
-	Zona         *string
-	Status       *domain.Status
-	Query        *string // busca en nombre y apellido, sin distinguir acentos
-	Limit        int
-	Offset       int
+// puede: un Estado("") sería indistinguible de "sin filtro".
+type Filtro struct {
+	Especialidad   *domain.Especialidad
+	Zona           *string
+	Estado         *domain.Estado
+	Busqueda       *string // busca en nombre y apellido, sin distinguir acentos
+	Limite         int
+	Desplazamiento int
 }
 
-// Professional es el punto de cambio a PostgreSQL. Cuando exista la
+// Profesional es el punto de cambio a PostgreSQL. Cuando exista la
 // implementación con base de datos, migrar es cambiar una línea de main.go y
 // nada más.
 //
 // Todos los métodos reciben context.Context aunque la implementación en
 // memoria lo ignore: agregarlo después obligaría a tocar todas las firmas.
 //
-// No hay Delete: la baja es lógica y se hace con Update.
-type Professional interface {
-	Create(ctx context.Context, p domain.Professional) error
-	GetByID(ctx context.Context, id uuid.UUID) (domain.Professional, error)
-	GetBySlug(ctx context.Context, slug string) (domain.Professional, error)
-	GetByMatricula(ctx context.Context, m domain.Matricula) (domain.Professional, error)
-	List(ctx context.Context, f Filter) ([]domain.Professional, int, error)
-	Update(ctx context.Context, p domain.Professional) error
+// No hay borrado físico: la baja es lógica y se hace con Actualizar.
+type Profesional interface {
+	Crear(ctx context.Context, p domain.Profesional) error
+	ObtenerPorID(ctx context.Context, id uuid.UUID) (domain.Profesional, error)
+	ObtenerPorSlug(ctx context.Context, slug string) (domain.Profesional, error)
+	ObtenerPorMatricula(ctx context.Context, m domain.Matricula) (domain.Profesional, error)
+	Listar(ctx context.Context, f Filtro) ([]domain.Profesional, int, error)
+	Actualizar(ctx context.Context, p domain.Profesional) error
 }
 ```
 
@@ -1588,78 +1588,78 @@ import (
 	"github.com/joaquinfochoa/Salud/apps/api/internal/repository"
 )
 
-var testNow = time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
+var ahoraDePrueba = time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
 
-func makeProfessional(t *testing.T, first, last, matricula string, esp domain.Especialidad, zona string) domain.Professional {
+func hacerProfesional(t *testing.T, nombre, apellido, matricula string, esp domain.Especialidad, zona string) domain.Profesional {
 	t.Helper()
-	p, err := domain.NewProfessional(domain.ProfessionalInput{
-		FirstName:     first,
-		LastName:      last,
-		Matricula:     matricula,
-		Especialidad:  string(esp),
-		Bio:           "bio",
-		ConsultaPrice: 1000000,
-		Modalidades:   []string{"telemedicina"},
-		Zona:          zona,
-		ObrasSociales: []string{"OSDE"},
-	}, testNow)
+	p, err := domain.NuevoProfesional(domain.EntradaProfesional{
+		Nombre:         nombre,
+		Apellido:       apellido,
+		Matricula:      matricula,
+		Especialidad:   string(esp),
+		Bio:            "bio",
+		PrecioConsulta: 1000000,
+		Modalidades:    []string{"telemedicina"},
+		Zona:           zona,
+		ObrasSociales:  []string{"OSDE"},
+	}, ahoraDePrueba)
 	if err != nil {
 		t.Fatalf("no se pudo construir el profesional de prueba: %v", err)
 	}
 	return p
 }
 
-func TestCreateYGetByID(t *testing.T) {
+func TestCrearYObtenerPorID(t *testing.T) {
 	ctx := context.Background()
-	repo := NewProfessional()
-	p := makeProfessional(t, "Martín", "González", "MN 98234", domain.EspecialidadPsicologia, "CABA")
+	repo := NuevoProfesional()
+	p := hacerProfesional(t, "Martín", "González", "MN 98234", domain.EspecialidadPsicologia, "CABA")
 
-	if err := repo.Create(ctx, p); err != nil {
-		t.Fatalf("Create devolvió error: %v", err)
+	if err := repo.Crear(ctx, p); err != nil {
+		t.Fatalf("Crear devolvió error: %v", err)
 	}
 
-	got, err := repo.GetByID(ctx, p.ID)
+	obtenido, err := repo.ObtenerPorID(ctx, p.ID)
 	if err != nil {
-		t.Fatalf("GetByID devolvió error: %v", err)
+		t.Fatalf("ObtenerPorID devolvió error: %v", err)
 	}
-	if got.ID != p.ID || got.Slug != p.Slug {
-		t.Errorf("el profesional recuperado no coincide: %+v", got)
+	if obtenido.ID != p.ID || obtenido.Slug != p.Slug {
+		t.Errorf("el profesional recuperado no coincide: %+v", obtenido)
 	}
 }
 
-func TestGetByIDNoExiste(t *testing.T) {
-	_, err := NewProfessional().GetByID(context.Background(), uuid.New())
-	if !errors.Is(err, domain.ErrNotFound) {
-		t.Errorf("se esperaba ErrNotFound, se obtuvo %v", err)
+func TestObtenerPorIDNoExiste(t *testing.T) {
+	_, err := NuevoProfesional().ObtenerPorID(context.Background(), uuid.New())
+	if !errors.Is(err, domain.ErrNoEncontrado) {
+		t.Errorf("se esperaba ErrNoEncontrado, se obtuvo %v", err)
 	}
 }
 
-func TestGetBySlugYPorMatricula(t *testing.T) {
+func TestObtenerPorSlugYPorMatricula(t *testing.T) {
 	ctx := context.Background()
-	repo := NewProfessional()
-	p := makeProfessional(t, "Martín", "González", "MN 98234", domain.EspecialidadPsicologia, "CABA")
-	if err := repo.Create(ctx, p); err != nil {
-		t.Fatalf("Create devolvió error: %v", err)
+	repo := NuevoProfesional()
+	p := hacerProfesional(t, "Martín", "González", "MN 98234", domain.EspecialidadPsicologia, "CABA")
+	if err := repo.Crear(ctx, p); err != nil {
+		t.Fatalf("Crear devolvió error: %v", err)
 	}
 
-	bySlug, err := repo.GetBySlug(ctx, "martin-gonzalez")
+	porSlug, err := repo.ObtenerPorSlug(ctx, "martin-gonzalez")
 	if err != nil {
-		t.Fatalf("GetBySlug devolvió error: %v", err)
+		t.Fatalf("ObtenerPorSlug devolvió error: %v", err)
 	}
-	if bySlug.ID != p.ID {
-		t.Error("GetBySlug devolvió otro profesional")
+	if porSlug.ID != p.ID {
+		t.Error("ObtenerPorSlug devolvió otro profesional")
 	}
 
-	byMat, err := repo.GetByMatricula(ctx, p.Matricula)
+	porMatricula, err := repo.ObtenerPorMatricula(ctx, p.Matricula)
 	if err != nil {
-		t.Fatalf("GetByMatricula devolvió error: %v", err)
+		t.Fatalf("ObtenerPorMatricula devolvió error: %v", err)
 	}
-	if byMat.ID != p.ID {
-		t.Error("GetByMatricula devolvió otro profesional")
+	if porMatricula.ID != p.ID {
+		t.Error("ObtenerPorMatricula devolvió otro profesional")
 	}
 
-	if _, err := repo.GetBySlug(ctx, "no-existe"); !errors.Is(err, domain.ErrNotFound) {
-		t.Errorf("se esperaba ErrNotFound, se obtuvo %v", err)
+	if _, err := repo.ObtenerPorSlug(ctx, "no-existe"); !errors.Is(err, domain.ErrNoEncontrado) {
+		t.Errorf("se esperaba ErrNoEncontrado, se obtuvo %v", err)
 	}
 }
 
@@ -1668,99 +1668,99 @@ func TestGetBySlugYPorMatricula(t *testing.T) {
 // desde afuera sin enterarse.
 func TestElStoreDevuelveCopias(t *testing.T) {
 	ctx := context.Background()
-	repo := NewProfessional()
-	p := makeProfessional(t, "Martín", "González", "MN 98234", domain.EspecialidadPsicologia, "CABA")
-	if err := repo.Create(ctx, p); err != nil {
-		t.Fatalf("Create devolvió error: %v", err)
+	repo := NuevoProfesional()
+	p := hacerProfesional(t, "Martín", "González", "MN 98234", domain.EspecialidadPsicologia, "CABA")
+	if err := repo.Crear(ctx, p); err != nil {
+		t.Fatalf("Crear devolvió error: %v", err)
 	}
 
 	// mutar lo que devolvió el repositorio
-	got, _ := repo.GetByID(ctx, p.ID)
-	got.FirstName = "MUTADO"
-	got.Modalidades[0] = domain.ModalidadDomicilio
-	got.ObrasSociales[0] = "MUTADA"
+	obtenido, _ := repo.ObtenerPorID(ctx, p.ID)
+	obtenido.Nombre = "MUTADO"
+	obtenido.Modalidades[0] = domain.ModalidadDomicilio
+	obtenido.ObrasSociales[0] = "MUTADA"
 
-	fresh, _ := repo.GetByID(ctx, p.ID)
-	if fresh.FirstName == "MUTADO" {
+	recargado, _ := repo.ObtenerPorID(ctx, p.ID)
+	if recargado.Nombre == "MUTADO" {
 		t.Error("mutar el resultado alteró el store")
 	}
-	if fresh.Modalidades[0] == domain.ModalidadDomicilio {
+	if recargado.Modalidades[0] == domain.ModalidadDomicilio {
 		t.Error("las modalidades comparten memoria con el store")
 	}
-	if fresh.ObrasSociales[0] == "MUTADA" {
+	if recargado.ObrasSociales[0] == "MUTADA" {
 		t.Error("las obras sociales comparten memoria con el store")
 	}
 
-	// y al revés: mutar lo que se pasó a Create tampoco debe afectar
+	// y al revés: mutar lo que se pasó a Crear tampoco debe afectar
 	p.Modalidades[0] = domain.ModalidadPresencial
-	fresh2, _ := repo.GetByID(ctx, p.ID)
-	if fresh2.Modalidades[0] == domain.ModalidadPresencial {
-		t.Error("Create guardó una referencia en vez de una copia")
+	recargado2, _ := repo.ObtenerPorID(ctx, p.ID)
+	if recargado2.Modalidades[0] == domain.ModalidadPresencial {
+		t.Error("Crear guardó una referencia en vez de una copia")
 	}
 }
 
-func TestUpdate(t *testing.T) {
+func TestActualizar(t *testing.T) {
 	ctx := context.Background()
-	repo := NewProfessional()
-	p := makeProfessional(t, "Martín", "González", "MN 98234", domain.EspecialidadPsicologia, "CABA")
-	if err := repo.Create(ctx, p); err != nil {
-		t.Fatalf("Create devolvió error: %v", err)
+	repo := NuevoProfesional()
+	p := hacerProfesional(t, "Martín", "González", "MN 98234", domain.EspecialidadPsicologia, "CABA")
+	if err := repo.Crear(ctx, p); err != nil {
+		t.Fatalf("Crear devolvió error: %v", err)
 	}
 
 	p.Zona = "GBA Norte"
-	if err := repo.Update(ctx, p); err != nil {
-		t.Fatalf("Update devolvió error: %v", err)
+	if err := repo.Actualizar(ctx, p); err != nil {
+		t.Fatalf("Actualizar devolvió error: %v", err)
 	}
 
-	got, _ := repo.GetByID(ctx, p.ID)
-	if got.Zona != "GBA Norte" {
-		t.Errorf("Zona = %q, se esperaba %q", got.Zona, "GBA Norte")
+	obtenido, _ := repo.ObtenerPorID(ctx, p.ID)
+	if obtenido.Zona != "GBA Norte" {
+		t.Errorf("Zona = %q, se esperaba %q", obtenido.Zona, "GBA Norte")
 	}
 
-	desconocido := makeProfessional(t, "Otro", "Nombre", "MN 11111", domain.EspecialidadOdontologia, "CABA")
-	if err := repo.Update(ctx, desconocido); !errors.Is(err, domain.ErrNotFound) {
-		t.Errorf("se esperaba ErrNotFound al actualizar algo inexistente, se obtuvo %v", err)
+	desconocido := hacerProfesional(t, "Otro", "Nombre", "MN 11111", domain.EspecialidadOdontologia, "CABA")
+	if err := repo.Actualizar(ctx, desconocido); !errors.Is(err, domain.ErrNoEncontrado) {
+		t.Errorf("se esperaba ErrNoEncontrado al actualizar algo inexistente, se obtuvo %v", err)
 	}
 }
 
-func TestListFiltros(t *testing.T) {
+func TestListarFiltros(t *testing.T) {
 	ctx := context.Background()
-	repo := NewProfessional()
+	repo := NuevoProfesional()
 
-	psico := makeProfessional(t, "Martín", "González", "MN 98234", domain.EspecialidadPsicologia, "CABA")
-	kine := makeProfessional(t, "Pablo", "Moreno", "MN 45321", domain.EspecialidadKinesiologia, "CABA")
-	odonto := makeProfessional(t, "Gabriela", "Ríos", "MN 67890", domain.EspecialidadOdontologia, "GBA Norte")
+	psico := hacerProfesional(t, "Martín", "González", "MN 98234", domain.EspecialidadPsicologia, "CABA")
+	kine := hacerProfesional(t, "Pablo", "Moreno", "MN 45321", domain.EspecialidadKinesiologia, "CABA")
+	odonto := hacerProfesional(t, "Gabriela", "Ríos", "MN 67890", domain.EspecialidadOdontologia, "GBA Norte")
 	// las fechas distintas fuerzan un orden determinista
-	kine.CreatedAt = testNow.Add(time.Minute)
-	odonto.CreatedAt = testNow.Add(2 * time.Minute)
+	kine.CreadoEn = ahoraDePrueba.Add(time.Minute)
+	odonto.CreadoEn = ahoraDePrueba.Add(2 * time.Minute)
 
-	for _, p := range []domain.Professional{psico, kine, odonto} {
-		if err := repo.Create(ctx, p); err != nil {
-			t.Fatalf("Create devolvió error: %v", err)
+	for _, p := range []domain.Profesional{psico, kine, odonto} {
+		if err := repo.Crear(ctx, p); err != nil {
+			t.Fatalf("Crear devolvió error: %v", err)
 		}
 	}
 
 	t.Run("sin filtros devuelve todo", func(t *testing.T) {
-		got, total, err := repo.List(ctx, repository.Filter{Limit: 10})
+		obtenido, total, err := repo.Listar(ctx, repository.Filtro{Limite: 10})
 		if err != nil {
-			t.Fatalf("List devolvió error: %v", err)
+			t.Fatalf("Listar devolvió error: %v", err)
 		}
-		if total != 3 || len(got) != 3 {
-			t.Errorf("total=%d len=%d, se esperaba 3 y 3", total, len(got))
+		if total != 3 || len(obtenido) != 3 {
+			t.Errorf("total=%d len=%d, se esperaba 3 y 3", total, len(obtenido))
 		}
 	})
 
 	t.Run("por especialidad", func(t *testing.T) {
 		esp := domain.EspecialidadPsicologia
-		got, total, _ := repo.List(ctx, repository.Filter{Especialidad: &esp, Limit: 10})
-		if total != 1 || got[0].ID != psico.ID {
+		obtenido, total, _ := repo.Listar(ctx, repository.Filtro{Especialidad: &esp, Limite: 10})
+		if total != 1 || obtenido[0].ID != psico.ID {
 			t.Errorf("se esperaba solo el psicólogo, se obtuvo total=%d", total)
 		}
 	})
 
 	t.Run("por zona sin distinguir acentos", func(t *testing.T) {
 		zona := "caba"
-		_, total, _ := repo.List(ctx, repository.Filter{Zona: &zona, Limit: 10})
+		_, total, _ := repo.Listar(ctx, repository.Filtro{Zona: &zona, Limite: 10})
 		if total != 2 {
 			t.Errorf("total = %d, se esperaban 2 en CABA", total)
 		}
@@ -1769,113 +1769,113 @@ func TestListFiltros(t *testing.T) {
 	t.Run("busqueda sin acentos", func(t *testing.T) {
 		// buscar "gonzalez" tiene que encontrar a "González"
 		q := "gonzalez"
-		got, total, _ := repo.List(ctx, repository.Filter{Query: &q, Limit: 10})
-		if total != 1 || got[0].ID != psico.ID {
+		obtenido, total, _ := repo.Listar(ctx, repository.Filtro{Busqueda: &q, Limite: 10})
+		if total != 1 || obtenido[0].ID != psico.ID {
 			t.Errorf("la búsqueda sin acentos no encontró a González: total=%d", total)
 		}
 	})
 
 	t.Run("busqueda por nombre parcial", func(t *testing.T) {
 		q := "pab"
-		_, total, _ := repo.List(ctx, repository.Filter{Query: &q, Limit: 10})
+		_, total, _ := repo.Listar(ctx, repository.Filtro{Busqueda: &q, Limite: 10})
 		if total != 1 {
 			t.Errorf("total = %d, se esperaba 1", total)
 		}
 	})
 
-	t.Run("por status", func(t *testing.T) {
-		off := psico.Deactivate(testNow.Add(time.Hour))
-		if err := repo.Update(ctx, off); err != nil {
-			t.Fatalf("Update devolvió error: %v", err)
+	t.Run("por estado", func(t *testing.T) {
+		baja := psico.DarDeBaja(ahoraDePrueba.Add(time.Hour))
+		if err := repo.Actualizar(ctx, baja); err != nil {
+			t.Fatalf("Actualizar devolvió error: %v", err)
 		}
 
-		inactive := domain.StatusInactive
-		_, total, _ := repo.List(ctx, repository.Filter{Status: &inactive, Limit: 10})
+		inactivo := domain.EstadoInactivo
+		_, total, _ := repo.Listar(ctx, repository.Filtro{Estado: &inactivo, Limite: 10})
 		if total != 1 {
 			t.Errorf("total = %d, se esperaba 1 inactivo", total)
 		}
 
-		active := domain.StatusActive
-		_, total, _ = repo.List(ctx, repository.Filter{Status: &active, Limit: 10})
+		activo := domain.EstadoActivo
+		_, total, _ = repo.Listar(ctx, repository.Filtro{Estado: &activo, Limite: 10})
 		if total != 2 {
 			t.Errorf("total = %d, se esperaban 2 activos", total)
 		}
 	})
 }
 
-func TestListPaginacionEsEstable(t *testing.T) {
+func TestListarPaginacionEsEstable(t *testing.T) {
 	ctx := context.Background()
-	repo := NewProfessional()
+	repo := NuevoProfesional()
 
 	for i := range 10 {
-		p := makeProfessional(t, fmt.Sprintf("Nombre%d", i), "Apellido",
+		p := hacerProfesional(t, fmt.Sprintf("Nombre%d", i), "Apellido",
 			fmt.Sprintf("MN %d", 10000+i), domain.EspecialidadPsicologia, "CABA")
-		p.CreatedAt = testNow.Add(time.Duration(i) * time.Minute)
-		if err := repo.Create(ctx, p); err != nil {
-			t.Fatalf("Create devolvió error: %v", err)
+		p.CreadoEn = ahoraDePrueba.Add(time.Duration(i) * time.Minute)
+		if err := repo.Crear(ctx, p); err != nil {
+			t.Fatalf("Crear devolvió error: %v", err)
 		}
 	}
 
-	page1, total, _ := repo.List(ctx, repository.Filter{Limit: 3, Offset: 0})
-	if total != 10 || len(page1) != 3 {
-		t.Fatalf("total=%d len=%d, se esperaba 10 y 3", total, len(page1))
+	pagina1, total, _ := repo.Listar(ctx, repository.Filtro{Limite: 3, Desplazamiento: 0})
+	if total != 10 || len(pagina1) != 3 {
+		t.Fatalf("total=%d len=%d, se esperaba 10 y 3", total, len(pagina1))
 	}
 
-	page2, _, _ := repo.List(ctx, repository.Filter{Limit: 3, Offset: 3})
-	if len(page2) != 3 {
-		t.Fatalf("len(page2) = %d, se esperaba 3", len(page2))
+	pagina2, _, _ := repo.Listar(ctx, repository.Filtro{Limite: 3, Desplazamiento: 3})
+	if len(pagina2) != 3 {
+		t.Fatalf("len(pagina2) = %d, se esperaba 3", len(pagina2))
 	}
 
 	// el mapa de Go itera en orden aleatorio: sin ordenar, dos llamadas
 	// idénticas devolverían páginas distintas y la paginación no serviría
 	for range 5 {
-		again, _, _ := repo.List(ctx, repository.Filter{Limit: 3, Offset: 0})
-		for i := range page1 {
-			if again[i].ID != page1[i].ID {
+		otraVez, _, _ := repo.Listar(ctx, repository.Filtro{Limite: 3, Desplazamiento: 0})
+		for i := range pagina1 {
+			if otraVez[i].ID != pagina1[i].ID {
 				t.Fatal("dos llamadas idénticas devolvieron órdenes distintos")
 			}
 		}
 	}
 
 	// las páginas no se solapan
-	for _, a := range page1 {
-		for _, b := range page2 {
+	for _, a := range pagina1 {
+		for _, b := range pagina2 {
 			if a.ID == b.ID {
 				t.Error("la página 1 y la 2 comparten un elemento")
 			}
 		}
 	}
 
-	last, _, _ := repo.List(ctx, repository.Filter{Limit: 3, Offset: 9})
-	if len(last) != 1 {
-		t.Errorf("la última página tenía %d elementos, se esperaba 1", len(last))
+	ultima, _, _ := repo.Listar(ctx, repository.Filtro{Limite: 3, Desplazamiento: 9})
+	if len(ultima) != 1 {
+		t.Errorf("la última página tenía %d elementos, se esperaba 1", len(ultima))
 	}
 
-	empty, _, _ := repo.List(ctx, repository.Filter{Limit: 3, Offset: 50})
-	if len(empty) != 0 {
-		t.Errorf("un offset más allá del total debía devolver vacío, devolvió %d", len(empty))
+	vacio, _, _ := repo.Listar(ctx, repository.Filtro{Limite: 3, Desplazamiento: 50})
+	if len(vacio) != 0 {
+		t.Errorf("un desplazamiento más allá del total debía devolver vacío, devolvió %d", len(vacio))
 	}
 }
 
 func TestAccesoConcurrente(t *testing.T) {
 	ctx := context.Background()
-	repo := NewProfessional()
+	repo := NuevoProfesional()
 
 	var wg sync.WaitGroup
 	for i := range 50 {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			p := makeProfessional(t, fmt.Sprintf("N%d", i), "A",
+			p := hacerProfesional(t, fmt.Sprintf("N%d", i), "A",
 				fmt.Sprintf("MN %d", 20000+i), domain.EspecialidadPsicologia, "CABA")
-			_ = repo.Create(ctx, p)
-			_, _, _ = repo.List(ctx, repository.Filter{Limit: 10})
-			_, _ = repo.GetByID(ctx, p.ID)
+			_ = repo.Crear(ctx, p)
+			_, _, _ = repo.Listar(ctx, repository.Filtro{Limite: 10})
+			_, _ = repo.ObtenerPorID(ctx, p.ID)
 		}(i)
 	}
 	wg.Wait()
 
-	_, total, _ := repo.List(ctx, repository.Filter{Limit: 100})
+	_, total, _ := repo.Listar(ctx, repository.Filtro{Limite: 100})
 	if total != 50 {
 		t.Errorf("total = %d, se esperaban 50", total)
 	}
@@ -1885,7 +1885,7 @@ func TestAccesoConcurrente(t *testing.T) {
 - [ ] **Step 3: Correr los tests y verificar que fallan**
 
 Run: `cd apps/api && go test ./internal/repository/... -v`
-Expected: FAIL con `undefined: NewProfessional`
+Expected: FAIL con `undefined: NuevoProfesional`
 
 - [ ] **Step 4: Implementar el repositorio en memoria**
 
@@ -1909,125 +1909,125 @@ import (
 
 // aserción de compilación: si la implementación deja de cumplir la interfaz,
 // el error aparece acá y no en main.go
-var _ repository.Professional = (*Professional)(nil)
+var _ repository.Profesional = (*Profesional)(nil)
 
-// Professional guarda los profesionales en memoria. Se pierde todo al
+// Profesional guarda los profesionales en memoria. Se pierde todo al
 // reiniciar, y está bien: sirve para definir el dominio antes de comprometerse
-// con un esquema de base de datos, y para correr los tests sin infraestructura.
-type Professional struct {
-	mu   sync.RWMutex
-	data map[uuid.UUID]domain.Professional
+// con un esquema de base de datos, y para correr los casos sin infraestructura.
+type Profesional struct {
+	mu    sync.RWMutex
+	datos map[uuid.UUID]domain.Profesional
 }
 
-func NewProfessional() *Professional {
-	return &Professional{data: make(map[uuid.UUID]domain.Professional)}
+func NuevoProfesional() *Profesional {
+	return &Profesional{datos: make(map[uuid.UUID]domain.Profesional)}
 }
 
-func (r *Professional) Create(_ context.Context, p domain.Professional) error {
+func (r *Profesional) Crear(_ context.Context, p domain.Profesional) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, exists := r.data[p.ID]; exists {
+	if _, existe := r.datos[p.ID]; existe {
 		return fmt.Errorf("ya existe un profesional con id %s", p.ID)
 	}
-	r.data[p.ID] = p.Clone()
+	r.datos[p.ID] = p.Clonar()
 	return nil
 }
 
-func (r *Professional) GetByID(_ context.Context, id uuid.UUID) (domain.Professional, error) {
+func (r *Profesional) ObtenerPorID(_ context.Context, id uuid.UUID) (domain.Profesional, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	p, ok := r.data[id]
+	p, ok := r.datos[id]
 	if !ok {
-		return domain.Professional{}, domain.ErrNotFound
+		return domain.Profesional{}, domain.ErrNoEncontrado
 	}
-	return p.Clone(), nil
+	return p.Clonar(), nil
 }
 
-func (r *Professional) GetBySlug(_ context.Context, slug string) (domain.Professional, error) {
+func (r *Profesional) ObtenerPorSlug(_ context.Context, slug string) (domain.Profesional, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	for _, p := range r.data {
+	for _, p := range r.datos {
 		if p.Slug == slug {
-			return p.Clone(), nil
+			return p.Clonar(), nil
 		}
 	}
-	return domain.Professional{}, domain.ErrNotFound
+	return domain.Profesional{}, domain.ErrNoEncontrado
 }
 
-func (r *Professional) GetByMatricula(_ context.Context, m domain.Matricula) (domain.Professional, error) {
+func (r *Profesional) ObtenerPorMatricula(_ context.Context, m domain.Matricula) (domain.Profesional, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	for _, p := range r.data {
+	for _, p := range r.datos {
 		if p.Matricula == m {
-			return p.Clone(), nil
+			return p.Clonar(), nil
 		}
 	}
-	return domain.Professional{}, domain.ErrNotFound
+	return domain.Profesional{}, domain.ErrNoEncontrado
 }
 
-func (r *Professional) List(_ context.Context, f repository.Filter) ([]domain.Professional, int, error) {
+func (r *Profesional) Listar(_ context.Context, f repository.Filtro) ([]domain.Profesional, int, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	// ponytail: scan O(n), correcto para un store en memoria. La
 	// implementación Postgres resuelve esto con índices sobre especialidad,
-	// zona y status.
-	matched := make([]domain.Professional, 0, len(r.data))
-	for _, p := range r.data {
-		if matches(p, f) {
-			matched = append(matched, p.Clone())
+	// zona y estado.
+	coincidentes := make([]domain.Profesional, 0, len(r.datos))
+	for _, p := range r.datos {
+		if coincide(p, f) {
+			coincidentes = append(coincidentes, p.Clonar())
 		}
 	}
 
 	// El mapa de Go itera en orden aleatorio. Sin este orden, dos llamadas
 	// idénticas devolverían páginas distintas y la paginación sería inútil.
-	slices.SortFunc(matched, func(a, b domain.Professional) int {
-		if c := a.CreatedAt.Compare(b.CreatedAt); c != 0 {
+	slices.SortFunc(coincidentes, func(a, b domain.Profesional) int {
+		if c := a.CreadoEn.Compare(b.CreadoEn); c != 0 {
 			return c
 		}
 		return strings.Compare(a.ID.String(), b.ID.String())
 	})
 
-	total := len(matched)
-	if f.Offset >= total {
-		return []domain.Professional{}, total, nil
+	total := len(coincidentes)
+	if f.Desplazamiento >= total {
+		return []domain.Profesional{}, total, nil
 	}
 
-	end := total
-	if f.Limit > 0 && f.Offset+f.Limit < total {
-		end = f.Offset + f.Limit
+	fin := total
+	if f.Limite > 0 && f.Desplazamiento+f.Limite < total {
+		fin = f.Desplazamiento + f.Limite
 	}
-	return matched[f.Offset:end], total, nil
+	return coincidentes[f.Desplazamiento:fin], total, nil
 }
 
-func (r *Professional) Update(_ context.Context, p domain.Professional) error {
+func (r *Profesional) Actualizar(_ context.Context, p domain.Profesional) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, exists := r.data[p.ID]; !exists {
-		return domain.ErrNotFound
+	if _, existe := r.datos[p.ID]; !existe {
+		return domain.ErrNoEncontrado
 	}
-	r.data[p.ID] = p.Clone()
+	r.datos[p.ID] = p.Clonar()
 	return nil
 }
 
-func matches(p domain.Professional, f repository.Filter) bool {
+func coincide(p domain.Profesional, f repository.Filtro) bool {
 	if f.Especialidad != nil && p.Especialidad != *f.Especialidad {
 		return false
 	}
-	if f.Status != nil && p.Status != *f.Status {
+	if f.Estado != nil && p.Estado != *f.Estado {
 		return false
 	}
-	if f.Zona != nil && domain.Normalize(p.Zona) != domain.Normalize(*f.Zona) {
+	if f.Zona != nil && domain.Normalizar(p.Zona) != domain.Normalizar(*f.Zona) {
 		return false
 	}
-	if f.Query != nil {
-		q := domain.Normalize(*f.Query)
-		if q != "" && !strings.Contains(domain.Normalize(p.FullName()), q) {
+	if f.Busqueda != nil {
+		q := domain.Normalizar(*f.Busqueda)
+		if q != "" && !strings.Contains(domain.Normalizar(p.NombreCompleto()), q) {
 			return false
 		}
 	}
@@ -2072,14 +2072,14 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Test: `apps/api/internal/service/professional_test.go`
 
 **Interfaces:**
-- Consumes: `domain` (Tasks 2-4), `repository.Professional` y `repository.Filter` (Task 5), `memory.NewProfessional` (Task 5, solo en tests)
+- Consumes: `domain` (Tasks 2-4), `repository.Profesional` y `repository.Filtro` (Task 5), `memory.NuevoProfesional` (Task 5, solo en tests)
 - Produces:
-  - `func service.NewProfessional(repository.Professional) *service.Professional`
-  - `func (*service.Professional) Create(context.Context, domain.ProfessionalInput) (domain.Professional, error)`
-  - `func (*service.Professional) GetByID(context.Context, uuid.UUID) (domain.Professional, error)`
-  - `func (*service.Professional) GetBySlug(context.Context, string) (domain.Professional, error)`
-  - `func (*service.Professional) List(context.Context, repository.Filter) ([]domain.Professional, int, error)`
-  - Constantes `service.DefaultLimit = 20`, `service.MaxLimit = 100`
+  - `func service.NuevoProfesional(repository.Profesional) *service.Profesional`
+  - `func (*service.Profesional) Crear(context.Context, domain.EntradaProfesional) (domain.Profesional, error)`
+  - `func (*service.Profesional) ObtenerPorID(context.Context, uuid.UUID) (domain.Profesional, error)`
+  - `func (*service.Profesional) ObtenerPorSlug(context.Context, string) (domain.Profesional, error)`
+  - `func (*service.Profesional) Listar(context.Context, repository.Filtro) ([]domain.Profesional, int, error)`
+  - Constantes `service.LimitePorDefecto = 20`, `service.LimiteMaximo = 100`
 
 - [ ] **Step 1: Escribir los tests del alta y las lecturas**
 
@@ -2105,163 +2105,163 @@ import (
 // determinista, así que es el doble de test: se prueba contra la
 // implementación de verdad. Si un test pareciera necesitar un mock, la
 // frontera está mal dibujada.
-func newTestService() *Professional {
-	return NewProfessional(memory.NewProfessional())
+func nuevoServicioDePrueba() *Profesional {
+	return NuevoProfesional(memory.NuevoProfesional())
 }
 
-func validInput() domain.ProfessionalInput {
-	return domain.ProfessionalInput{
-		FirstName:     "Martín",
-		LastName:      "González",
-		Matricula:     "MN 98.234",
-		Especialidad:  "psicologia",
-		Bio:           "Psicólogo clínico.",
-		ConsultaPrice: 1200000,
-		Modalidades:   []string{"telemedicina"},
-		Zona:          "CABA",
-		ObrasSociales: []string{"OSDE"},
+func entradaValida() domain.EntradaProfesional {
+	return domain.EntradaProfesional{
+		Nombre:         "Martín",
+		Apellido:       "González",
+		Matricula:      "MN 98.234",
+		Especialidad:   "psicologia",
+		Bio:            "Psicólogo clínico.",
+		PrecioConsulta: 1200000,
+		Modalidades:    []string{"telemedicina"},
+		Zona:           "CABA",
+		ObrasSociales:  []string{"OSDE"},
 	}
 }
 
-func TestCreate(t *testing.T) {
+func TestCrear(t *testing.T) {
 	ctx := context.Background()
-	svc := newTestService()
+	svc := nuevoServicioDePrueba()
 
-	p, err := svc.Create(ctx, validInput())
+	p, err := svc.Crear(ctx, entradaValida())
 	if err != nil {
-		t.Fatalf("Create devolvió error: %v", err)
+		t.Fatalf("Crear devolvió error: %v", err)
 	}
 	if p.Slug != "martin-gonzalez" {
 		t.Errorf("Slug = %q, se esperaba %q", p.Slug, "martin-gonzalez")
 	}
-	if p.Status != domain.StatusActive || p.Verification != domain.VerificationPending {
+	if p.Estado != domain.EstadoActivo || p.Verificacion != domain.VerificacionPendiente {
 		t.Error("un profesional nuevo nace activo y sin verificar")
 	}
 
 	// tiene que quedar realmente guardado
-	got, err := svc.GetByID(ctx, p.ID)
+	obtenido, err := svc.ObtenerPorID(ctx, p.ID)
 	if err != nil {
-		t.Fatalf("GetByID devolvió error: %v", err)
+		t.Fatalf("ObtenerPorID devolvió error: %v", err)
 	}
-	if got.ID != p.ID {
+	if obtenido.ID != p.ID {
 		t.Error("el profesional no quedó persistido")
 	}
 }
 
-func TestCreateValidacion(t *testing.T) {
-	in := validInput()
-	in.FirstName = ""
+func TestCrearValidacion(t *testing.T) {
+	entrada := entradaValida()
+	entrada.Nombre = ""
 
-	_, err := newTestService().Create(context.Background(), in)
+	_, err := nuevoServicioDePrueba().Crear(context.Background(), entrada)
 
-	var verr domain.ValidationError
+	var verr domain.ErrorValidacion
 	if !errors.As(err, &verr) {
-		t.Fatalf("se esperaba ValidationError, se obtuvo %T: %v", err, err)
+		t.Fatalf("se esperaba ErrorValidacion, se obtuvo %T: %v", err, err)
 	}
 }
 
-func TestCreateMatriculaDuplicada(t *testing.T) {
+func TestCrearMatriculaDuplicada(t *testing.T) {
 	ctx := context.Background()
-	svc := newTestService()
+	svc := nuevoServicioDePrueba()
 
-	if _, err := svc.Create(ctx, validInput()); err != nil {
+	if _, err := svc.Crear(ctx, entradaValida()); err != nil {
 		t.Fatalf("el primer alta falló: %v", err)
 	}
 
 	// la misma matrícula escrita distinto sigue siendo la misma matrícula
-	otro := validInput()
-	otro.FirstName = "Otro"
-	otro.LastName = "Profesional"
+	otro := entradaValida()
+	otro.Nombre = "Otro"
+	otro.Apellido = "Profesional"
 	otro.Matricula = "m.n. 98234"
 
-	_, err := svc.Create(ctx, otro)
-	if !errors.Is(err, domain.ErrMatriculaTaken) {
-		t.Errorf("se esperaba ErrMatriculaTaken, se obtuvo %v", err)
+	_, err := svc.Crear(ctx, otro)
+	if !errors.Is(err, domain.ErrMatriculaEnUso) {
+		t.Errorf("se esperaba ErrMatriculaEnUso, se obtuvo %v", err)
 	}
 }
 
-func TestCreateSlugUnico(t *testing.T) {
+func TestCrearSlugUnico(t *testing.T) {
 	ctx := context.Background()
-	svc := newTestService()
+	svc := nuevoServicioDePrueba()
 
 	// tres homónimos: dos "Martín González" son perfectamente posibles y no
 	// pueden ser un error para el cliente
-	first, err := svc.Create(ctx, validInput())
+	primero, err := svc.Crear(ctx, entradaValida())
 	if err != nil {
 		t.Fatalf("alta 1 falló: %v", err)
 	}
 
-	in2 := validInput()
-	in2.Matricula = "MN 11111"
-	second, err := svc.Create(ctx, in2)
+	entrada2 := entradaValida()
+	entrada2.Matricula = "MN 11111"
+	segundo, err := svc.Crear(ctx, entrada2)
 	if err != nil {
 		t.Fatalf("alta 2 falló: %v", err)
 	}
 
-	in3 := validInput()
-	in3.Matricula = "MN 22222"
-	third, err := svc.Create(ctx, in3)
+	entrada3 := entradaValida()
+	entrada3.Matricula = "MN 22222"
+	tercero, err := svc.Crear(ctx, entrada3)
 	if err != nil {
 		t.Fatalf("alta 3 falló: %v", err)
 	}
 
-	if first.Slug != "martin-gonzalez" {
-		t.Errorf("slug 1 = %q", first.Slug)
+	if primero.Slug != "martin-gonzalez" {
+		t.Errorf("slug 1 = %q", primero.Slug)
 	}
-	if second.Slug != "martin-gonzalez-2" {
-		t.Errorf("slug 2 = %q, se esperaba martin-gonzalez-2", second.Slug)
+	if segundo.Slug != "martin-gonzalez-2" {
+		t.Errorf("slug 2 = %q, se esperaba martin-gonzalez-2", segundo.Slug)
 	}
-	if third.Slug != "martin-gonzalez-3" {
-		t.Errorf("slug 3 = %q, se esperaba martin-gonzalez-3", third.Slug)
+	if tercero.Slug != "martin-gonzalez-3" {
+		t.Errorf("slug 3 = %q, se esperaba martin-gonzalez-3", tercero.Slug)
 	}
 }
 
-func TestGetBySlug(t *testing.T) {
+func TestObtenerPorSlug(t *testing.T) {
 	ctx := context.Background()
-	svc := newTestService()
+	svc := nuevoServicioDePrueba()
 
-	p, err := svc.Create(ctx, validInput())
+	p, err := svc.Crear(ctx, entradaValida())
 	if err != nil {
-		t.Fatalf("Create devolvió error: %v", err)
+		t.Fatalf("Crear devolvió error: %v", err)
 	}
 
-	got, err := svc.GetBySlug(ctx, p.Slug)
+	obtenido, err := svc.ObtenerPorSlug(ctx, p.Slug)
 	if err != nil {
-		t.Fatalf("GetBySlug devolvió error: %v", err)
+		t.Fatalf("ObtenerPorSlug devolvió error: %v", err)
 	}
-	if got.ID != p.ID {
-		t.Error("GetBySlug devolvió otro profesional")
+	if obtenido.ID != p.ID {
+		t.Error("ObtenerPorSlug devolvió otro profesional")
 	}
 
-	if _, err := svc.GetBySlug(ctx, "no-existe"); !errors.Is(err, domain.ErrNotFound) {
-		t.Errorf("se esperaba ErrNotFound, se obtuvo %v", err)
+	if _, err := svc.ObtenerPorSlug(ctx, "no-existe"); !errors.Is(err, domain.ErrNoEncontrado) {
+		t.Errorf("se esperaba ErrNoEncontrado, se obtuvo %v", err)
 	}
 }
 
-func TestGetByIDNoExiste(t *testing.T) {
-	_, err := newTestService().GetByID(context.Background(), uuid.New())
-	if !errors.Is(err, domain.ErrNotFound) {
-		t.Errorf("se esperaba ErrNotFound, se obtuvo %v", err)
+func TestObtenerPorIDNoExiste(t *testing.T) {
+	_, err := nuevoServicioDePrueba().ObtenerPorID(context.Background(), uuid.New())
+	if !errors.Is(err, domain.ErrNoEncontrado) {
+		t.Errorf("se esperaba ErrNoEncontrado, se obtuvo %v", err)
 	}
 }
 
-func TestListDefaults(t *testing.T) {
+func TestListarDefaults(t *testing.T) {
 	ctx := context.Background()
-	svc := newTestService()
+	svc := nuevoServicioDePrueba()
 
 	for i := range 3 {
-		in := validInput()
-		in.Matricula = "MN 3000" + string(rune('0'+i))
-		if _, err := svc.Create(ctx, in); err != nil {
-			t.Fatalf("Create devolvió error: %v", err)
+		entrada := entradaValida()
+		entrada.Matricula = "MN 3000" + string(rune('0'+i))
+		if _, err := svc.Crear(ctx, entrada); err != nil {
+			t.Fatalf("Crear devolvió error: %v", err)
 		}
 	}
 
 	t.Run("limite por defecto", func(t *testing.T) {
-		f := repository.Filter{}
-		_, total, err := svc.List(ctx, f)
+		f := repository.Filtro{}
+		_, total, err := svc.Listar(ctx, f)
 		if err != nil {
-			t.Fatalf("List devolvió error: %v", err)
+			t.Fatalf("Listar devolvió error: %v", err)
 		}
 		if total != 3 {
 			t.Errorf("total = %d, se esperaba 3", total)
@@ -2269,22 +2269,22 @@ func TestListDefaults(t *testing.T) {
 	})
 
 	t.Run("limite recortado al maximo", func(t *testing.T) {
-		got, _, err := svc.List(ctx, repository.Filter{Limit: 5000})
+		obtenido, _, err := svc.Listar(ctx, repository.Filtro{Limite: 5000})
 		if err != nil {
-			t.Fatalf("List devolvió error: %v", err)
+			t.Fatalf("Listar devolvió error: %v", err)
 		}
-		if len(got) > MaxLimit {
-			t.Errorf("devolvió %d elementos, el máximo es %d", len(got), MaxLimit)
+		if len(obtenido) > LimiteMaximo {
+			t.Errorf("devolvió %d elementos, el máximo es %d", len(obtenido), LimiteMaximo)
 		}
 	})
 
-	t.Run("offset negativo se normaliza", func(t *testing.T) {
-		got, _, err := svc.List(ctx, repository.Filter{Offset: -10})
+	t.Run("desplazamiento negativo se normaliza", func(t *testing.T) {
+		obtenido, _, err := svc.Listar(ctx, repository.Filtro{Desplazamiento: -10})
 		if err != nil {
-			t.Fatalf("List devolvió error: %v", err)
+			t.Fatalf("Listar devolvió error: %v", err)
 		}
-		if len(got) != 3 {
-			t.Errorf("len = %d, se esperaba 3", len(got))
+		if len(obtenido) != 3 {
+			t.Errorf("len = %d, se esperaba 3", len(obtenido))
 		}
 	})
 }
@@ -2293,7 +2293,7 @@ func TestListDefaults(t *testing.T) {
 - [ ] **Step 2: Correr los tests y verificar que fallan**
 
 Run: `cd apps/api && go test ./internal/service/ -v`
-Expected: FAIL con `undefined: NewProfessional`
+Expected: FAIL con `undefined: NuevoProfesional`
 
 - [ ] **Step 3: Implementar el servicio con alta y lecturas**
 
@@ -2315,109 +2315,109 @@ import (
 )
 
 const (
-	// DefaultLimit es cuántos profesionales devuelve el listado si el cliente
+	// LimitePorDefecto es cuántos profesionales devuelve el listado si el cliente
 	// no pide un tamaño.
-	DefaultLimit = 20
+	LimitePorDefecto = 20
 
-	// MaxLimit es el techo. Sin techo, un cliente puede pedir el padrón
+	// LimiteMaximo es el techo. Sin techo, un cliente puede pedir el padrón
 	// entero en una llamada.
-	MaxLimit = 100
+	LimiteMaximo = 100
 )
 
-// Professional resuelve los casos de uso que necesitan mirar más de un
+// Profesional resuelve los casos de uso que necesitan mirar más de un
 // profesional a la vez. Las reglas que se deciden con una sola entidad viven
 // en el dominio, no acá.
-type Professional struct {
-	repo repository.Professional
+type Profesional struct {
+	repo repository.Profesional
 
-	// now es inyectable para que los tests no dependan del reloj.
-	now func() time.Time
+	// ahora es inyectable para que los casos no dependan del reloj.
+	ahora func() time.Time
 }
 
-func NewProfessional(repo repository.Professional) *Professional {
-	return &Professional{
-		repo: repo,
-		now:  func() time.Time { return time.Now().UTC() },
+func NuevoProfesional(repo repository.Profesional) *Profesional {
+	return &Profesional{
+		repo:  repo,
+		ahora: func() time.Time { return time.Now().UTC() },
 	}
 }
 
-func (s *Professional) Create(ctx context.Context, in domain.ProfessionalInput) (domain.Professional, error) {
-	p, err := domain.NewProfessional(in, s.now())
+func (s *Profesional) Crear(ctx context.Context, entrada domain.EntradaProfesional) (domain.Profesional, error) {
+	p, err := domain.NuevoProfesional(entrada, s.ahora())
 	if err != nil {
-		return domain.Professional{}, err
+		return domain.Profesional{}, err
 	}
 
 	// La matrícula es la única identidad real de una persona en este sistema.
 	// El parser ya normalizó "M.N. 98.234" y "MN 98234" a lo mismo, así que
 	// esta comparación atrapa los duplicados escritos distinto.
-	if err := s.assertMatriculaLibre(ctx, p.Matricula, uuid.Nil); err != nil {
-		return domain.Professional{}, err
+	if err := s.verificarMatriculaLibre(ctx, p.Matricula, uuid.Nil); err != nil {
+		return domain.Profesional{}, err
 	}
 
-	slug, err := s.uniqueSlug(ctx, p.Slug)
+	slug, err := s.slugUnico(ctx, p.Slug)
 	if err != nil {
-		return domain.Professional{}, err
+		return domain.Profesional{}, err
 	}
 	p.Slug = slug
 
-	if err := s.repo.Create(ctx, p); err != nil {
-		return domain.Professional{}, err
+	if err := s.repo.Crear(ctx, p); err != nil {
+		return domain.Profesional{}, err
 	}
 	return p, nil
 }
 
-func (s *Professional) GetByID(ctx context.Context, id uuid.UUID) (domain.Professional, error) {
-	return s.repo.GetByID(ctx, id)
+func (s *Profesional) ObtenerPorID(ctx context.Context, id uuid.UUID) (domain.Profesional, error) {
+	return s.repo.ObtenerPorID(ctx, id)
 }
 
-func (s *Professional) GetBySlug(ctx context.Context, slug string) (domain.Professional, error) {
-	return s.repo.GetBySlug(ctx, slug)
+func (s *Profesional) ObtenerPorSlug(ctx context.Context, slug string) (domain.Profesional, error) {
+	return s.repo.ObtenerPorSlug(ctx, slug)
 }
 
-func (s *Professional) List(ctx context.Context, f repository.Filter) ([]domain.Professional, int, error) {
-	if f.Limit <= 0 {
-		f.Limit = DefaultLimit
+func (s *Profesional) Listar(ctx context.Context, f repository.Filtro) ([]domain.Profesional, int, error) {
+	if f.Limite <= 0 {
+		f.Limite = LimitePorDefecto
 	}
-	if f.Limit > MaxLimit {
-		f.Limit = MaxLimit
+	if f.Limite > LimiteMaximo {
+		f.Limite = LimiteMaximo
 	}
-	if f.Offset < 0 {
-		f.Offset = 0
+	if f.Desplazamiento < 0 {
+		f.Desplazamiento = 0
 	}
-	return s.repo.List(ctx, f)
+	return s.repo.Listar(ctx, f)
 }
 
-// assertMatriculaLibre falla si otro profesional ya tiene esa matrícula.
-// exclude permite ignorar al propio profesional durante una edición.
-func (s *Professional) assertMatriculaLibre(ctx context.Context, m domain.Matricula, exclude uuid.UUID) error {
-	existing, err := s.repo.GetByMatricula(ctx, m)
+// verificarMatriculaLibre falla si otro profesional ya tiene esa matrícula.
+// excluir permite ignorar al propio profesional durante una edición.
+func (s *Profesional) verificarMatriculaLibre(ctx context.Context, m domain.Matricula, excluir uuid.UUID) error {
+	existente, err := s.repo.ObtenerPorMatricula(ctx, m)
 	switch {
-	case errors.Is(err, domain.ErrNotFound):
+	case errors.Is(err, domain.ErrNoEncontrado):
 		return nil
 	case err != nil:
 		return err
-	case existing.ID == exclude:
+	case existente.ID == excluir:
 		return nil
 	default:
-		return domain.ErrMatriculaTaken
+		return domain.ErrMatriculaEnUso
 	}
 }
 
-// uniqueSlug resuelve las colisiones agregando un sufijo numérico.
+// slugUnico resuelve las colisiones agregando un sufijo numérico.
 //
 // Nunca es un error para el cliente: dos "Martín González" son perfectamente
 // posibles y no hay razón para rechazar al segundo.
-func (s *Professional) uniqueSlug(ctx context.Context, base string) (string, error) {
-	candidate := base
+func (s *Profesional) slugUnico(ctx context.Context, base string) (string, error) {
+	candidato := base
 	for i := 2; ; i++ {
-		_, err := s.repo.GetBySlug(ctx, candidate)
-		if errors.Is(err, domain.ErrNotFound) {
-			return candidate, nil
+		_, err := s.repo.ObtenerPorSlug(ctx, candidato)
+		if errors.Is(err, domain.ErrNoEncontrado) {
+			return candidato, nil
 		}
 		if err != nil {
 			return "", err
 		}
-		candidate = fmt.Sprintf("%s-%d", base, i)
+		candidato = fmt.Sprintf("%s-%d", base, i)
 	}
 }
 ```
@@ -2425,14 +2425,14 @@ func (s *Professional) uniqueSlug(ctx context.Context, base string) (string, err
 - [ ] **Step 4: Correr los tests y verificar que pasan**
 
 Run: `cd apps/api && go test ./internal/service/ -v`
-Expected: PASS. `TestCreateSlugUnico` es el que confirma la cadena `martin-gonzalez`, `-2`, `-3`.
+Expected: PASS. `TestCrearSlugUnico` es el que confirma la cadena `martin-gonzalez`, `-2`, `-3`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 cd "c:/Users/gianl/Desktop/Salud"
 git add apps/api/internal/service/
-git commit -m "feat(service): alta y lecturas de Professional
+git commit -m "feat(service): alta y lecturas de Profesional
 
 La matrícula es única: el parser normaliza antes de comparar, así que
 'M.N. 98.234' y 'MN 98234' colisionan como corresponde.
@@ -2456,269 +2456,269 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Consumes: todo lo de la Task 6
 - Produces:
-  - `func (*service.Professional) Update(context.Context, uuid.UUID, domain.ProfessionalInput) (domain.Professional, error)`
-  - `func (*service.Professional) Deactivate(context.Context, uuid.UUID) error`
-  - `func (*service.Professional) Reactivate(context.Context, uuid.UUID) (domain.Professional, error)`
+  - `func (*service.Profesional) Actualizar(context.Context, uuid.UUID, domain.EntradaProfesional) (domain.Profesional, error)`
+  - `func (*service.Profesional) DarDeBaja(context.Context, uuid.UUID) error`
+  - `func (*service.Profesional) Reactivar(context.Context, uuid.UUID) (domain.Profesional, error)`
 
 - [ ] **Step 1: Escribir los tests**
 
 Agregar al final de `apps/api/internal/service/professional_test.go`:
 
 ```go
-func TestUpdate(t *testing.T) {
+func TestActualizar(t *testing.T) {
 	ctx := context.Background()
-	svc := newTestService()
+	svc := nuevoServicioDePrueba()
 
-	p, err := svc.Create(ctx, validInput())
+	p, err := svc.Crear(ctx, entradaValida())
 	if err != nil {
-		t.Fatalf("Create devolvió error: %v", err)
+		t.Fatalf("Crear devolvió error: %v", err)
 	}
 
-	in := validInput()
-	in.Bio = "Bio actualizada."
-	in.Zona = "GBA Norte"
+	entrada := entradaValida()
+	entrada.Bio = "Bio actualizada."
+	entrada.Zona = "GBA Norte"
 
-	updated, err := svc.Update(ctx, p.ID, in)
+	actualizado, err := svc.Actualizar(ctx, p.ID, entrada)
 	if err != nil {
-		t.Fatalf("Update devolvió error: %v", err)
+		t.Fatalf("Actualizar devolvió error: %v", err)
 	}
-	if updated.Bio != "Bio actualizada." || updated.Zona != "GBA Norte" {
+	if actualizado.Bio != "Bio actualizada." || actualizado.Zona != "GBA Norte" {
 		t.Error("los campos editables no se aplicaron")
 	}
-	if updated.Slug != p.Slug {
+	if actualizado.Slug != p.Slug {
 		t.Error("el slug es una URL pública y no debía cambiar")
 	}
 
 	// tiene que haber quedado persistido
-	got, _ := svc.GetByID(ctx, p.ID)
-	if got.Zona != "GBA Norte" {
+	obtenido, _ := svc.ObtenerPorID(ctx, p.ID)
+	if obtenido.Zona != "GBA Norte" {
 		t.Error("el cambio no quedó guardado")
 	}
 }
 
-func TestUpdateNoExiste(t *testing.T) {
-	_, err := newTestService().Update(context.Background(), uuid.New(), validInput())
-	if !errors.Is(err, domain.ErrNotFound) {
-		t.Errorf("se esperaba ErrNotFound, se obtuvo %v", err)
+func TestActualizarNoExiste(t *testing.T) {
+	_, err := nuevoServicioDePrueba().Actualizar(context.Background(), uuid.New(), entradaValida())
+	if !errors.Is(err, domain.ErrNoEncontrado) {
+		t.Errorf("se esperaba ErrNoEncontrado, se obtuvo %v", err)
 	}
 }
 
-func TestUpdateMatriculaDeOtro(t *testing.T) {
+func TestActualizarMatriculaDeOtro(t *testing.T) {
 	ctx := context.Background()
-	svc := newTestService()
+	svc := nuevoServicioDePrueba()
 
-	primero, err := svc.Create(ctx, validInput())
+	primero, err := svc.Crear(ctx, entradaValida())
 	if err != nil {
 		t.Fatalf("alta 1 falló: %v", err)
 	}
 
-	in2 := validInput()
-	in2.FirstName = "Carolina"
-	in2.LastName = "Vega"
-	in2.Matricula = "MN 11111"
-	if _, err := svc.Create(ctx, in2); err != nil {
+	entrada2 := entradaValida()
+	entrada2.Nombre = "Carolina"
+	entrada2.Apellido = "Vega"
+	entrada2.Matricula = "MN 11111"
+	if _, err := svc.Crear(ctx, entrada2); err != nil {
 		t.Fatalf("alta 2 falló: %v", err)
 	}
 
 	// el primero intenta quedarse con la matrícula del segundo
-	robo := validInput()
+	robo := entradaValida()
 	robo.Matricula = "MN 11111"
-	if _, err := svc.Update(ctx, primero.ID, robo); !errors.Is(err, domain.ErrMatriculaTaken) {
-		t.Errorf("se esperaba ErrMatriculaTaken, se obtuvo %v", err)
+	if _, err := svc.Actualizar(ctx, primero.ID, robo); !errors.Is(err, domain.ErrMatriculaEnUso) {
+		t.Errorf("se esperaba ErrMatriculaEnUso, se obtuvo %v", err)
 	}
 }
 
-func TestUpdateConservaLaPropiaMatricula(t *testing.T) {
+func TestActualizarConservaLaPropiaMatricula(t *testing.T) {
 	ctx := context.Background()
-	svc := newTestService()
+	svc := nuevoServicioDePrueba()
 
-	p, err := svc.Create(ctx, validInput())
+	p, err := svc.Crear(ctx, entradaValida())
 	if err != nil {
-		t.Fatalf("Create devolvió error: %v", err)
+		t.Fatalf("Crear devolvió error: %v", err)
 	}
 
 	// editar sin cambiar la matrícula no puede chocar consigo mismo
-	in := validInput()
-	in.Bio = "Otra bio."
-	if _, err := svc.Update(ctx, p.ID, in); err != nil {
+	entrada := entradaValida()
+	entrada.Bio = "Otra bio."
+	if _, err := svc.Actualizar(ctx, p.ID, entrada); err != nil {
 		t.Errorf("editar conservando la matrícula propia falló: %v", err)
 	}
 }
 
-func TestUpdateResetaVerificacion(t *testing.T) {
+func TestActualizarResetaVerificacion(t *testing.T) {
 	ctx := context.Background()
-	repo := memory.NewProfessional()
-	svc := NewProfessional(repo)
+	repo := memory.NuevoProfesional()
+	svc := NuevoProfesional(repo)
 
-	p, err := svc.Create(ctx, validInput())
+	p, err := svc.Crear(ctx, entradaValida())
 	if err != nil {
-		t.Fatalf("Create devolvió error: %v", err)
+		t.Fatalf("Crear devolvió error: %v", err)
 	}
 
 	// simular que ya fue verificado
-	p.Verification = domain.VerificationVerified
-	if err := repo.Update(ctx, p); err != nil {
+	p.Verificacion = domain.VerificacionVerificada
+	if err := repo.Actualizar(ctx, p); err != nil {
 		t.Fatalf("no se pudo preparar el estado: %v", err)
 	}
 
-	in := validInput()
-	in.Matricula = "MN 55555"
-	updated, err := svc.Update(ctx, p.ID, in)
+	entrada := entradaValida()
+	entrada.Matricula = "MN 55555"
+	actualizado, err := svc.Actualizar(ctx, p.ID, entrada)
 	if err != nil {
-		t.Fatalf("Update devolvió error: %v", err)
+		t.Fatalf("Actualizar devolvió error: %v", err)
 	}
-	if updated.Verification != domain.VerificationPending {
+	if actualizado.Verificacion != domain.VerificacionPendiente {
 		t.Error("cambiar la matrícula tenía que invalidar la verificación")
 	}
 }
 
-func TestDeactivateYReactivate(t *testing.T) {
+func TestDarDeBajaYReactivar(t *testing.T) {
 	ctx := context.Background()
-	svc := newTestService()
+	svc := nuevoServicioDePrueba()
 
-	p, err := svc.Create(ctx, validInput())
+	p, err := svc.Crear(ctx, entradaValida())
 	if err != nil {
-		t.Fatalf("Create devolvió error: %v", err)
+		t.Fatalf("Crear devolvió error: %v", err)
 	}
 
-	if err := svc.Deactivate(ctx, p.ID); err != nil {
-		t.Fatalf("Deactivate devolvió error: %v", err)
+	if err := svc.DarDeBaja(ctx, p.ID); err != nil {
+		t.Fatalf("DarDeBaja devolvió error: %v", err)
 	}
 
 	// el registro sigue existiendo: un turno pasado apunta acá
-	got, err := svc.GetByID(ctx, p.ID)
+	obtenido, err := svc.ObtenerPorID(ctx, p.ID)
 	if err != nil {
 		t.Fatalf("el profesional dado de baja tenía que seguir existiendo: %v", err)
 	}
-	if got.Status != domain.StatusInactive {
-		t.Errorf("Status = %q, se esperaba inactive", got.Status)
+	if obtenido.Estado != domain.EstadoInactivo {
+		t.Errorf("Estado = %q, se esperaba inactivo", obtenido.Estado)
 	}
-	if got.DeactivatedAt == nil {
-		t.Error("DeactivatedAt debía sellarse")
+	if obtenido.DadoDeBajaEn == nil {
+		t.Error("DadoDeBajaEn debía sellarse")
 	}
 
 	// pero no aparece en el listado por defecto
-	_, total, _ := svc.List(ctx, repository.Filter{})
+	_, total, _ := svc.Listar(ctx, repository.Filtro{})
 	if total != 0 {
 		t.Errorf("el listado por defecto devolvió %d, se esperaba 0", total)
 	}
 
 	// filtrando explícitamente sí aparece
-	inactive := domain.StatusInactive
-	_, total, _ = svc.List(ctx, repository.Filter{Status: &inactive})
+	inactivo := domain.EstadoInactivo
+	_, total, _ = svc.Listar(ctx, repository.Filtro{Estado: &inactivo})
 	if total != 1 {
 		t.Errorf("el listado de inactivos devolvió %d, se esperaba 1", total)
 	}
 
 	// dar de baja dos veces es idempotente, no un error
-	if err := svc.Deactivate(ctx, p.ID); err != nil {
+	if err := svc.DarDeBaja(ctx, p.ID); err != nil {
 		t.Errorf("la segunda baja debía ser idempotente, devolvió %v", err)
 	}
 
-	back, err := svc.Reactivate(ctx, p.ID)
+	reactivado, err := svc.Reactivar(ctx, p.ID)
 	if err != nil {
-		t.Fatalf("Reactivate devolvió error: %v", err)
+		t.Fatalf("Reactivar devolvió error: %v", err)
 	}
-	if back.Status != domain.StatusActive || back.DeactivatedAt != nil {
-		t.Error("reactivar debía dejarlo activo y limpiar DeactivatedAt")
+	if reactivado.Estado != domain.EstadoActivo || reactivado.DadoDeBajaEn != nil {
+		t.Error("reactivar debía dejarlo activo y limpiar DadoDeBajaEn")
 	}
 
-	_, total, _ = svc.List(ctx, repository.Filter{})
+	_, total, _ = svc.Listar(ctx, repository.Filtro{})
 	if total != 1 {
 		t.Errorf("después de reactivar el listado devolvió %d, se esperaba 1", total)
 	}
 }
 
-func TestDeactivateNoExiste(t *testing.T) {
-	if err := newTestService().Deactivate(context.Background(), uuid.New()); !errors.Is(err, domain.ErrNotFound) {
-		t.Errorf("se esperaba ErrNotFound, se obtuvo %v", err)
+func TestDarDeBajaNoExiste(t *testing.T) {
+	if err := nuevoServicioDePrueba().DarDeBaja(context.Background(), uuid.New()); !errors.Is(err, domain.ErrNoEncontrado) {
+		t.Errorf("se esperaba ErrNoEncontrado, se obtuvo %v", err)
 	}
 }
 ```
 
-Nota: el `List` por defecto todavía no filtra por activos. Ese comportamiento se agrega en el paso 3 y es lo que hace pasar `TestDeactivateYReactivate`.
+Nota: el `Listar` por defecto todavía no filtra por activos. Ese comportamiento se agrega en el paso 3 y es lo que hace pasar `TestDarDeBajaYReactivar`.
 
 - [ ] **Step 2: Correr los tests y verificar que fallan**
 
-Run: `cd apps/api && go test ./internal/service/ -run 'TestUpdate|TestDeactivate' -v`
-Expected: FAIL con `svc.Update undefined` y `svc.Deactivate undefined`
+Run: `cd apps/api && go test ./internal/service/ -run 'TestActualizar|TestDarDeBaja' -v`
+Expected: FAIL con `svc.Actualizar undefined` y `svc.DarDeBaja undefined`
 
 - [ ] **Step 3: Implementar los tres métodos y el filtro por defecto**
 
-En `apps/api/internal/service/professional.go`, reemplazar el método `List` por esta versión:
+En `apps/api/internal/service/professional.go`, reemplazar el método `Listar` por esta versión:
 
 ```go
-func (s *Professional) List(ctx context.Context, f repository.Filter) ([]domain.Professional, int, error) {
-	if f.Limit <= 0 {
-		f.Limit = DefaultLimit
+func (s *Profesional) Listar(ctx context.Context, f repository.Filtro) ([]domain.Profesional, int, error) {
+	if f.Limite <= 0 {
+		f.Limite = LimitePorDefecto
 	}
-	if f.Limit > MaxLimit {
-		f.Limit = MaxLimit
+	if f.Limite > LimiteMaximo {
+		f.Limite = LimiteMaximo
 	}
-	if f.Offset < 0 {
-		f.Offset = 0
+	if f.Desplazamiento < 0 {
+		f.Desplazamiento = 0
 	}
 	// Por defecto solo los activos: un profesional dado de baja no tiene que
 	// aparecer en una búsqueda de pacientes. Para verlos hay que pedirlos.
-	if f.Status == nil {
-		active := domain.StatusActive
-		f.Status = &active
+	if f.Estado == nil {
+		activo := domain.EstadoActivo
+		f.Estado = &activo
 	}
-	return s.repo.List(ctx, f)
+	return s.repo.Listar(ctx, f)
 }
 ```
 
 Y agregar al final del archivo:
 
 ```go
-// Update reemplaza los campos editables. Funciona también sobre profesionales
+// Actualizar reemplaza los campos editables. Funciona también sobre profesionales
 // dados de baja: editar los datos de alguien inactivo no tiene por qué
 // bloquearse, y no cambia su estado.
-func (s *Professional) Update(ctx context.Context, id uuid.UUID, in domain.ProfessionalInput) (domain.Professional, error) {
-	current, err := s.repo.GetByID(ctx, id)
+func (s *Profesional) Actualizar(ctx context.Context, id uuid.UUID, entrada domain.EntradaProfesional) (domain.Profesional, error) {
+	actual, err := s.repo.ObtenerPorID(ctx, id)
 	if err != nil {
-		return domain.Professional{}, err
+		return domain.Profesional{}, err
 	}
 
-	updated, err := current.ApplyUpdate(in, s.now())
+	actualizado, err := actual.AplicarCambios(entrada, s.ahora())
 	if err != nil {
-		return domain.Professional{}, err
+		return domain.Profesional{}, err
 	}
 
-	if updated.Matricula != current.Matricula {
-		if err := s.assertMatriculaLibre(ctx, updated.Matricula, id); err != nil {
-			return domain.Professional{}, err
+	if actualizado.Matricula != actual.Matricula {
+		if err := s.verificarMatriculaLibre(ctx, actualizado.Matricula, id); err != nil {
+			return domain.Profesional{}, err
 		}
 	}
 
-	if err := s.repo.Update(ctx, updated); err != nil {
-		return domain.Professional{}, err
+	if err := s.repo.Actualizar(ctx, actualizado); err != nil {
+		return domain.Profesional{}, err
 	}
-	return updated, nil
+	return actualizado, nil
 }
 
-// Deactivate da de baja. No borra: los turnos, comprobantes y pagos históricos
+// DarDeBaja da de baja. No borra: los turnos, comprobantes y pagos históricos
 // siguen apuntando a este registro, y sin él el comprobante que un paciente
 // presentó para un reintegro queda huérfano.
-func (s *Professional) Deactivate(ctx context.Context, id uuid.UUID) error {
-	current, err := s.repo.GetByID(ctx, id)
+func (s *Profesional) DarDeBaja(ctx context.Context, id uuid.UUID) error {
+	actual, err := s.repo.ObtenerPorID(ctx, id)
 	if err != nil {
 		return err
 	}
-	return s.repo.Update(ctx, current.Deactivate(s.now()))
+	return s.repo.Actualizar(ctx, actual.DarDeBaja(s.ahora()))
 }
 
-func (s *Professional) Reactivate(ctx context.Context, id uuid.UUID) (domain.Professional, error) {
-	current, err := s.repo.GetByID(ctx, id)
+func (s *Profesional) Reactivar(ctx context.Context, id uuid.UUID) (domain.Profesional, error) {
+	actual, err := s.repo.ObtenerPorID(ctx, id)
 	if err != nil {
-		return domain.Professional{}, err
+		return domain.Profesional{}, err
 	}
 
-	reactivated := current.Reactivate(s.now())
-	if err := s.repo.Update(ctx, reactivated); err != nil {
-		return domain.Professional{}, err
+	reactivado := actual.Reactivar(s.ahora())
+	if err := s.repo.Actualizar(ctx, reactivado); err != nil {
+		return domain.Profesional{}, err
 	}
-	return reactivated, nil
+	return reactivado, nil
 }
 ```
 
@@ -2739,7 +2739,7 @@ cd "c:/Users/gianl/Desktop/Salud"
 git add apps/api/internal/service/
 git commit -m "feat(service): edición, baja lógica y reactivación
 
-La baja no borra: pone Status en inactive y sella DeactivatedAt. Un
+La baja no borra: pone Estado en inactivo y sella DadoDeBajaEn. Un
 turno pasado apunta al profesional, y sin el registro el comprobante
 que el paciente presentó para un reintegro queda huérfano.
 
@@ -2784,13 +2784,13 @@ servers:
     description: Desarrollo local
 
 tags:
-  - name: professionals
-  - name: health
+  - name: profesionales
+  - name: salud
 
 paths:
   /healthz:
     get:
-      tags: [health]
+      tags: [salud]
       summary: Verifica que el servidor responde
       responses:
         '200':
@@ -2800,15 +2800,15 @@ paths:
               schema:
                 type: object
                 properties:
-                  status: { type: string, example: ok }
+                  estado: { type: string, example: ok }
 
-  /api/v1/professionals:
+  /api/v1/profesionales:
     get:
-      tags: [professionals]
+      tags: [profesionales]
       summary: Lista profesionales
       description: |
         Por defecto devuelve solo los activos. Para ver los dados de baja hay
-        que pedir `status=inactive` explícitamente.
+        que pedir `estado=inactivo` explícitamente.
       parameters:
         - name: especialidad
           in: query
@@ -2817,19 +2817,19 @@ paths:
           in: query
           description: Compara sin distinguir mayúsculas ni acentos
           schema: { type: string }
-        - name: status
+        - name: estado
           in: query
-          schema: { $ref: '#/components/schemas/Status' }
-        - name: q
+          schema: { $ref: '#/components/schemas/Estado' }
+        - name: busqueda
           in: query
           description: |
             Busca en nombre y apellido, sin distinguir mayúsculas ni acentos.
             Buscar `gonzalez` encuentra a `González`.
           schema: { type: string }
-        - name: limit
+        - name: limite
           in: query
           schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
-        - name: offset
+        - name: desplazamiento
           in: query
           schema: { type: integer, minimum: 0, default: 0 }
       responses:
@@ -2837,20 +2837,20 @@ paths:
           description: OK
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ProfessionalList' }
+              schema: { $ref: '#/components/schemas/ListaProfesionales' }
 
     post:
-      tags: [professionals]
+      tags: [profesionales]
       summary: Da de alta un profesional
       description: |
-        El profesional nace con `status: active` y `verification: pending`.
+        El profesional nace con `estado: activo` y `verificacion: pendiente`.
         Nadie nace verificado: la verificación es un acto contra REFEPS que
         todavía no está implementado.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ProfessionalRequest' }
+            schema: { $ref: '#/components/schemas/PeticionProfesional' }
       responses:
         '201':
           description: Creado
@@ -2860,12 +2860,12 @@ paths:
               schema: { type: string }
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Professional' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '422': { $ref: '#/components/responses/ValidationFailed' }
+              schema: { $ref: '#/components/schemas/Profesional' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+        '422': { $ref: '#/components/responses/ValidacionFallida' }
 
-  /api/v1/professionals/{id}:
+  /api/v1/profesionales/{id}:
     parameters:
       - name: id
         in: path
@@ -2873,72 +2873,72 @@ paths:
         schema: { type: string, format: uuid }
 
     get:
-      tags: [professionals]
+      tags: [profesionales]
       summary: Trae un profesional por ID
       description: |
-        Un profesional dado de baja devuelve 200 con `status: inactive`. El
+        Un profesional dado de baja devuelve 200 con `estado: inactivo`. El
         recurso existe, simplemente no opera.
       responses:
         '200':
           description: OK
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Professional' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '404': { $ref: '#/components/responses/NotFound' }
+              schema: { $ref: '#/components/schemas/Profesional' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
 
     put:
-      tags: [professionals]
+      tags: [profesionales]
       summary: Reemplaza los campos editables
       description: |
-        Reemplazo total, no parcial. `id`, `slug`, `status`, `verification` y
+        Reemplazo total, no parcial. `id`, `slug`, `estado`, `verificacion` y
         las marcas de tiempo no son editables.
 
         El slug no se regenera al cambiar el nombre: es una URL pública y
         romperla rompe enlaces y posicionamiento.
 
-        Cambiar la matrícula o la especialidad devuelve `verification` a
-        `pending`: la verificación se hizo sobre esos datos.
+        Cambiar la matrícula o la especialidad devuelve `verificacion` a
+        `pendiente`: la verificación se hizo sobre esos datos.
 
         Funciona sobre profesionales inactivos y no cambia su estado.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ProfessionalRequest' }
+            schema: { $ref: '#/components/schemas/PeticionProfesional' }
       responses:
         '200':
           description: Actualizado
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Professional' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '422': { $ref: '#/components/responses/ValidationFailed' }
+              schema: { $ref: '#/components/schemas/Profesional' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+        '422': { $ref: '#/components/responses/ValidacionFallida' }
 
     delete:
-      tags: [professionals]
+      tags: [profesionales]
       summary: Da de baja al profesional
       description: |
-        Baja lógica, no borrado. Pone `status` en `inactive` y sella
-        `deactivatedAt`. El registro se queda: los turnos y comprobantes
+        Baja lógica, no borrado. Pone `estado` en `inactivo` y sella
+        `dadoDeBajaEn`. El registro se queda: los turnos y comprobantes
         históricos apuntan a él.
 
         Es idempotente: dar de baja algo ya dado de baja devuelve 204.
       responses:
         '204': { description: Dado de baja }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '404': { $ref: '#/components/responses/NotFound' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
 
-  /api/v1/professionals/{id}/reactivate:
+  /api/v1/profesionales/{id}/reactivar:
     parameters:
       - name: id
         in: path
         required: true
         schema: { type: string, format: uuid }
     post:
-      tags: [professionals]
+      tags: [profesionales]
       summary: Revierte la baja
       description: Idempotente. Sobre alguien ya activo devuelve 200 sin cambios.
       responses:
@@ -2946,18 +2946,18 @@ paths:
           description: Reactivado
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Professional' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '404': { $ref: '#/components/responses/NotFound' }
+              schema: { $ref: '#/components/schemas/Profesional' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
 
-  /api/v1/professionals/by-slug/{slug}:
+  /api/v1/profesionales/por-slug/{slug}:
     parameters:
       - name: slug
         in: path
         required: true
         schema: { type: string }
     get:
-      tags: [professionals]
+      tags: [profesionales]
       summary: Trae un profesional por su slug público
       description: Es lo que consume la página `/p/{slug}` del frontend.
       responses:
@@ -2965,8 +2965,8 @@ paths:
           description: OK
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Professional' }
-        '404': { $ref: '#/components/responses/NotFound' }
+              schema: { $ref: '#/components/schemas/Profesional' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
 
 components:
   schemas:
@@ -2978,34 +2978,34 @@ components:
       type: string
       enum: [telemedicina, presencial, domicilio]
 
-    Status:
+    Estado:
       type: string
-      enum: [active, inactive]
+      enum: [activo, inactivo]
       description: Si el profesional opera hoy en la plataforma
 
-    Verification:
+    Verificacion:
       type: string
-      enum: [pending, verified, rejected]
+      enum: [pendiente, verificada, rechazada]
       description: Si su matrícula fue verificada contra el mundo real
 
-    Professional:
+    Profesional:
       type: object
       required:
         - id
         - slug
-        - firstName
-        - lastName
+        - nombre
+        - apellido
         - matricula
         - especialidad
         - bio
-        - consultaPriceCents
+        - precioConsultaCentavos
         - modalidades
         - zona
         - obrasSociales
-        - status
-        - verification
-        - createdAt
-        - updatedAt
+        - estado
+        - verificacion
+        - creadoEn
+        - actualizadoEn
       properties:
         id:
           type: string
@@ -3013,10 +3013,10 @@ components:
         slug:
           type: string
           example: martin-gonzalez
-        firstName:
+        nombre:
           type: string
           example: Martín
-        lastName:
+        apellido:
           type: string
           example: González
         matricula:
@@ -3027,7 +3027,7 @@ components:
           $ref: '#/components/schemas/Especialidad'
         bio:
           type: string
-        consultaPriceCents:
+        precioConsultaCentavos:
           type: integer
           format: int64
           minimum: 0
@@ -3044,35 +3044,35 @@ components:
           type: array
           items: { type: string }
           example: [OSDE, Swiss Medical]
-        status:
-          $ref: '#/components/schemas/Status'
-        verification:
-          $ref: '#/components/schemas/Verification'
-        createdAt:
+        estado:
+          $ref: '#/components/schemas/Estado'
+        verificacion:
+          $ref: '#/components/schemas/Verificacion'
+        creadoEn:
           type: string
           format: date-time
-        updatedAt:
+        actualizadoEn:
           type: string
           format: date-time
-        deactivatedAt:
+        dadoDeBajaEn:
           type: [string, 'null']
           format: date-time
 
-    ProfessionalRequest:
+    PeticionProfesional:
       type: object
       required:
-        - firstName
-        - lastName
+        - nombre
+        - apellido
         - matricula
         - especialidad
-        - consultaPriceCents
+        - precioConsultaCentavos
         - modalidades
         - zona
       properties:
-        firstName:
+        nombre:
           type: string
           maxLength: 100
-        lastName:
+        apellido:
           type: string
           maxLength: 100
         matricula:
@@ -3086,7 +3086,7 @@ components:
         bio:
           type: string
           maxLength: 2000
-        consultaPriceCents:
+        precioConsultaCentavos:
           type: integer
           format: int64
           minimum: 0
@@ -3102,62 +3102,62 @@ components:
           items: { type: string }
       additionalProperties: false
 
-    ProfessionalList:
+    ListaProfesionales:
       type: object
-      required: [data, pagination]
+      required: [datos, paginacion]
       properties:
-        data:
+        datos:
           type: array
-          items: { $ref: '#/components/schemas/Professional' }
-        pagination:
+          items: { $ref: '#/components/schemas/Profesional' }
+        paginacion:
           type: object
-          required: [total, limit, offset]
+          required: [total, limite, desplazamiento]
           properties:
             total:
               type: integer
               description: Cuántos hay en total con esos filtros, no en la página
-            limit: { type: integer }
-            offset: { type: integer }
+            limite: { type: integer }
+            desplazamiento: { type: integer }
 
-    Problem:
+    Problema:
       type: object
-      description: RFC 7807 Problem Details
+      description: Detalles del problema según RFC 7807
       required: [type, title, status]
       properties:
         type: { type: string, format: uri }
         title: { type: string }
         status: { type: integer }
         detail: { type: string }
-        errors:
+        errores:
           type: array
           description: Presente solo en errores de validación
           items:
             type: object
-            required: [field, message]
+            required: [campo, mensaje]
             properties:
-              field: { type: string }
-              message: { type: string }
+              campo: { type: string }
+              mensaje: { type: string }
 
   responses:
-    BadRequest:
+    PeticionInvalida:
       description: JSON malformado o parámetro con formato inválido
       content:
         application/problem+json:
-          schema: { $ref: '#/components/schemas/Problem' }
+          schema: { $ref: '#/components/schemas/Problema' }
 
-    NotFound:
+    NoEncontrado:
       description: No existe
       content:
         application/problem+json:
-          schema: { $ref: '#/components/schemas/Problem' }
+          schema: { $ref: '#/components/schemas/Problema' }
 
-    Conflict:
+    Conflicto:
       description: La matrícula ya está registrada por otro profesional
       content:
         application/problem+json:
-          schema: { $ref: '#/components/schemas/Problem' }
+          schema: { $ref: '#/components/schemas/Problema' }
 
-    ValidationFailed:
+    ValidacionFallida:
       description: |
         JSON válido pero datos inválidos. Distinto de 400: "entendí perfecto
         y está mal" es otro problema que "no entiendo lo que mandaste".
@@ -3165,9 +3165,9 @@ components:
         application/problem+json:
           schema:
             allOf:
-              - $ref: '#/components/schemas/Problem'
+              - $ref: '#/components/schemas/Problema'
               - type: object
-                required: [errors]
+                required: [errores]
 ```
 
 - [ ] **Step 2: Validar que el YAML es sintácticamente correcto**
@@ -3182,7 +3182,7 @@ Si Python no está disponible, cualquier validador de YAML sirve. La validación
 ```bash
 cd "c:/Users/gianl/Desktop/Salud"
 git add apps/api/api/openapi.yaml
-git commit -m "docs(api): contrato OpenAPI del CRUD de Professional
+git commit -m "docs(api): contrato OpenAPI del CRUD de Profesional
 
 Escrito a mano y antes que los handlers: el YAML es la fuente de verdad.
 Sirve para probar la API con Swagger UI mientras no exista el front, y
@@ -3206,12 +3206,12 @@ La traducción entre el dominio y el mundo HTTP. Es la única capa que conoce c�
 **Interfaces:**
 - Consumes: `domain` (Tasks 2-4)
 - Produces:
-  - `handler.Problem` con etiquetas JSON `type`, `title`, `status`, `detail`, `errors`
-  - `func writeProblem(http.ResponseWriter, Problem)`
-  - `func writeError(http.ResponseWriter, *http.Request, error)` — mapea errores de dominio a HTTP
-  - `func writeJSON(http.ResponseWriter, int, any)`
-  - `func decodeJSON(http.ResponseWriter, *http.Request, any) error`
-  - `professionalResponse`, `professionalRequest`, `listResponse` con sus conversores
+  - `handler.Problema` con etiquetas JSON `type`, `title`, `status`, `detail`, `errores`
+  - `func escribirProblema(http.ResponseWriter, Problema)`
+  - `func escribirError(http.ResponseWriter, *http.Request, error)` — mapea errores de dominio a HTTP
+  - `func escribirJSON(http.ResponseWriter, int, any)`
+  - `func decodificarJSON(http.ResponseWriter, *http.Request, any) error`
+  - `respuestaProfesional`, `peticionProfesional`, `respuestaListado` con sus conversores
 
 - [ ] **Step 1: Escribir los tests del mapeo de errores**
 
@@ -3231,105 +3231,105 @@ import (
 	"github.com/joaquinfochoa/Salud/apps/api/internal/domain"
 )
 
-func TestWriteErrorMapeaLosErroresDelDominio(t *testing.T) {
-	tests := []struct {
-		name       string
-		err        error
-		wantStatus int
+func TestEscribirErrorMapeaLosErroresDelDominio(t *testing.T) {
+	casos := []struct {
+		nombre         string
+		err            error
+		statusEsperado int
 	}{
-		{"no encontrado", domain.ErrNotFound, http.StatusNotFound},
-		{"matricula tomada", domain.ErrMatriculaTaken, http.StatusConflict},
+		{"no encontrado", domain.ErrNoEncontrado, http.StatusNotFound},
+		{"matricula tomada", domain.ErrMatriculaEnUso, http.StatusConflict},
 		{
 			"validacion",
-			domain.ValidationError{Fields: []domain.FieldError{{Field: "zona", Message: "es obligatoria"}}},
+			domain.ErrorValidacion{Campos: []domain.ErrorCampo{{Campo: "zona", Mensaje: "es obligatoria"}}},
 			http.StatusUnprocessableEntity,
 		},
 		{"desconocido", errors.New("algo explotó"), http.StatusInternalServerError},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, caso := range casos {
+		t.Run(caso.nombre, func(t *testing.T) {
 			rec := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 
-			writeError(rec, req, tt.err)
+			escribirError(rec, req, caso.err)
 
-			if rec.Code != tt.wantStatus {
-				t.Errorf("status = %d, se esperaba %d", rec.Code, tt.wantStatus)
+			if rec.Code != caso.statusEsperado {
+				t.Errorf("status = %d, se esperaba %d", rec.Code, caso.statusEsperado)
 			}
-			if ct := rec.Header().Get("Content-Type"); ct != problemContentType {
-				t.Errorf("Content-Type = %q, se esperaba %q", ct, problemContentType)
+			if ct := rec.Header().Get("Content-Type"); ct != tipoContenidoProblema {
+				t.Errorf("Content-Type = %q, se esperaba %q", ct, tipoContenidoProblema)
 			}
 
-			var p Problem
+			var p Problema
 			if err := json.Unmarshal(rec.Body.Bytes(), &p); err != nil {
 				t.Fatalf("el cuerpo no es JSON válido: %v", err)
 			}
-			if p.Status != tt.wantStatus {
-				t.Errorf("problem.status = %d, se esperaba %d", p.Status, tt.wantStatus)
+			if p.Estado != caso.statusEsperado {
+				t.Errorf("problem.status = %d, se esperaba %d", p.Estado, caso.statusEsperado)
 			}
-			if p.Title == "" || p.Type == "" {
+			if p.Titulo == "" || p.Tipo == "" {
 				t.Error("title y type son obligatorios en RFC 7807")
 			}
 		})
 	}
 }
 
-func TestWriteErrorNoFiltraDetallesInternos(t *testing.T) {
+func TestEscribirErrorNoFiltraDetallesInternos(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 
 	// un error interno no puede llegarle al cliente: puede tener nombres de
 	// tablas, rutas del servidor o datos de otro usuario
-	writeError(rec, req, errors.New("pq: relation \"professionals\" does not exist"))
+	escribirError(rec, req, errors.New("pq: relation \"profesionales\" does not exist"))
 
-	if strings.Contains(rec.Body.String(), "professionals") {
+	if strings.Contains(rec.Body.String(), "profesionales") {
 		t.Error("el error interno se filtró al cliente")
 	}
 }
 
-func TestWriteErrorDeValidacionIncluyeLosCampos(t *testing.T) {
+func TestEscribirErrorDeValidacionIncluyeLosCampos(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 
-	verr := domain.ValidationError{Fields: []domain.FieldError{
-		{Field: "matricula", Message: "formato inválido"},
-		{Field: "modalidades", Message: "se requiere al menos una"},
+	verr := domain.ErrorValidacion{Campos: []domain.ErrorCampo{
+		{Campo: "matricula", Mensaje: "formato inválido"},
+		{Campo: "modalidades", Mensaje: "se requiere al menos una"},
 	}}
-	writeError(rec, req, verr)
+	escribirError(rec, req, verr)
 
-	var p Problem
+	var p Problema
 	if err := json.Unmarshal(rec.Body.Bytes(), &p); err != nil {
 		t.Fatalf("el cuerpo no es JSON válido: %v", err)
 	}
-	if len(p.Errors) != 2 {
-		t.Fatalf("errors tenía %d elementos, se esperaban 2", len(p.Errors))
+	if len(p.Errores) != 2 {
+		t.Fatalf("errores tenía %d elementos, se esperaban 2", len(p.Errores))
 	}
-	if p.Errors[0].Field != "matricula" {
-		t.Errorf("errors[0].field = %q", p.Errors[0].Field)
+	if p.Errores[0].Campo != "matricula" {
+		t.Errorf("errores[0].campo = %q", p.Errores[0].Campo)
 	}
 }
 
-func TestDecodeJSONRechazaCamposDesconocidos(t *testing.T) {
+func TestDecodificarJSONRechazaCamposDesconocidos(t *testing.T) {
 	rec := httptest.NewRecorder()
-	// "consultaPrice" en vez de "consultaPriceCents" es exactamente el typo
+	// "precioConsulta" en vez de "precioConsultaCentavos" es exactamente el typo
 	// que este modo estricto tiene que atrapar
-	body := strings.NewReader(`{"firstName":"Ana","consultaPrice":100}`)
-	req := httptest.NewRequest(http.MethodPost, "/", body)
+	cuerpo := strings.NewReader(`{"nombre":"Ana","precioConsulta":100}`)
+	req := httptest.NewRequest(http.MethodPost, "/", cuerpo)
 
-	var dst professionalRequest
-	if err := decodeJSON(rec, req, &dst); err == nil {
+	var destino peticionProfesional
+	if err := decodificarJSON(rec, req, &destino); err == nil {
 		t.Error("un campo desconocido debía ser rechazado")
 	}
 }
 
-func TestDecodeJSONRechazaBasuraDespuesDelObjeto(t *testing.T) {
+func TestDecodificarJSONRechazaBasuraDespuesDelObjeto(t *testing.T) {
 	rec := httptest.NewRecorder()
-	body := strings.NewReader(`{"firstName":"Ana"} {"firstName":"Otro"}`)
-	req := httptest.NewRequest(http.MethodPost, "/", body)
+	cuerpo := strings.NewReader(`{"nombre":"Ana"} {"nombre":"Otro"}`)
+	req := httptest.NewRequest(http.MethodPost, "/", cuerpo)
 
-	var dst professionalRequest
-	if err := decodeJSON(rec, req, &dst); err == nil {
+	var destino peticionProfesional
+	if err := decodificarJSON(rec, req, &destino); err == nil {
 		t.Error("dos objetos JSON seguidos debían ser rechazados")
 	}
 }
@@ -3338,7 +3338,7 @@ func TestDecodeJSONRechazaBasuraDespuesDelObjeto(t *testing.T) {
 - [ ] **Step 2: Correr los tests y verificar que fallan**
 
 Run: `cd apps/api && go test ./internal/handler/ -v`
-Expected: FAIL con `undefined: writeError`
+Expected: FAIL con `undefined: escribirError`
 
 - [ ] **Step 3: Implementar `problem.go`**
 
@@ -3356,71 +3356,71 @@ import (
 	"github.com/joaquinfochoa/Salud/apps/api/internal/domain"
 )
 
-const problemContentType = "application/problem+json"
+const tipoContenidoProblema = "application/problem+json"
 
 // Los tipos de error del contrato. Son URIs por convención de RFC 7807: no
 // hace falta que resuelvan a una página, alcanza con que identifiquen la clase
 // de problema de forma estable.
 const (
-	typeBadRequest = "https://salud.app/errors/bad-request"
-	typeValidation = "https://salud.app/errors/validation"
-	typeNotFound   = "https://salud.app/errors/not-found"
-	typeConflict   = "https://salud.app/errors/conflict"
-	typeInternal   = "https://salud.app/errors/internal"
+	tipoPeticionInvalida = "https://salud.app/errors/bad-request"
+	tipoValidacion       = "https://salud.app/errors/validation"
+	tipoNoEncontrado     = "https://salud.app/errors/not-found"
+	tipoConflicto        = "https://salud.app/errors/conflict"
+	tipoInterno          = "https://salud.app/errors/internal"
 )
 
-// Problem es la representación de un error según RFC 7807.
-type Problem struct {
-	Type   string              `json:"type"`
-	Title  string              `json:"title"`
-	Status int                 `json:"status"`
-	Detail string              `json:"detail,omitempty"`
-	Errors []domain.FieldError `json:"errors,omitempty"`
+// Problema es la representación de un error según RFC 7807.
+type Problema struct {
+	Tipo    string              `json:"type"`
+	Titulo  string              `json:"title"`
+	Estado  int                 `json:"status"`
+	Detalle string              `json:"detail,omitempty"`
+	Errores []domain.ErrorCampo `json:"errores,omitempty"`
 }
 
-func writeProblem(w http.ResponseWriter, p Problem) {
-	w.Header().Set("Content-Type", problemContentType)
-	w.WriteHeader(p.Status)
+func escribirProblema(w http.ResponseWriter, p Problema) {
+	w.Header().Set("Content-Type", tipoContenidoProblema)
+	w.WriteHeader(p.Estado)
 	_ = json.NewEncoder(w).Encode(p)
 }
 
-func writeJSON(w http.ResponseWriter, status int, v any) {
+func escribirJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// writeError traduce un error del dominio al problema HTTP que le corresponde.
+// escribirError traduce un error del dominio al problema HTTP que le corresponde.
 //
 // Es el único lugar del proyecto donde el dominio se convierte en códigos de
 // estado. Las capas de abajo no saben que existe HTTP.
-func writeError(w http.ResponseWriter, r *http.Request, err error) {
-	var verr domain.ValidationError
+func escribirError(w http.ResponseWriter, r *http.Request, err error) {
+	var verr domain.ErrorValidacion
 
 	switch {
 	case errors.As(err, &verr):
-		writeProblem(w, Problem{
-			Type:   typeValidation,
-			Title:  "Datos inválidos",
-			Status: http.StatusUnprocessableEntity,
-			Detail: "Uno o más campos no cumplen las reglas del sistema",
-			Errors: verr.Fields,
+		escribirProblema(w, Problema{
+			Tipo:    tipoValidacion,
+			Titulo:  "Datos inválidos",
+			Estado:  http.StatusUnprocessableEntity,
+			Detalle: "Uno o más campos no cumplen las reglas del sistema",
+			Errores: verr.Campos,
 		})
 
-	case errors.Is(err, domain.ErrNotFound):
-		writeProblem(w, Problem{
-			Type:   typeNotFound,
-			Title:  "No encontrado",
-			Status: http.StatusNotFound,
-			Detail: "El profesional solicitado no existe",
+	case errors.Is(err, domain.ErrNoEncontrado):
+		escribirProblema(w, Problema{
+			Tipo:    tipoNoEncontrado,
+			Titulo:  "No encontrado",
+			Estado:  http.StatusNotFound,
+			Detalle: "El profesional solicitado no existe",
 		})
 
-	case errors.Is(err, domain.ErrMatriculaTaken):
-		writeProblem(w, Problem{
-			Type:   typeConflict,
-			Title:  "Matrícula ya registrada",
-			Status: http.StatusConflict,
-			Detail: "Otro profesional ya tiene registrada esa matrícula",
+	case errors.Is(err, domain.ErrMatriculaEnUso):
+		escribirProblema(w, Problema{
+			Tipo:    tipoConflicto,
+			Titulo:  "Matrícula ya registrada",
+			Estado:  http.StatusConflict,
+			Detalle: "Otro profesional ya tiene registrada esa matrícula",
 		})
 
 	default:
@@ -3428,24 +3428,24 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		// de tablas, rutas del servidor o datos de otro usuario.
 		slog.ErrorContext(r.Context(), "error no manejado",
 			"error", err,
-			"method", r.Method,
-			"path", r.URL.Path,
+			"metodo", r.Method,
+			"ruta", r.URL.Path,
 		)
-		writeProblem(w, Problem{
-			Type:   typeInternal,
-			Title:  "Error interno",
-			Status: http.StatusInternalServerError,
-			Detail: "Ocurrió un error inesperado. Volvé a intentar.",
+		escribirProblema(w, Problema{
+			Tipo:    tipoInterno,
+			Titulo:  "Error interno",
+			Estado:  http.StatusInternalServerError,
+			Detalle: "Ocurrió un error inesperado. Volvé a intentar.",
 		})
 	}
 }
 
-func writeBadRequest(w http.ResponseWriter, detail string) {
-	writeProblem(w, Problem{
-		Type:   typeBadRequest,
-		Title:  "Petición inválida",
-		Status: http.StatusBadRequest,
-		Detail: detail,
+func escribirPeticionInvalida(w http.ResponseWriter, detail string) {
+	escribirProblema(w, Problema{
+		Tipo:    tipoPeticionInvalida,
+		Titulo:  "Petición inválida",
+		Estado:  http.StatusBadRequest,
+		Detalle: detail,
 	})
 }
 ```
@@ -3466,57 +3466,57 @@ import (
 	"github.com/joaquinfochoa/Salud/apps/api/internal/domain"
 )
 
-const maxBodyBytes = 1 << 20 // 1 MB
+const maxBytesCuerpo = 1 << 20 // 1 MB
 
-// professionalRequest es lo que entra. Deliberadamente no incluye id, slug,
-// status, verification ni marcas de tiempo: son campos que el servidor decide,
+// peticionProfesional es lo que entra. Deliberadamente no incluye id, slug,
+// estado, verificacion ni marcas de tiempo: son campos que el servidor decide,
 // y aceptarlos sería dejar que el cliente se autoverifique.
-type professionalRequest struct {
-	FirstName          string   `json:"firstName"`
-	LastName           string   `json:"lastName"`
-	Matricula          string   `json:"matricula"`
-	Especialidad       string   `json:"especialidad"`
-	Bio                string   `json:"bio"`
-	ConsultaPriceCents int64    `json:"consultaPriceCents"`
-	Modalidades        []string `json:"modalidades"`
-	Zona               string   `json:"zona"`
-	ObrasSociales      []string `json:"obrasSociales"`
+type peticionProfesional struct {
+	Nombre                 string   `json:"nombre"`
+	Apellido               string   `json:"apellido"`
+	Matricula              string   `json:"matricula"`
+	Especialidad           string   `json:"especialidad"`
+	Bio                    string   `json:"bio"`
+	PrecioConsultaCentavos int64    `json:"precioConsultaCentavos"`
+	Modalidades            []string `json:"modalidades"`
+	Zona                   string   `json:"zona"`
+	ObrasSociales          []string `json:"obrasSociales"`
 }
 
-func (r professionalRequest) toInput() domain.ProfessionalInput {
-	return domain.ProfessionalInput{
-		FirstName:     r.FirstName,
-		LastName:      r.LastName,
-		Matricula:     r.Matricula,
-		Especialidad:  r.Especialidad,
-		Bio:           r.Bio,
-		ConsultaPrice: r.ConsultaPriceCents,
-		Modalidades:   r.Modalidades,
-		Zona:          r.Zona,
-		ObrasSociales: r.ObrasSociales,
+func (r peticionProfesional) aEntrada() domain.EntradaProfesional {
+	return domain.EntradaProfesional{
+		Nombre:         r.Nombre,
+		Apellido:       r.Apellido,
+		Matricula:      r.Matricula,
+		Especialidad:   r.Especialidad,
+		Bio:            r.Bio,
+		PrecioConsulta: r.PrecioConsultaCentavos,
+		Modalidades:    r.Modalidades,
+		Zona:           r.Zona,
+		ObrasSociales:  r.ObrasSociales,
 	}
 }
 
-type professionalResponse struct {
-	ID                 string     `json:"id"`
-	Slug               string     `json:"slug"`
-	FirstName          string     `json:"firstName"`
-	LastName           string     `json:"lastName"`
-	Matricula          string     `json:"matricula"`
-	Especialidad       string     `json:"especialidad"`
-	Bio                string     `json:"bio"`
-	ConsultaPriceCents int64      `json:"consultaPriceCents"`
-	Modalidades        []string   `json:"modalidades"`
-	Zona               string     `json:"zona"`
-	ObrasSociales      []string   `json:"obrasSociales"`
-	Status             string     `json:"status"`
-	Verification       string     `json:"verification"`
-	CreatedAt          time.Time  `json:"createdAt"`
-	UpdatedAt          time.Time  `json:"updatedAt"`
-	DeactivatedAt      *time.Time `json:"deactivatedAt"`
+type respuestaProfesional struct {
+	ID                     string     `json:"id"`
+	Slug                   string     `json:"slug"`
+	Nombre                 string     `json:"nombre"`
+	Apellido               string     `json:"apellido"`
+	Matricula              string     `json:"matricula"`
+	Especialidad           string     `json:"especialidad"`
+	Bio                    string     `json:"bio"`
+	PrecioConsultaCentavos int64      `json:"precioConsultaCentavos"`
+	Modalidades            []string   `json:"modalidades"`
+	Zona                   string     `json:"zona"`
+	ObrasSociales          []string   `json:"obrasSociales"`
+	Estado                 string     `json:"estado"`
+	Verificacion           string     `json:"verificacion"`
+	CreadoEn               time.Time  `json:"creadoEn"`
+	ActualizadoEn          time.Time  `json:"actualizadoEn"`
+	DadoDeBajaEn           *time.Time `json:"dadoDeBajaEn"`
 }
 
-func toResponse(p domain.Professional) professionalResponse {
+func aRespuesta(p domain.Profesional) respuestaProfesional {
 	// make con len 0 en vez de nil: un slice nil se serializa como null y el
 	// cliente TypeScript tendría que chequearlo en cada uso
 	mods := make([]string, 0, len(p.Modalidades))
@@ -3527,60 +3527,60 @@ func toResponse(p domain.Professional) professionalResponse {
 	obras := make([]string, 0, len(p.ObrasSociales))
 	obras = append(obras, p.ObrasSociales...)
 
-	return professionalResponse{
-		ID:                 p.ID.String(),
-		Slug:               p.Slug,
-		FirstName:          p.FirstName,
-		LastName:           p.LastName,
-		Matricula:          p.Matricula.String(),
-		Especialidad:       string(p.Especialidad),
-		Bio:                p.Bio,
-		ConsultaPriceCents: int64(p.ConsultaPrice),
-		Modalidades:        mods,
-		Zona:               p.Zona,
-		ObrasSociales:      obras,
-		Status:             string(p.Status),
-		Verification:       string(p.Verification),
-		CreatedAt:          p.CreatedAt,
-		UpdatedAt:          p.UpdatedAt,
-		DeactivatedAt:      p.DeactivatedAt,
+	return respuestaProfesional{
+		ID:                     p.ID.String(),
+		Slug:                   p.Slug,
+		Nombre:                 p.Nombre,
+		Apellido:               p.Apellido,
+		Matricula:              p.Matricula.String(),
+		Especialidad:           string(p.Especialidad),
+		Bio:                    p.Bio,
+		PrecioConsultaCentavos: int64(p.PrecioConsulta),
+		Modalidades:            mods,
+		Zona:                   p.Zona,
+		ObrasSociales:          obras,
+		Estado:                 string(p.Estado),
+		Verificacion:           string(p.Verificacion),
+		CreadoEn:               p.CreadoEn,
+		ActualizadoEn:          p.ActualizadoEn,
+		DadoDeBajaEn:           p.DadoDeBajaEn,
 	}
 }
 
-type paginationResponse struct {
-	Total  int `json:"total"`
-	Limit  int `json:"limit"`
-	Offset int `json:"offset"`
+type respuestaPaginacion struct {
+	Total          int `json:"total"`
+	Limite         int `json:"limite"`
+	Desplazamiento int `json:"desplazamiento"`
 }
 
-type listResponse struct {
-	Data       []professionalResponse `json:"data"`
-	Pagination paginationResponse     `json:"pagination"`
+type respuestaListado struct {
+	Datos      []respuestaProfesional `json:"datos"`
+	Paginacion respuestaPaginacion    `json:"paginacion"`
 }
 
-func toListResponse(ps []domain.Professional, total, limit, offset int) listResponse {
-	data := make([]professionalResponse, 0, len(ps))
+func aRespuestaListado(ps []domain.Profesional, total, limite, desplazamiento int) respuestaListado {
+	datos := make([]respuestaProfesional, 0, len(ps))
 	for _, p := range ps {
-		data = append(data, toResponse(p))
+		datos = append(datos, aRespuesta(p))
 	}
-	return listResponse{
-		Data:       data,
-		Pagination: paginationResponse{Total: total, Limit: limit, Offset: offset},
+	return respuestaListado{
+		Datos:      datos,
+		Paginacion: respuestaPaginacion{Total: total, Limite: limite, Desplazamiento: desplazamiento},
 	}
 }
 
-// decodeJSON lee el cuerpo en modo estricto.
+// decodificarJSON lee el cuerpo en modo estricto.
 //
 // DisallowUnknownFields atrapa el typo más probable de esta API: mandar
-// "consultaPrice" en vez de "consultaPriceCents" y que el precio quede en cero
+// "precioConsulta" en vez de "precioConsultaCentavos" y que el precio quede en cero
 // sin que nadie se entere.
-func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
-	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+func decodificarJSON(w http.ResponseWriter, r *http.Request, destino any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytesCuerpo)
 
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 
-	if err := dec.Decode(dst); err != nil {
+	if err := dec.Decode(destino); err != nil {
 		return err
 	}
 	if dec.More() {
@@ -3606,67 +3606,67 @@ import (
 	"github.com/joaquinfochoa/Salud/apps/api/internal/domain"
 )
 
-func TestToResponseSerializaLosCamposDelContrato(t *testing.T) {
-	now := time.Date(2026, 8, 21, 14, 2, 11, 0, time.UTC)
-	p, err := domain.NewProfessional(domain.ProfessionalInput{
-		FirstName:     "Martín",
-		LastName:      "González",
-		Matricula:     "MN 98.234",
-		Especialidad:  "psicologia",
-		Bio:           "Psicólogo clínico.",
-		ConsultaPrice: 1200000,
-		Modalidades:   []string{"telemedicina", "presencial"},
-		Zona:          "CABA",
-		ObrasSociales: []string{"OSDE"},
-	}, now)
+func TestARespuestaSerializaLosCamposDelContrato(t *testing.T) {
+	ahora := time.Date(2026, 8, 21, 14, 2, 11, 0, time.UTC)
+	p, err := domain.NuevoProfesional(domain.EntradaProfesional{
+		Nombre:         "Martín",
+		Apellido:       "González",
+		Matricula:      "MN 98.234",
+		Especialidad:   "psicologia",
+		Bio:            "Psicólogo clínico.",
+		PrecioConsulta: 1200000,
+		Modalidades:    []string{"telemedicina", "presencial"},
+		Zona:           "CABA",
+		ObrasSociales:  []string{"OSDE"},
+	}, ahora)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
 
-	raw, err := json.Marshal(toResponse(p))
+	crudo, err := json.Marshal(aRespuesta(p))
 	if err != nil {
 		t.Fatalf("no se pudo serializar: %v", err)
 	}
-	body := string(raw)
+	cuerpo := string(crudo)
 
 	// el precio viaja como entero, sin punto decimal
-	if !strings.Contains(body, `"consultaPriceCents":1200000`) {
-		t.Errorf("el precio no viaja como entero de centavos: %s", body)
+	if !strings.Contains(cuerpo, `"precioConsultaCentavos":1200000`) {
+		t.Errorf("el precio no viaja como entero de centavos: %s", cuerpo)
 	}
 	// la matrícula viaja en forma canónica
-	if !strings.Contains(body, `"matricula":"MN 98234"`) {
-		t.Errorf("la matrícula no viaja canónica: %s", body)
+	if !strings.Contains(cuerpo, `"matricula":"MN 98234"`) {
+		t.Errorf("la matrícula no viaja canónica: %s", cuerpo)
 	}
-	if !strings.Contains(body, `"deactivatedAt":null`) {
-		t.Errorf("deactivatedAt debía estar presente como null: %s", body)
+	if !strings.Contains(cuerpo, `"dadoDeBajaEn":null`) {
+		t.Errorf("dadoDeBajaEn debía estar presente como null: %s", cuerpo)
 	}
 }
 
-func TestToResponseNuncaSerializaSlicesComoNull(t *testing.T) {
+func TestARespuestaNuncaSerializaSlicesComoNull(t *testing.T) {
 	// un slice nil se serializa como null y obliga al cliente TypeScript a
 	// chequearlo en cada uso
-	var p domain.Professional
-	raw, err := json.Marshal(toResponse(p))
+	var p domain.Profesional
+	crudo, err := json.Marshal(aRespuesta(p))
 	if err != nil {
 		t.Fatalf("no se pudo serializar: %v", err)
 	}
-	body := string(raw)
+	cuerpo := string(crudo)
 
-	if strings.Contains(body, `"modalidades":null`) {
+	if strings.Contains(cuerpo, `"modalidades":null`) {
 		t.Error("modalidades se serializó como null en vez de []")
 	}
-	if strings.Contains(body, `"obrasSociales":null`) {
+	if strings.Contains(cuerpo, `"obrasSociales":null`) {
 		t.Error("obrasSociales se serializó como null en vez de []")
 	}
 }
 
-func TestToListResponseConListaVacia(t *testing.T) {
-	raw, err := json.Marshal(toListResponse(nil, 0, 20, 0))
+func TestARespuestaListadoConListaVacia(t *testing.T) {
+	crudo, err := json.Marshal(aRespuestaListado(nil, 0, 20, 0))
 	if err != nil {
 		t.Fatalf("no se pudo serializar: %v", err)
 	}
-	if strings.Contains(string(raw), `"data":null`) {
-		t.Errorf("data se serializó como null en vez de []: %s", raw)
+	if strings.Contains(string(crudo), `"datos":null`) {
+		t.Errorf("datos se serializó como null en vez de []: %s", crudo)
 	}
 }
 ```
@@ -3683,11 +3683,11 @@ cd "c:/Users/gianl/Desktop/Salud"
 git add apps/api/internal/handler/
 git commit -m "feat(handler): errores RFC 7807 y DTOs
 
-writeError es el único lugar donde el dominio se convierte en códigos
+escribirError es el único lugar donde el dominio se convierte en códigos
 HTTP. Los errores internos van al log, nunca al cliente.
 
-decodeJSON rechaza campos desconocidos: atrapa el typo de mandar
-consultaPrice en vez de consultaPriceCents, que dejaría el precio en
+decodificarJSON rechaza campos desconocidos: atrapa el typo de mandar
+precioConsulta en vez de precioConsultaCentavos, que dejaría el precio en
 cero sin que nadie se entere.
 
 Los slices se serializan como [] y nunca como null.
@@ -3706,10 +3706,10 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Consumes: `problem.go` (Task 9). No depende de los handlers: por eso va antes.
 - Produces:
-  - `func handler.Chain(http.Handler, ...func(http.Handler) http.Handler) http.Handler`
-  - `func handler.RequestID(http.Handler) http.Handler`
-  - `func handler.LogRequests(http.Handler) http.Handler`
-  - `func handler.RecoverPanic(http.Handler) http.Handler`
+  - `func handler.Encadenar(http.Handler, ...func(http.Handler) http.Handler) http.Handler`
+  - `func handler.IDPeticion(http.Handler) http.Handler`
+  - `func handler.RegistrarPeticiones(http.Handler) http.Handler`
+  - `func handler.RecuperarPanic(http.Handler) http.Handler`
 
 - [ ] **Step 1: Escribir los tests**
 
@@ -3725,27 +3725,27 @@ import (
 	"testing"
 )
 
-func TestRequestIDGeneraUnoSiNoViene(t *testing.T) {
-	var seen string
-	h := RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seen = RequestIDFrom(r.Context())
+func TestIDPeticionGeneraUnoSiNoViene(t *testing.T) {
+	var visto string
+	h := IDPeticion(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		visto = IDPeticionDe(r.Context())
 	}))
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 
-	if seen == "" {
+	if visto == "" {
 		t.Error("no se generó un request id")
 	}
-	if rec.Header().Get("X-Request-ID") != seen {
+	if rec.Header().Get("X-Request-ID") != visto {
 		t.Error("el request id tenía que volver en el header de la respuesta")
 	}
 }
 
-func TestRequestIDRespetaElQueViene(t *testing.T) {
-	var seen string
-	h := RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seen = RequestIDFrom(r.Context())
+func TestIDPeticionRespetaElQueViene(t *testing.T) {
+	var visto string
+	h := IDPeticion(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		visto = IDPeticionDe(r.Context())
 	}))
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -3754,13 +3754,13 @@ func TestRequestIDRespetaElQueViene(t *testing.T) {
 	h.ServeHTTP(httptest.NewRecorder(), req)
 
 	// permite seguir un request a través de varios servicios
-	if seen != "trae-el-suyo" {
-		t.Errorf("request id = %q, se esperaba el que vino en el header", seen)
+	if visto != "trae-el-suyo" {
+		t.Errorf("request id = %q, se esperaba el que vino en el header", visto)
 	}
 }
 
-func TestRecoverPanicDevuelve500(t *testing.T) {
-	h := RecoverPanic(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+func TestRecuperarPanicDevuelve500(t *testing.T) {
+	h := RecuperarPanic(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("algo explotó")
 	}))
 
@@ -3770,8 +3770,8 @@ func TestRecoverPanicDevuelve500(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, se esperaba 500", rec.Code)
 	}
-	if ct := rec.Header().Get("Content-Type"); ct != problemContentType {
-		t.Errorf("Content-Type = %q, se esperaba %q", ct, problemContentType)
+	if ct := rec.Header().Get("Content-Type"); ct != tipoContenidoProblema {
+		t.Errorf("Content-Type = %q, se esperaba %q", ct, tipoContenidoProblema)
 	}
 	// el mensaje del panic no puede llegarle al cliente
 	if strings.Contains(rec.Body.String(), "algo explotó") {
@@ -3779,32 +3779,32 @@ func TestRecoverPanicDevuelve500(t *testing.T) {
 	}
 }
 
-func TestChainAplicaEnOrden(t *testing.T) {
-	var order []string
+func TestEncadenarAplicaEnOrden(t *testing.T) {
+	var orden []string
 
-	mark := func(name string) func(http.Handler) http.Handler {
-		return func(next http.Handler) http.Handler {
+	marcar := func(nombre string) func(http.Handler) http.Handler {
+		return func(siguiente http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				order = append(order, name)
-				next.ServeHTTP(w, r)
+				orden = append(orden, nombre)
+				siguiente.ServeHTTP(w, r)
 			})
 		}
 	}
 
 	final := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		order = append(order, "handler")
+		orden = append(orden, "handler")
 	})
 
-	Chain(final, mark("primero"), mark("segundo")).
+	Encadenar(final, marcar("primero"), marcar("segundo")).
 		ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
 
-	want := []string{"primero", "segundo", "handler"}
-	if len(order) != len(want) {
-		t.Fatalf("orden = %v, se esperaba %v", order, want)
+	esperado := []string{"primero", "segundo", "handler"}
+	if len(orden) != len(esperado) {
+		t.Fatalf("orden = %v, se esperaba %v", orden, esperado)
 	}
-	for i := range want {
-		if order[i] != want[i] {
-			t.Fatalf("orden = %v, se esperaba %v", order, want)
+	for i := range esperado {
+		if orden[i] != esperado[i] {
+			t.Fatalf("orden = %v, se esperaba %v", orden, esperado)
 		}
 	}
 }
@@ -3812,8 +3812,8 @@ func TestChainAplicaEnOrden(t *testing.T) {
 
 - [ ] **Step 2: Correr los tests y verificar que fallan**
 
-Run: `cd apps/api && go test ./internal/handler/ -run 'TestRequestID|TestRecover|TestChain' -v`
-Expected: FAIL con `undefined: RequestID`
+Run: `cd apps/api && go test ./internal/handler/ -run 'TestIDPeticion|TestRecuperar|TestEncadenar' -v`
+Expected: FAIL con `undefined: IDPeticion`
 
 - [ ] **Step 3: Implementar el middleware**
 
@@ -3831,87 +3831,87 @@ import (
 	"github.com/google/uuid"
 )
 
-const requestIDHeader = "X-Request-ID"
+const headerIDPeticion = "X-Request-ID"
 
-type contextKey string
+type claveContexto string
 
-const requestIDKey contextKey = "requestID"
+const claveIDPeticion claveContexto = "requestID"
 
-// Chain envuelve el handler. El primer middleware de la lista es el más
+// Encadenar envuelve el handler. El primer middleware de la lista es el más
 // externo: el primero en ver el request y el último en ver la respuesta.
-func Chain(h http.Handler, mw ...func(http.Handler) http.Handler) http.Handler {
+func Encadenar(h http.Handler, mw ...func(http.Handler) http.Handler) http.Handler {
 	for i := len(mw) - 1; i >= 0; i-- {
 		h = mw[i](h)
 	}
 	return h
 }
 
-// RequestID asegura que todo request tenga un identificador. Si el cliente
+// IDPeticion asegura que todo request tenga un identificador. Si el cliente
 // manda uno, se respeta: permite seguir una operación a través de varios
 // servicios en los logs.
-func RequestID(next http.Handler) http.Handler {
+func IDPeticion(siguiente http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := r.Header.Get(requestIDHeader)
+		id := r.Header.Get(headerIDPeticion)
 		if id == "" {
 			id = uuid.NewString()
 		}
 
-		w.Header().Set(requestIDHeader, id)
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestIDKey, id)))
+		w.Header().Set(headerIDPeticion, id)
+		siguiente.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), claveIDPeticion, id)))
 	})
 }
 
-// RequestIDFrom devuelve el identificador del request, o cadena vacía si el
+// IDPeticionDe devuelve el identificador del request, o cadena vacía si el
 // middleware no corrió.
-func RequestIDFrom(ctx context.Context) string {
-	id, _ := ctx.Value(requestIDKey).(string)
+func IDPeticionDe(ctx context.Context) string {
+	id, _ := ctx.Value(claveIDPeticion).(string)
 	return id
 }
 
-// statusRecorder captura el código de estado para poder loguearlo: el
+// grabadorEstado captura el código de estado para poder loguearlo: el
 // http.ResponseWriter no lo expone.
-type statusRecorder struct {
+type grabadorEstado struct {
 	http.ResponseWriter
-	status int
+	estado int
 	bytes  int
 }
 
-func (w *statusRecorder) WriteHeader(code int) {
-	w.status = code
-	w.ResponseWriter.WriteHeader(code)
+func (w *grabadorEstado) WriteHeader(codigo int) {
+	w.estado = codigo
+	w.ResponseWriter.WriteHeader(codigo)
 }
 
-func (w *statusRecorder) Write(b []byte) (int, error) {
-	if w.status == 0 {
-		w.status = http.StatusOK
+func (w *grabadorEstado) Write(b []byte) (int, error) {
+	if w.estado == 0 {
+		w.estado = http.StatusOK
 	}
 	n, err := w.ResponseWriter.Write(b)
 	w.bytes += n
 	return n, err
 }
 
-func LogRequests(next http.Handler) http.Handler {
+func RegistrarPeticiones(siguiente http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		inicio := time.Now()
+		rec := &grabadorEstado{ResponseWriter: w, estado: http.StatusOK}
 
-		next.ServeHTTP(rec, r)
+		siguiente.ServeHTTP(rec, r)
 
-		slog.InfoContext(r.Context(), "request",
-			"requestId", RequestIDFrom(r.Context()),
-			"method", r.Method,
-			"path", r.URL.Path,
-			"status", rec.status,
+		slog.InfoContext(r.Context(), "peticion",
+			"idPeticion", IDPeticionDe(r.Context()),
+			"metodo", r.Method,
+			"ruta", r.URL.Path,
+			"estado", rec.estado,
 			"bytes", rec.bytes,
-			"durationMs", time.Since(start).Milliseconds(),
+			"duracionMs", time.Since(inicio).Milliseconds(),
 		)
 	})
 }
 
-// RecoverPanic evita que un panic en un handler tire el proceso entero.
+// RecuperarPanic evita que un panic en un handler tire el proceso entero.
 //
-// Va por dentro de LogRequests para que el log registre el 500 resultante.
-func RecoverPanic(next http.Handler) http.Handler {
+// Va por dentro de RegistrarPeticiones para que el log registre el 500 resultante.
+func RecuperarPanic(siguiente http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			rec := recover()
@@ -3921,21 +3921,21 @@ func RecoverPanic(next http.Handler) http.Handler {
 
 			// el detalle del panic va al log, nunca al cliente
 			slog.ErrorContext(r.Context(), "panic recuperado",
-				"requestId", RequestIDFrom(r.Context()),
+				"idPeticion", IDPeticionDe(r.Context()),
 				"panic", rec,
-				"method", r.Method,
-				"path", r.URL.Path,
+				"metodo", r.Method,
+				"ruta", r.URL.Path,
 			)
 
-			writeProblem(w, Problem{
-				Type:   typeInternal,
-				Title:  "Error interno",
-				Status: http.StatusInternalServerError,
-				Detail: "Ocurrió un error inesperado. Volvé a intentar.",
+			escribirProblema(w, Problema{
+				Tipo:    tipoInterno,
+				Titulo:  "Error interno",
+				Estado:  http.StatusInternalServerError,
+				Detalle: "Ocurrió un error inesperado. Volvé a intentar.",
 			})
 		}()
 
-		next.ServeHTTP(w, r)
+		siguiente.ServeHTTP(w, r)
 	})
 }
 ```
@@ -3952,10 +3952,10 @@ cd "c:/Users/gianl/Desktop/Salud"
 git add apps/api/internal/handler/
 git commit -m "feat(handler): middleware de request id, logging y recover
 
-RequestID respeta el que manda el cliente: permite seguir una operación
+IDPeticion respeta el que manda el cliente: permite seguir una operación
 a través de varios servicios en los logs.
 
-RecoverPanic evita que un handler tire el proceso, y el detalle del
+RecuperarPanic evita que un handler tire el proceso, y el detalle del
 panic va al log y nunca al cliente.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
@@ -3971,11 +3971,11 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Test: `apps/api/internal/handler/professional_test.go`
 
 **Interfaces:**
-- Consumes: `service.Professional` (Tasks 6-7), `problem.go` y `dto.go` (Task 9), el middleware (Task 10)
+- Consumes: `service.Profesional` (Tasks 6-7), `problem.go` y `dto.go` (Task 9), el middleware (Task 10)
 - Produces:
-  - `func handler.NewProfessional(*service.Professional) *handler.ProfessionalHandler`
-  - Métodos `Create`, `List`, `GetByID`, `GetBySlug`, `Update`, `Deactivate`, `Reactivate`
-  - `func handler.NewRouter(*ProfessionalHandler) http.Handler`
+  - `func handler.NuevoProfesional(*service.Profesional) *handler.ManejadorProfesional`
+  - Métodos `Crear`, `Listar`, `ObtenerPorID`, `ObtenerPorSlug`, `Actualizar`, `DarDeBaja`, `Reactivar`
+  - `func handler.NuevoRouter(*ManejadorProfesional) http.Handler`
 
 - [ ] **Step 1: Escribir los tests de la capa HTTP**
 
@@ -3997,66 +3997,66 @@ import (
 	"github.com/joaquinfochoa/Salud/apps/api/internal/service"
 )
 
-// newTestServer cablea el stack real de punta a punta.
-func newTestServer(t *testing.T) *httptest.Server {
+// nuevoServidorDePrueba cablea el stack real de punta a punta.
+func nuevoServidorDePrueba(t *testing.T) *httptest.Server {
 	t.Helper()
-	repo := memory.NewProfessional()
-	svc := service.NewProfessional(repo)
-	srv := httptest.NewServer(NewRouter(NewProfessional(svc)))
+	repo := memory.NuevoProfesional()
+	svc := service.NuevoProfesional(repo)
+	srv := httptest.NewServer(NuevoRouter(NuevoProfesional(svc)))
 	t.Cleanup(srv.Close)
 	return srv
 }
 
-const validBody = `{
-  "firstName": "Martín",
-  "lastName": "González",
+const cuerpoValido = `{
+  "nombre": "Martín",
+  "apellido": "González",
   "matricula": "MN 98.234",
   "especialidad": "psicologia",
   "bio": "Psicólogo clínico.",
-  "consultaPriceCents": 1200000,
+  "precioConsultaCentavos": 1200000,
   "modalidades": ["telemedicina", "presencial"],
   "zona": "CABA",
   "obrasSociales": ["OSDE"]
 }`
 
-func post(t *testing.T, srv *httptest.Server, path, body string) *http.Response {
+func postear(t *testing.T, srv *httptest.Server, ruta, cuerpo string) *http.Response {
 	t.Helper()
-	resp, err := srv.Client().Post(srv.URL+path, "application/json", strings.NewReader(body))
+	resp, err := srv.Client().Post(srv.URL+ruta, "application/json", strings.NewReader(cuerpo))
 	if err != nil {
-		t.Fatalf("POST %s falló: %v", path, err)
+		t.Fatalf("POST %s falló: %v", ruta, err)
 	}
 	t.Cleanup(func() { resp.Body.Close() })
 	return resp
 }
 
-func get(t *testing.T, srv *httptest.Server, path string) *http.Response {
+func obtener(t *testing.T, srv *httptest.Server, ruta string) *http.Response {
 	t.Helper()
-	resp, err := srv.Client().Get(srv.URL + path)
+	resp, err := srv.Client().Get(srv.URL + ruta)
 	if err != nil {
-		t.Fatalf("GET %s falló: %v", path, err)
+		t.Fatalf("GET %s falló: %v", ruta, err)
 	}
 	t.Cleanup(func() { resp.Body.Close() })
 	return resp
 }
 
-func do(t *testing.T, srv *httptest.Server, method, path, body string) *http.Response {
+func ejecutar(t *testing.T, srv *httptest.Server, metodo, ruta, cuerpo string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequest(method, srv.URL+path, strings.NewReader(body))
+	req, err := http.NewRequest(metodo, srv.URL+ruta, strings.NewReader(cuerpo))
 	if err != nil {
 		t.Fatalf("no se pudo armar el request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := srv.Client().Do(req)
 	if err != nil {
-		t.Fatalf("%s %s falló: %v", method, path, err)
+		t.Fatalf("%s %s falló: %v", metodo, ruta, err)
 	}
 	t.Cleanup(func() { resp.Body.Close() })
 	return resp
 }
 
-func decodeProfessional(t *testing.T, resp *http.Response) professionalResponse {
+func decodificarProfesional(t *testing.T, resp *http.Response) respuestaProfesional {
 	t.Helper()
-	var p professionalResponse
+	var p respuestaProfesional
 	if err := json.NewDecoder(resp.Body).Decode(&p); err != nil {
 		t.Fatalf("no se pudo decodificar la respuesta: %v", err)
 	}
@@ -4064,253 +4064,253 @@ func decodeProfessional(t *testing.T, resp *http.Response) professionalResponse 
 }
 
 func TestHealthz(t *testing.T) {
-	srv := newTestServer(t)
-	resp := get(t, srv, "/healthz")
+	srv := nuevoServidorDePrueba(t)
+	resp := obtener(t, srv, "/healthz")
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("status = %d, se esperaba 200", resp.StatusCode)
 	}
 }
 
-func TestCreateDevuelve201YLocation(t *testing.T) {
-	srv := newTestServer(t)
-	resp := post(t, srv, "/api/v1/professionals", validBody)
+func TestCrearDevuelve201YLocation(t *testing.T) {
+	srv := nuevoServidorDePrueba(t)
+	resp := postear(t, srv, "/api/v1/profesionales", cuerpoValido)
 
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, se esperaba 201", resp.StatusCode)
 	}
 
-	p := decodeProfessional(t, resp)
+	p := decodificarProfesional(t, resp)
 	if p.Slug != "martin-gonzalez" {
 		t.Errorf("slug = %q, se esperaba martin-gonzalez", p.Slug)
 	}
-	if p.Verification != "pending" {
-		t.Errorf("verification = %q, se esperaba pending", p.Verification)
+	if p.Verificacion != "pendiente" {
+		t.Errorf("verificacion = %q, se esperaba pendiente", p.Verificacion)
 	}
 
-	loc := resp.Header.Get("Location")
-	if loc != "/api/v1/professionals/"+p.ID {
-		t.Errorf("Location = %q, se esperaba la URL del recurso creado", loc)
+	ubicacion := resp.Header.Get("Location")
+	if ubicacion != "/api/v1/profesionales/"+p.ID {
+		t.Errorf("Location = %q, se esperaba la URL del recurso creado", ubicacion)
 	}
 }
 
-func TestCreateJSONMalformadoDevuelve400(t *testing.T) {
-	srv := newTestServer(t)
-	resp := post(t, srv, "/api/v1/professionals", `{"firstName":`)
+func TestCrearJSONMalformadoDevuelve400(t *testing.T) {
+	srv := nuevoServidorDePrueba(t)
+	resp := postear(t, srv, "/api/v1/profesionales", `{"nombre":`)
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, se esperaba 400", resp.StatusCode)
 	}
-	if ct := resp.Header.Get("Content-Type"); ct != problemContentType {
-		t.Errorf("Content-Type = %q, se esperaba %q", ct, problemContentType)
+	if ct := resp.Header.Get("Content-Type"); ct != tipoContenidoProblema {
+		t.Errorf("Content-Type = %q, se esperaba %q", ct, tipoContenidoProblema)
 	}
 }
 
-func TestCreateDatosInvalidosDevuelve422(t *testing.T) {
-	srv := newTestServer(t)
+func TestCrearDatosInvalidosDevuelve422(t *testing.T) {
+	srv := nuevoServidorDePrueba(t)
 	// JSON perfectamente válido, datos mal: es otro problema que un 400
-	body := `{
-	  "firstName": "",
-	  "lastName": "González",
+	cuerpo := `{
+	  "nombre": "",
+	  "apellido": "González",
 	  "matricula": "roto",
 	  "especialidad": "cardiologia",
-	  "consultaPriceCents": -5,
+	  "precioConsultaCentavos": -5,
 	  "modalidades": [],
 	  "zona": ""
 	}`
-	resp := post(t, srv, "/api/v1/professionals", body)
+	resp := postear(t, srv, "/api/v1/profesionales", cuerpo)
 
 	if resp.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, se esperaba 422", resp.StatusCode)
 	}
 
-	var p Problem
+	var p Problema
 	if err := json.NewDecoder(resp.Body).Decode(&p); err != nil {
 		t.Fatalf("no se pudo decodificar el problem: %v", err)
 	}
-	if len(p.Errors) < 5 {
-		t.Errorf("se esperaban al menos 5 campos con error, se obtuvieron %d: %+v", len(p.Errors), p.Errors)
+	if len(p.Errores) < 5 {
+		t.Errorf("se esperaban al menos 5 campos con error, se obtuvieron %d: %+v", len(p.Errores), p.Errores)
 	}
 }
 
-func TestCreateMatriculaDuplicadaDevuelve409(t *testing.T) {
-	srv := newTestServer(t)
-	post(t, srv, "/api/v1/professionals", validBody)
-	resp := post(t, srv, "/api/v1/professionals", validBody)
+func TestCrearMatriculaDuplicadaDevuelve409(t *testing.T) {
+	srv := nuevoServidorDePrueba(t)
+	postear(t, srv, "/api/v1/profesionales", cuerpoValido)
+	resp := postear(t, srv, "/api/v1/profesionales", cuerpoValido)
 
 	if resp.StatusCode != http.StatusConflict {
 		t.Errorf("status = %d, se esperaba 409", resp.StatusCode)
 	}
 }
 
-func TestGetByIDYPorSlug(t *testing.T) {
-	srv := newTestServer(t)
-	created := decodeProfessional(t, post(t, srv, "/api/v1/professionals", validBody))
+func TestObtenerPorIDYPorSlug(t *testing.T) {
+	srv := nuevoServidorDePrueba(t)
+	creado := decodificarProfesional(t, postear(t, srv, "/api/v1/profesionales", cuerpoValido))
 
-	byID := get(t, srv, "/api/v1/professionals/"+created.ID)
-	if byID.StatusCode != http.StatusOK {
-		t.Errorf("GET por id: status = %d, se esperaba 200", byID.StatusCode)
+	porID := obtener(t, srv, "/api/v1/profesionales/"+creado.ID)
+	if porID.StatusCode != http.StatusOK {
+		t.Errorf("GET por id: status = %d, se esperaba 200", porID.StatusCode)
 	}
 
-	bySlug := get(t, srv, "/api/v1/professionals/by-slug/"+created.Slug)
-	if bySlug.StatusCode != http.StatusOK {
-		t.Errorf("GET por slug: status = %d, se esperaba 200", bySlug.StatusCode)
+	porSlug := obtener(t, srv, "/api/v1/profesionales/por-slug/"+creado.Slug)
+	if porSlug.StatusCode != http.StatusOK {
+		t.Errorf("GET por slug: status = %d, se esperaba 200", porSlug.StatusCode)
 	}
-	if decodeProfessional(t, bySlug).ID != created.ID {
+	if decodificarProfesional(t, porSlug).ID != creado.ID {
 		t.Error("GET por slug devolvió otro profesional")
 	}
 }
 
-func TestGetIDInexistenteDevuelve404(t *testing.T) {
-	srv := newTestServer(t)
-	resp := get(t, srv, "/api/v1/professionals/6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+func TestObtenerIDInexistenteDevuelve404(t *testing.T) {
+	srv := nuevoServidorDePrueba(t)
+	resp := obtener(t, srv, "/api/v1/profesionales/6ba7b810-9dad-11d1-80b4-00c04fd430c8")
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, se esperaba 404", resp.StatusCode)
 	}
 }
 
-func TestGetIDMalFormadoDevuelve400(t *testing.T) {
-	srv := newTestServer(t)
+func TestObtenerIDMalFormadoDevuelve400(t *testing.T) {
+	srv := nuevoServidorDePrueba(t)
 	// no es un UUID: es un problema del cliente, no un recurso que falta
-	resp := get(t, srv, "/api/v1/professionals/no-soy-un-uuid")
+	resp := obtener(t, srv, "/api/v1/profesionales/no-soy-un-uuid")
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, se esperaba 400", resp.StatusCode)
 	}
 }
 
-func TestListPaginaYFiltra(t *testing.T) {
-	srv := newTestServer(t)
-	post(t, srv, "/api/v1/professionals", validBody)
+func TestListarPaginaYFiltra(t *testing.T) {
+	srv := nuevoServidorDePrueba(t)
+	postear(t, srv, "/api/v1/profesionales", cuerpoValido)
 
-	segundo := strings.Replace(validBody, `"MN 98.234"`, `"MN 11111"`, 1)
+	segundo := strings.Replace(cuerpoValido, `"MN 98.234"`, `"MN 11111"`, 1)
 	segundo = strings.Replace(segundo, `"psicologia"`, `"odontologia"`, 1)
-	post(t, srv, "/api/v1/professionals", segundo)
+	postear(t, srv, "/api/v1/profesionales", segundo)
 
 	t.Run("sin filtros", func(t *testing.T) {
-		resp := get(t, srv, "/api/v1/professionals")
-		var list listResponse
-		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+		resp := obtener(t, srv, "/api/v1/profesionales")
+		var listado respuestaListado
+		if err := json.NewDecoder(resp.Body).Decode(&listado); err != nil {
 			t.Fatalf("no se pudo decodificar: %v", err)
 		}
-		if list.Pagination.Total != 2 {
-			t.Errorf("total = %d, se esperaba 2", list.Pagination.Total)
+		if listado.Paginacion.Total != 2 {
+			t.Errorf("total = %d, se esperaba 2", listado.Paginacion.Total)
 		}
-		if list.Pagination.Limit != service.DefaultLimit {
-			t.Errorf("limit = %d, se esperaba el default %d", list.Pagination.Limit, service.DefaultLimit)
+		if listado.Paginacion.Limite != service.LimitePorDefecto {
+			t.Errorf("limite = %d, se esperaba el default %d", listado.Paginacion.Limite, service.LimitePorDefecto)
 		}
 	})
 
 	t.Run("por especialidad", func(t *testing.T) {
-		resp := get(t, srv, "/api/v1/professionals?especialidad=odontologia")
-		var list listResponse
-		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+		resp := obtener(t, srv, "/api/v1/profesionales?especialidad=odontologia")
+		var listado respuestaListado
+		if err := json.NewDecoder(resp.Body).Decode(&listado); err != nil {
 			t.Fatalf("no se pudo decodificar: %v", err)
 		}
-		if list.Pagination.Total != 1 {
-			t.Errorf("total = %d, se esperaba 1", list.Pagination.Total)
+		if listado.Paginacion.Total != 1 {
+			t.Errorf("total = %d, se esperaba 1", listado.Paginacion.Total)
 		}
 	})
 
 	t.Run("busqueda sin acentos", func(t *testing.T) {
-		resp := get(t, srv, "/api/v1/professionals?q=gonzalez")
-		var list listResponse
-		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+		resp := obtener(t, srv, "/api/v1/profesionales?busqueda=gonzalez")
+		var listado respuestaListado
+		if err := json.NewDecoder(resp.Body).Decode(&listado); err != nil {
 			t.Fatalf("no se pudo decodificar: %v", err)
 		}
-		if list.Pagination.Total != 2 {
-			t.Errorf("total = %d, se esperaban 2: ambos apellidan González", list.Pagination.Total)
+		if listado.Paginacion.Total != 2 {
+			t.Errorf("total = %d, se esperaban 2: ambos apellidan González", listado.Paginacion.Total)
 		}
 	})
 
-	t.Run("limit invalido devuelve 400", func(t *testing.T) {
-		resp := get(t, srv, "/api/v1/professionals?limit=abc")
+	t.Run("limite invalido devuelve 400", func(t *testing.T) {
+		resp := obtener(t, srv, "/api/v1/profesionales?limite=abc")
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Errorf("status = %d, se esperaba 400", resp.StatusCode)
 		}
 	})
 
 	t.Run("especialidad invalida devuelve 400", func(t *testing.T) {
-		resp := get(t, srv, "/api/v1/professionals?especialidad=cardiologia")
+		resp := obtener(t, srv, "/api/v1/profesionales?especialidad=cardiologia")
 		if resp.StatusCode != http.StatusBadRequest {
 			t.Errorf("status = %d, se esperaba 400", resp.StatusCode)
 		}
 	})
 }
 
-func TestUpdate(t *testing.T) {
-	srv := newTestServer(t)
-	created := decodeProfessional(t, post(t, srv, "/api/v1/professionals", validBody))
+func TestActualizar(t *testing.T) {
+	srv := nuevoServidorDePrueba(t)
+	creado := decodificarProfesional(t, postear(t, srv, "/api/v1/profesionales", cuerpoValido))
 
-	body := strings.Replace(validBody, `"CABA"`, `"GBA Norte"`, 1)
-	resp := do(t, srv, http.MethodPut, "/api/v1/professionals/"+created.ID, body)
+	cuerpo := strings.Replace(cuerpoValido, `"CABA"`, `"GBA Norte"`, 1)
+	resp := ejecutar(t, srv, http.MethodPut, "/api/v1/profesionales/"+creado.ID, cuerpo)
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, se esperaba 200", resp.StatusCode)
 	}
-	updated := decodeProfessional(t, resp)
-	if updated.Zona != "GBA Norte" {
-		t.Errorf("zona = %q, se esperaba GBA Norte", updated.Zona)
+	actualizado := decodificarProfesional(t, resp)
+	if actualizado.Zona != "GBA Norte" {
+		t.Errorf("zona = %q, se esperaba GBA Norte", actualizado.Zona)
 	}
-	if updated.Slug != created.Slug {
+	if actualizado.Slug != creado.Slug {
 		t.Error("el slug es una URL pública y no debía cambiar")
 	}
 }
 
 func TestDeleteEsBajaLogicaYIdempotente(t *testing.T) {
-	srv := newTestServer(t)
-	created := decodeProfessional(t, post(t, srv, "/api/v1/professionals", validBody))
+	srv := nuevoServidorDePrueba(t)
+	creado := decodificarProfesional(t, postear(t, srv, "/api/v1/profesionales", cuerpoValido))
 
-	resp := do(t, srv, http.MethodDelete, "/api/v1/professionals/"+created.ID, "")
+	resp := ejecutar(t, srv, http.MethodDelete, "/api/v1/profesionales/"+creado.ID, "")
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("status = %d, se esperaba 204", resp.StatusCode)
 	}
 
 	// el recurso sigue existiendo: no fue un borrado
-	after := get(t, srv, "/api/v1/professionals/"+created.ID)
-	if after.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d: el profesional dado de baja tenía que seguir existiendo", after.StatusCode)
+	despues := obtener(t, srv, "/api/v1/profesionales/"+creado.ID)
+	if despues.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d: el profesional dado de baja tenía que seguir existiendo", despues.StatusCode)
 	}
-	if p := decodeProfessional(t, after); p.Status != "inactive" || p.DeactivatedAt == nil {
-		t.Error("debía quedar inactive con deactivatedAt sellado")
+	if p := decodificarProfesional(t, despues); p.Estado != "inactivo" || p.DadoDeBajaEn == nil {
+		t.Error("debía quedar inactivo con dadoDeBajaEn sellado")
 	}
 
 	// pero no aparece en el listado por defecto
-	list := get(t, srv, "/api/v1/professionals")
-	var lr listResponse
-	if err := json.NewDecoder(list.Body).Decode(&lr); err != nil {
+	respListado := obtener(t, srv, "/api/v1/profesionales")
+	var listado respuestaListado
+	if err := json.NewDecoder(respListado.Body).Decode(&listado); err != nil {
 		t.Fatalf("no se pudo decodificar: %v", err)
 	}
-	if lr.Pagination.Total != 0 {
-		t.Errorf("total = %d, se esperaba 0", lr.Pagination.Total)
+	if listado.Paginacion.Total != 0 {
+		t.Errorf("total = %d, se esperaba 0", listado.Paginacion.Total)
 	}
 
 	// y una segunda baja no es un error
-	again := do(t, srv, http.MethodDelete, "/api/v1/professionals/"+created.ID, "")
-	if again.StatusCode != http.StatusNoContent {
-		t.Errorf("la segunda baja devolvió %d, se esperaba 204", again.StatusCode)
+	otraVez := ejecutar(t, srv, http.MethodDelete, "/api/v1/profesionales/"+creado.ID, "")
+	if otraVez.StatusCode != http.StatusNoContent {
+		t.Errorf("la segunda baja devolvió %d, se esperaba 204", otraVez.StatusCode)
 	}
 }
 
-func TestReactivate(t *testing.T) {
-	srv := newTestServer(t)
-	created := decodeProfessional(t, post(t, srv, "/api/v1/professionals", validBody))
-	do(t, srv, http.MethodDelete, "/api/v1/professionals/"+created.ID, "")
+func TestReactivar(t *testing.T) {
+	srv := nuevoServidorDePrueba(t)
+	creado := decodificarProfesional(t, postear(t, srv, "/api/v1/profesionales", cuerpoValido))
+	ejecutar(t, srv, http.MethodDelete, "/api/v1/profesionales/"+creado.ID, "")
 
-	resp := post(t, srv, "/api/v1/professionals/"+created.ID+"/reactivate", "")
+	resp := postear(t, srv, "/api/v1/profesionales/"+creado.ID+"/reactivar", "")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, se esperaba 200", resp.StatusCode)
 	}
 
-	p := decodeProfessional(t, resp)
-	if p.Status != "active" || p.DeactivatedAt != nil {
-		t.Error("debía quedar activo y con deactivatedAt en null")
+	p := decodificarProfesional(t, resp)
+	if p.Estado != "activo" || p.DadoDeBajaEn != nil {
+		t.Error("debía quedar activo y con dadoDeBajaEn en null")
 	}
 }
 ```
 
 - [ ] **Step 2: Correr los tests y verificar que fallan**
 
-Run: `cd apps/api && go test ./internal/handler/ -run 'TestHealthz|TestCreate|TestGet|TestList|TestUpdate|TestDelete|TestReactivate' -v`
-Expected: FAIL con `undefined: NewRouter`
+Run: `cd apps/api && go test ./internal/handler/ -run 'TestHealthz|TestCrear|TestObtener|TestListar|TestActualizar|TestDelete|TestReactivar' -v`
+Expected: FAIL con `undefined: NuevoRouter`
 
 - [ ] **Step 3: Implementar los handlers**
 
@@ -4330,195 +4330,195 @@ import (
 	"github.com/joaquinfochoa/Salud/apps/api/internal/service"
 )
 
-// ProfessionalHandler traduce entre HTTP y el servicio. No toma decisiones de
+// ManejadorProfesional traduce entre HTTP y el servicio. No toma decisiones de
 // negocio: decodifica, delega y serializa.
-type ProfessionalHandler struct {
-	svc *service.Professional
+type ManejadorProfesional struct {
+	svc *service.Profesional
 }
 
-func NewProfessional(svc *service.Professional) *ProfessionalHandler {
-	return &ProfessionalHandler{svc: svc}
+func NuevoProfesional(svc *service.Profesional) *ManejadorProfesional {
+	return &ManejadorProfesional{svc: svc}
 }
 
-func (h *ProfessionalHandler) Create(w http.ResponseWriter, r *http.Request) {
-	var req professionalRequest
-	if err := decodeJSON(w, r, &req); err != nil {
-		writeBadRequest(w, "el cuerpo no es un JSON válido: "+err.Error())
+func (h *ManejadorProfesional) Crear(w http.ResponseWriter, r *http.Request) {
+	var req peticionProfesional
+	if err := decodificarJSON(w, r, &req); err != nil {
+		escribirPeticionInvalida(w, "el cuerpo no es un JSON válido: "+err.Error())
 		return
 	}
 
-	p, err := h.svc.Create(r.Context(), req.toInput())
+	p, err := h.svc.Crear(r.Context(), req.aEntrada())
 	if err != nil {
-		writeError(w, r, err)
+		escribirError(w, r, err)
 		return
 	}
 
-	w.Header().Set("Location", "/api/v1/professionals/"+p.ID.String())
-	writeJSON(w, http.StatusCreated, toResponse(p))
+	w.Header().Set("Location", "/api/v1/profesionales/"+p.ID.String())
+	escribirJSON(w, http.StatusCreated, aRespuesta(p))
 }
 
-func (h *ProfessionalHandler) GetByID(w http.ResponseWriter, r *http.Request) {
-	id, ok := parseID(w, r)
+func (h *ManejadorProfesional) ObtenerPorID(w http.ResponseWriter, r *http.Request) {
+	id, ok := parsearID(w, r)
 	if !ok {
 		return
 	}
 
-	p, err := h.svc.GetByID(r.Context(), id)
+	p, err := h.svc.ObtenerPorID(r.Context(), id)
 	if err != nil {
-		writeError(w, r, err)
+		escribirError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toResponse(p))
+	escribirJSON(w, http.StatusOK, aRespuesta(p))
 }
 
-func (h *ProfessionalHandler) GetBySlug(w http.ResponseWriter, r *http.Request) {
-	p, err := h.svc.GetBySlug(r.Context(), r.PathValue("slug"))
+func (h *ManejadorProfesional) ObtenerPorSlug(w http.ResponseWriter, r *http.Request) {
+	p, err := h.svc.ObtenerPorSlug(r.Context(), r.PathValue("slug"))
 	if err != nil {
-		writeError(w, r, err)
+		escribirError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toResponse(p))
+	escribirJSON(w, http.StatusOK, aRespuesta(p))
 }
 
-func (h *ProfessionalHandler) List(w http.ResponseWriter, r *http.Request) {
-	f, err := parseFilter(r)
+func (h *ManejadorProfesional) Listar(w http.ResponseWriter, r *http.Request) {
+	f, err := parsearFiltro(r)
 	if err != nil {
-		writeBadRequest(w, err.Error())
+		escribirPeticionInvalida(w, err.Error())
 		return
 	}
 
-	ps, total, err := h.svc.List(r.Context(), f)
+	ps, total, err := h.svc.Listar(r.Context(), f)
 	if err != nil {
-		writeError(w, r, err)
+		escribirError(w, r, err)
 		return
 	}
 
-	limit := f.Limit
-	if limit <= 0 {
-		limit = service.DefaultLimit
+	limite := f.Limite
+	if limite <= 0 {
+		limite = service.LimitePorDefecto
 	}
-	writeJSON(w, http.StatusOK, toListResponse(ps, total, limit, f.Offset))
+	escribirJSON(w, http.StatusOK, aRespuestaListado(ps, total, limite, f.Desplazamiento))
 }
 
-func (h *ProfessionalHandler) Update(w http.ResponseWriter, r *http.Request) {
-	id, ok := parseID(w, r)
+func (h *ManejadorProfesional) Actualizar(w http.ResponseWriter, r *http.Request) {
+	id, ok := parsearID(w, r)
 	if !ok {
 		return
 	}
 
-	var req professionalRequest
-	if err := decodeJSON(w, r, &req); err != nil {
-		writeBadRequest(w, "el cuerpo no es un JSON válido: "+err.Error())
+	var req peticionProfesional
+	if err := decodificarJSON(w, r, &req); err != nil {
+		escribirPeticionInvalida(w, "el cuerpo no es un JSON válido: "+err.Error())
 		return
 	}
 
-	p, err := h.svc.Update(r.Context(), id, req.toInput())
+	p, err := h.svc.Actualizar(r.Context(), id, req.aEntrada())
 	if err != nil {
-		writeError(w, r, err)
+		escribirError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toResponse(p))
+	escribirJSON(w, http.StatusOK, aRespuesta(p))
 }
 
-// Deactivate implementa el DELETE. Se llama Deactivate y no Delete porque eso
+// DarDeBaja implementa el DELETE. Se llama DarDeBaja y no Delete porque eso
 // es lo que hace: baja lógica. El verbo HTTP conserva el nombre que espera
 // cualquiera que lea un CRUD.
-func (h *ProfessionalHandler) Deactivate(w http.ResponseWriter, r *http.Request) {
-	id, ok := parseID(w, r)
+func (h *ManejadorProfesional) DarDeBaja(w http.ResponseWriter, r *http.Request) {
+	id, ok := parsearID(w, r)
 	if !ok {
 		return
 	}
 
-	if err := h.svc.Deactivate(r.Context(), id); err != nil {
-		writeError(w, r, err)
+	if err := h.svc.DarDeBaja(r.Context(), id); err != nil {
+		escribirError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *ProfessionalHandler) Reactivate(w http.ResponseWriter, r *http.Request) {
-	id, ok := parseID(w, r)
+func (h *ManejadorProfesional) Reactivar(w http.ResponseWriter, r *http.Request) {
+	id, ok := parsearID(w, r)
 	if !ok {
 		return
 	}
 
-	p, err := h.svc.Reactivate(r.Context(), id)
+	p, err := h.svc.Reactivar(r.Context(), id)
 	if err != nil {
-		writeError(w, r, err)
+		escribirError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toResponse(p))
+	escribirJSON(w, http.StatusOK, aRespuesta(p))
 }
 
-// parseID devuelve false y ya escribió la respuesta si el ID no es un UUID.
+// parsearID devuelve false y ya escribió la respuesta si el ID no es un UUID.
 // Un ID mal formado es un error del cliente (400), no un recurso que falta.
-func parseID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
-	raw := r.PathValue("id")
-	id, err := uuid.Parse(raw)
+func parsearID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
+	crudo := r.PathValue("id")
+	id, err := uuid.Parse(crudo)
 	if err != nil {
-		writeBadRequest(w, "el id debe ser un UUID válido")
+		escribirPeticionInvalida(w, "el id debe ser un UUID válido")
 		return uuid.Nil, false
 	}
 	return id, true
 }
 
-func parseFilter(r *http.Request) (repository.Filter, error) {
+func parsearFiltro(r *http.Request) (repository.Filtro, error) {
 	q := r.URL.Query()
-	var f repository.Filter
+	var f repository.Filtro
 
-	if raw := q.Get("especialidad"); raw != "" {
-		esp := domain.Especialidad(raw)
-		if !esp.Valid() {
-			return f, errInvalidQuery("especialidad", "debe ser psicologia, kinesiologia u odontologia")
+	if crudo := q.Get("especialidad"); crudo != "" {
+		esp := domain.Especialidad(crudo)
+		if !esp.EsValida() {
+			return f, errParametroInvalido("especialidad", "debe ser psicologia, kinesiologia u odontologia")
 		}
 		f.Especialidad = &esp
 	}
 
-	if raw := q.Get("status"); raw != "" {
-		st := domain.Status(raw)
-		if !st.Valid() {
-			return f, errInvalidQuery("status", "debe ser active o inactive")
+	if crudo := q.Get("estado"); crudo != "" {
+		st := domain.Estado(crudo)
+		if !st.EsValido() {
+			return f, errParametroInvalido("estado", "debe ser activo o inactivo")
 		}
-		f.Status = &st
+		f.Estado = &st
 	}
 
-	if raw := q.Get("zona"); raw != "" {
-		f.Zona = &raw
+	if crudo := q.Get("zona"); crudo != "" {
+		f.Zona = &crudo
 	}
-	if raw := q.Get("q"); raw != "" {
-		f.Query = &raw
+	if crudo := q.Get("busqueda"); crudo != "" {
+		f.Busqueda = &crudo
 	}
 
-	if raw := q.Get("limit"); raw != "" {
-		v, err := strconv.Atoi(raw)
+	if crudo := q.Get("limite"); crudo != "" {
+		v, err := strconv.Atoi(crudo)
 		if err != nil || v < 1 {
-			return f, errInvalidQuery("limit", "debe ser un entero mayor a cero")
+			return f, errParametroInvalido("limite", "debe ser un entero mayor a cero")
 		}
-		f.Limit = v
+		f.Limite = v
 	}
 
-	if raw := q.Get("offset"); raw != "" {
-		v, err := strconv.Atoi(raw)
+	if crudo := q.Get("desplazamiento"); crudo != "" {
+		v, err := strconv.Atoi(crudo)
 		if err != nil || v < 0 {
-			return f, errInvalidQuery("offset", "debe ser un entero mayor o igual a cero")
+			return f, errParametroInvalido("desplazamiento", "debe ser un entero mayor o igual a cero")
 		}
-		f.Offset = v
+		f.Desplazamiento = v
 	}
 
 	return f, nil
 }
 
-type queryError struct {
-	param   string
-	message string
+type errorParametro struct {
+	parametro string
+	mensaje   string
 }
 
-func (e queryError) Error() string {
-	return "parámetro " + e.param + ": " + e.message
+func (e errorParametro) Error() string {
+	return "parámetro " + e.parametro + ": " + e.mensaje
 }
 
-func errInvalidQuery(param, message string) error {
-	return queryError{param: param, message: message}
+func errParametroInvalido(parametro, mensaje string) error {
+	return errorParametro{parametro: parametro, mensaje: mensaje}
 }
 ```
 
@@ -4531,34 +4531,34 @@ package handler
 
 import "net/http"
 
-// NewRouter arma la tabla de rutas.
+// NuevoRouter arma la tabla de rutas.
 //
 // Usa el ServeMux de la stdlib: desde Go 1.22 entiende método y parámetros de
 // ruta, así que no hace falta chi, gin ni echo para esto.
-func NewRouter(ph *ProfessionalHandler) http.Handler {
+func NuevoRouter(ph *ManejadorProfesional) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", healthz)
 
-	mux.HandleFunc("GET /api/v1/professionals", ph.List)
-	mux.HandleFunc("POST /api/v1/professionals", ph.Create)
-	mux.HandleFunc("GET /api/v1/professionals/{id}", ph.GetByID)
-	mux.HandleFunc("PUT /api/v1/professionals/{id}", ph.Update)
-	mux.HandleFunc("DELETE /api/v1/professionals/{id}", ph.Deactivate)
-	mux.HandleFunc("POST /api/v1/professionals/{id}/reactivate", ph.Reactivate)
+	mux.HandleFunc("GET /api/v1/profesionales", ph.Listar)
+	mux.HandleFunc("POST /api/v1/profesionales", ph.Crear)
+	mux.HandleFunc("GET /api/v1/profesionales/{id}", ph.ObtenerPorID)
+	mux.HandleFunc("PUT /api/v1/profesionales/{id}", ph.Actualizar)
+	mux.HandleFunc("DELETE /api/v1/profesionales/{id}", ph.DarDeBaja)
+	mux.HandleFunc("POST /api/v1/profesionales/{id}/reactivar", ph.Reactivar)
 
 	// No colisiona con /{id}: tiene un segmento más y el ServeMux resuelve
 	// por especificidad.
-	mux.HandleFunc("GET /api/v1/professionals/by-slug/{slug}", ph.GetBySlug)
+	mux.HandleFunc("GET /api/v1/profesionales/por-slug/{slug}", ph.ObtenerPorSlug)
 
-	// El orden es de afuera hacia adentro. RequestID va primero para que el
-	// log lo tenga; LogRequests envuelve a RecoverPanic para que un panic
+	// El orden es de afuera hacia adentro. IDPeticion va primero para que el
+	// log lo tenga; RegistrarPeticiones envuelve a RecuperarPanic para que un panic
 	// quede registrado con su 500.
-	return Chain(mux, RequestID, LogRequests, RecoverPanic)
+	return Encadenar(mux, IDPeticion, RegistrarPeticiones, RecuperarPanic)
 }
 
 func healthz(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	escribirJSON(w, http.StatusOK, map[string]string{"estado": "ok"})
 }
 ```
 
@@ -4591,15 +4591,15 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
-## Task 12: Seed de desarrollo
+## Task 12: Sembrar de desarrollo
 
 **Files:**
 - Create: `apps/api/internal/repository/memory/seed.go`
 - Test: `apps/api/internal/repository/memory/seed_test.go`
 
 **Interfaces:**
-- Consumes: `domain` (Task 4), `memory.Professional` (Task 5)
-- Produces: `func memory.Seed(context.Context, *Professional) error`
+- Consumes: `domain` (Task 4), `memory.Profesional` (Task 5)
+- Produces: `func memory.Sembrar(context.Context, *Profesional) error`
 
 - [ ] **Step 1: Escribir el test**
 
@@ -4615,31 +4615,31 @@ import (
 	"github.com/joaquinfochoa/Salud/apps/api/internal/repository"
 )
 
-func TestSeed(t *testing.T) {
+func TestSembrar(t *testing.T) {
 	ctx := context.Background()
-	repo := NewProfessional()
+	repo := NuevoProfesional()
 
-	if err := Seed(ctx, repo); err != nil {
-		t.Fatalf("Seed devolvió error: %v", err)
+	if err := Sembrar(ctx, repo); err != nil {
+		t.Fatalf("Sembrar devolvió error: %v", err)
 	}
 
-	_, total, err := repo.List(ctx, repository.Filter{Limit: 100})
+	_, total, err := repo.Listar(ctx, repository.Filtro{Limite: 100})
 	if err != nil {
-		t.Fatalf("List devolvió error: %v", err)
+		t.Fatalf("Listar devolvió error: %v", err)
 	}
 	if total != 4 {
 		t.Errorf("total = %d, se esperaban 4 profesionales de prueba", total)
 	}
 }
 
-func TestSeedGeneraSlugsUnicos(t *testing.T) {
+func TestSembrarGeneraSlugsUnicos(t *testing.T) {
 	ctx := context.Background()
-	repo := NewProfessional()
-	if err := Seed(ctx, repo); err != nil {
-		t.Fatalf("Seed devolvió error: %v", err)
+	repo := NuevoProfesional()
+	if err := Sembrar(ctx, repo); err != nil {
+		t.Fatalf("Sembrar devolvió error: %v", err)
 	}
 
-	ps, _, _ := repo.List(ctx, repository.Filter{Limit: 100})
+	ps, _, _ := repo.Listar(ctx, repository.Filtro{Limite: 100})
 
 	slugs := make(map[string]bool, len(ps))
 	matriculas := make(map[string]bool, len(ps))
@@ -4659,8 +4659,8 @@ func TestSeedGeneraSlugsUnicos(t *testing.T) {
 
 - [ ] **Step 2: Correr el test y verificar que falla**
 
-Run: `cd apps/api && go test ./internal/repository/memory/ -run TestSeed -v`
-Expected: FAIL con `undefined: Seed`
+Run: `cd apps/api && go test ./internal/repository/memory/ -run TestSembrar -v`
+Expected: FAIL con `undefined: Sembrar`
 
 - [ ] **Step 3: Implementar el seed**
 
@@ -4679,75 +4679,75 @@ import (
 	"github.com/joaquinfochoa/Salud/apps/api/internal/domain"
 )
 
-// Seed carga profesionales de prueba. Solo se llama en desarrollo: main.go lo
+// Sembrar carga profesionales de prueba. Solo se llama en desarrollo: main.go lo
 // invoca únicamente cuando APP_ENV=development.
 //
 // Los datos vienen del prototipo React, en legacy/prototype/src/data. Los
 // precios estaban en pesos y acá van en centavos.
-func Seed(ctx context.Context, repo *Professional) error {
-	now := time.Now().UTC()
+func Sembrar(ctx context.Context, repo *Profesional) error {
+	ahora := time.Now().UTC()
 
-	inputs := []domain.ProfessionalInput{
+	entradas := []domain.EntradaProfesional{
 		{
-			FirstName:     "Martín",
-			LastName:      "González",
-			Matricula:     "MN 98.234",
-			Especialidad:  string(domain.EspecialidadPsicologia),
-			Bio:           "Psicólogo clínico con orientación cognitivo-conductual. Atiendo adultos y adolescentes con ansiedad, depresión y crisis vitales. Más de 8 años de experiencia.",
-			ConsultaPrice: 1_200_000,
-			Modalidades:   []string{"telemedicina", "presencial"},
-			Zona:          "CABA",
-			ObrasSociales: []string{"OSDE", "Swiss Medical", "Galeno", "Medifé"},
+			Nombre:         "Martín",
+			Apellido:       "González",
+			Matricula:      "MN 98.234",
+			Especialidad:   string(domain.EspecialidadPsicologia),
+			Bio:            "Psicólogo clínico con orientación cognitivo-conductual. Atiendo adultos y adolescentes con ansiedad, depresión y crisis vitales. Más de 8 años de experiencia.",
+			PrecioConsulta: 1_200_000,
+			Modalidades:    []string{"telemedicina", "presencial"},
+			Zona:           "CABA",
+			ObrasSociales:  []string{"OSDE", "Swiss Medical", "Galeno", "Medifé"},
 		},
 		{
-			FirstName:     "Carolina",
-			LastName:      "Vega",
-			Matricula:     "MN 112.087",
-			Especialidad:  string(domain.EspecialidadPsicologia),
-			Bio:           "Especializada en terapia sistémica y de parejas. Trabajo con adultos en procesos de cambio, duelos y conflictos relacionales.",
-			ConsultaPrice: 1_400_000,
-			Modalidades:   []string{"telemedicina"},
-			Zona:          "GBA Norte",
-			ObrasSociales: []string{"OSDE", "OMINT", "Swiss Medical", "Sanitas"},
+			Nombre:         "Carolina",
+			Apellido:       "Vega",
+			Matricula:      "MN 112.087",
+			Especialidad:   string(domain.EspecialidadPsicologia),
+			Bio:            "Especializada en terapia sistémica y de parejas. Trabajo con adultos en procesos de cambio, duelos y conflictos relacionales.",
+			PrecioConsulta: 1_400_000,
+			Modalidades:    []string{"telemedicina"},
+			Zona:           "GBA Norte",
+			ObrasSociales:  []string{"OSDE", "OMINT", "Swiss Medical", "Sanitas"},
 		},
 		{
-			FirstName:     "Pablo",
-			LastName:      "Moreno",
-			Matricula:     "MN 45.321",
-			Especialidad:  string(domain.EspecialidadKinesiologia),
-			Bio:           "Kinesiólogo especializado en traumatología deportiva y rehabilitación postquirúrgica. Atiendo a domicilio y en consultorio.",
-			ConsultaPrice: 950_000,
-			Modalidades:   []string{"presencial", "domicilio"},
-			Zona:          "CABA",
-			ObrasSociales: []string{"OSDE", "Galeno", "IOMA", "PAMI"},
+			Nombre:         "Pablo",
+			Apellido:       "Moreno",
+			Matricula:      "MN 45.321",
+			Especialidad:   string(domain.EspecialidadKinesiologia),
+			Bio:            "Kinesiólogo especializado en traumatología deportiva y rehabilitación postquirúrgica. Atiendo a domicilio y en consultorio.",
+			PrecioConsulta: 950_000,
+			Modalidades:    []string{"presencial", "domicilio"},
+			Zona:           "CABA",
+			ObrasSociales:  []string{"OSDE", "Galeno", "IOMA", "PAMI"},
 		},
 		{
-			FirstName:     "Gabriela",
-			LastName:      "Ríos",
-			Matricula:     "MN 67.890",
-			Especialidad:  string(domain.EspecialidadOdontologia),
-			Bio:           "Odontóloga general con especialización en estética dental. Trabajo con materiales de primera calidad en un consultorio moderno en Palermo.",
-			ConsultaPrice: 1_500_000,
-			Modalidades:   []string{"presencial"},
-			Zona:          "CABA",
-			ObrasSociales: []string{"OSDE", "Swiss Medical", "Galeno", "Medifé", "OMINT"},
+			Nombre:         "Gabriela",
+			Apellido:       "Ríos",
+			Matricula:      "MN 67.890",
+			Especialidad:   string(domain.EspecialidadOdontologia),
+			Bio:            "Odontóloga general con especialización en estética dental. Trabajo con materiales de primera calidad en un consultorio moderno en Palermo.",
+			PrecioConsulta: 1_500_000,
+			Modalidades:    []string{"presencial"},
+			Zona:           "CABA",
+			ObrasSociales:  []string{"OSDE", "Swiss Medical", "Galeno", "Medifé", "OMINT"},
 		},
 	}
 
-	for i, in := range inputs {
-		p, err := domain.NewProfessional(in, now.Add(time.Duration(i)*time.Second))
+	for i, entrada := range entradas {
+		p, err := domain.NuevoProfesional(entrada, ahora.Add(time.Duration(i)*time.Second))
 		if err != nil {
-			return fmt.Errorf("seed: profesional %d (%s %s): %w", i, in.FirstName, in.LastName, err)
+			return fmt.Errorf("seed: profesional %d (%s %s): %w", i, entrada.Nombre, entrada.Apellido, err)
 		}
-		if err := repo.Create(ctx, p); err != nil {
-			return fmt.Errorf("seed: guardando %s %s: %w", in.FirstName, in.LastName, err)
+		if err := repo.Crear(ctx, p); err != nil {
+			return fmt.Errorf("seed: guardando %s %s: %w", entrada.Nombre, entrada.Apellido, err)
 		}
 	}
 	return nil
 }
 ```
 
-Nota: el seed usa `domain.NewProfessional` directamente en vez del servicio, así que no resuelve colisiones de slug. Los cuatro nombres son distintos, y `TestSeedGeneraSlugsUnicos` lo verifica: si alguien agrega un homónimo, el test lo atrapa.
+Nota: el seed usa `domain.NuevoProfesional` directamente en vez del servicio, así que no resuelve colisiones de slug. Los cuatro nombres son distintos, y `TestSembrarGeneraSlugsUnicos` lo verifica: si alguien agrega un homónimo, el test lo atrapa.
 
 - [ ] **Step 4: Correr los tests y verificar que pasan**
 
@@ -4782,9 +4782,9 @@ El binario que corre de verdad.
 **Interfaces:**
 - Consumes: todo lo anterior
 - Produces:
-  - `config.Config{Port string; Env string; LogLevel slog.Level; ShutdownTimeout time.Duration}`
-  - `func config.Load() (Config, error)`
-  - `func (Config) IsDevelopment() bool`
+  - `config.Config{Puerto string; Entorno string; NivelLog slog.Level; TimeoutApagado time.Duration}`
+  - `func config.Cargar() (Config, error)`
+  - `func (Config) EsDesarrollo() bool`
   - El binario `apps/api/cmd/api`
 
 - [ ] **Step 1: Escribir los tests de configuración**
@@ -4800,65 +4800,65 @@ import (
 	"time"
 )
 
-func TestLoadDefaults(t *testing.T) {
+func TestCargarDefaults(t *testing.T) {
 	// t.Setenv restaura el entorno al terminar el test
 	t.Setenv("PORT", "")
 	t.Setenv("APP_ENV", "")
 	t.Setenv("LOG_LEVEL", "")
 	t.Setenv("SHUTDOWN_TIMEOUT", "")
 
-	cfg, err := Load()
+	cfg, err := Cargar()
 	if err != nil {
-		t.Fatalf("Load devolvió error: %v", err)
+		t.Fatalf("Cargar devolvió error: %v", err)
 	}
 
-	if cfg.Port != "8080" {
-		t.Errorf("Port = %q, se esperaba 8080", cfg.Port)
+	if cfg.Puerto != "8080" {
+		t.Errorf("Puerto = %q, se esperaba 8080", cfg.Puerto)
 	}
-	if cfg.Env != "development" {
-		t.Errorf("Env = %q, se esperaba development", cfg.Env)
+	if cfg.Entorno != "development" {
+		t.Errorf("Entorno = %q, se esperaba development", cfg.Entorno)
 	}
-	if cfg.LogLevel != slog.LevelInfo {
-		t.Errorf("LogLevel = %v, se esperaba info", cfg.LogLevel)
+	if cfg.NivelLog != slog.LevelInfo {
+		t.Errorf("NivelLog = %v, se esperaba info", cfg.NivelLog)
 	}
-	if cfg.ShutdownTimeout != 10*time.Second {
-		t.Errorf("ShutdownTimeout = %v, se esperaba 10s", cfg.ShutdownTimeout)
+	if cfg.TimeoutApagado != 10*time.Second {
+		t.Errorf("TimeoutApagado = %v, se esperaba 10s", cfg.TimeoutApagado)
 	}
-	if !cfg.IsDevelopment() {
+	if !cfg.EsDesarrollo() {
 		t.Error("con APP_ENV vacío tenía que ser desarrollo")
 	}
 }
 
-func TestLoadDesdeElEntorno(t *testing.T) {
+func TestCargarDesdeElEntorno(t *testing.T) {
 	t.Setenv("PORT", "9000")
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("LOG_LEVEL", "debug")
 	t.Setenv("SHUTDOWN_TIMEOUT", "30s")
 
-	cfg, err := Load()
+	cfg, err := Cargar()
 	if err != nil {
-		t.Fatalf("Load devolvió error: %v", err)
+		t.Fatalf("Cargar devolvió error: %v", err)
 	}
 
-	if cfg.Port != "9000" {
-		t.Errorf("Port = %q", cfg.Port)
+	if cfg.Puerto != "9000" {
+		t.Errorf("Puerto = %q", cfg.Puerto)
 	}
-	if cfg.LogLevel != slog.LevelDebug {
-		t.Errorf("LogLevel = %v, se esperaba debug", cfg.LogLevel)
+	if cfg.NivelLog != slog.LevelDebug {
+		t.Errorf("NivelLog = %v, se esperaba debug", cfg.NivelLog)
 	}
-	if cfg.ShutdownTimeout != 30*time.Second {
-		t.Errorf("ShutdownTimeout = %v", cfg.ShutdownTimeout)
+	if cfg.TimeoutApagado != 30*time.Second {
+		t.Errorf("TimeoutApagado = %v", cfg.TimeoutApagado)
 	}
-	if cfg.IsDevelopment() {
+	if cfg.EsDesarrollo() {
 		t.Error("con APP_ENV=production no tenía que ser desarrollo")
 	}
 }
 
-func TestLoadFallaRapidoConValoresInvalidos(t *testing.T) {
-	tests := []struct {
-		name  string
-		key   string
-		value string
+func TestCargarFallaRapidoConValoresInvalidos(t *testing.T) {
+	casos := []struct {
+		nombre string
+		clave  string
+		valor  string
 	}{
 		{"puerto no numerico", "PORT", "ocho-mil"},
 		{"puerto fuera de rango", "PORT", "99999"},
@@ -4867,12 +4867,12 @@ func TestLoadFallaRapidoConValoresInvalidos(t *testing.T) {
 		{"entorno desconocido", "APP_ENV", "staging-raro"},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv(tt.key, tt.value)
+	for _, caso := range casos {
+		t.Run(caso.nombre, func(t *testing.T) {
+			t.Setenv(caso.clave, caso.valor)
 			// mejor no arrancar que arrancar mal configurado
-			if _, err := Load(); err == nil {
-				t.Errorf("%s=%q debía fallar y no falló", tt.key, tt.value)
+			if _, err := Cargar(); err == nil {
+				t.Errorf("%s=%q debía fallar y no falló", caso.clave, caso.valor)
 			}
 		})
 	}
@@ -4882,7 +4882,7 @@ func TestLoadFallaRapidoConValoresInvalidos(t *testing.T) {
 - [ ] **Step 2: Correr los tests y verificar que fallan**
 
 Run: `cd apps/api && go test ./internal/config/ -v`
-Expected: FAIL con `undefined: Load`
+Expected: FAIL con `undefined: Cargar`
 
 - [ ] **Step 3: Implementar la configuración**
 
@@ -4900,70 +4900,70 @@ import (
 )
 
 const (
-	EnvDevelopment = "development"
-	EnvProduction  = "production"
+	EntornoDesarrollo = "development"
+	EntornoProduccion = "production"
 )
 
 // Config es todo lo que el binario necesita saber del entorno. Sin librería:
 // son cuatro variables y un struct.
 type Config struct {
-	Port            string
-	Env             string
-	LogLevel        slog.Level
-	ShutdownTimeout time.Duration
+	Puerto         string
+	Entorno        string
+	NivelLog       slog.Level
+	TimeoutApagado time.Duration
 }
 
-func (c Config) IsDevelopment() bool {
-	return c.Env == EnvDevelopment
+func (c Config) EsDesarrollo() bool {
+	return c.Entorno == EntornoDesarrollo
 }
 
-// Load lee el entorno y falla si algo está mal.
+// Cargar lee el entorno y falla si algo está mal.
 //
 // Falla rápido a propósito: un servidor que arranca con una configuración
 // inválida es peor que uno que no arranca, porque el problema aparece más
 // tarde y en otro lado.
-func Load() (Config, error) {
+func Cargar() (Config, error) {
 	cfg := Config{
-		Port:            getEnv("PORT", "8080"),
-		Env:             getEnv("APP_ENV", EnvDevelopment),
-		ShutdownTimeout: 10 * time.Second,
+		Puerto:         leerEntorno("PORT", "8080"),
+		Entorno:        leerEntorno("APP_ENV", EntornoDesarrollo),
+		TimeoutApagado: 10 * time.Second,
 	}
 
-	port, err := strconv.Atoi(cfg.Port)
-	if err != nil || port < 1 || port > 65535 {
-		return Config{}, fmt.Errorf("PORT inválido: %q", cfg.Port)
+	puerto, err := strconv.Atoi(cfg.Puerto)
+	if err != nil || puerto < 1 || puerto > 65535 {
+		return Config{}, fmt.Errorf("PORT inválido: %q", cfg.Puerto)
 	}
 
-	if cfg.Env != EnvDevelopment && cfg.Env != EnvProduction {
-		return Config{}, fmt.Errorf("APP_ENV inválido: %q (debe ser %s o %s)", cfg.Env, EnvDevelopment, EnvProduction)
+	if cfg.Entorno != EntornoDesarrollo && cfg.Entorno != EntornoProduccion {
+		return Config{}, fmt.Errorf("APP_ENV inválido: %q (debe ser %s o %s)", cfg.Entorno, EntornoDesarrollo, EntornoProduccion)
 	}
 
-	level, err := parseLogLevel(getEnv("LOG_LEVEL", "info"))
+	nivel, err := parsearNivelLog(leerEntorno("LOG_LEVEL", "info"))
 	if err != nil {
 		return Config{}, err
 	}
-	cfg.LogLevel = level
+	cfg.NivelLog = nivel
 
-	if raw := os.Getenv("SHUTDOWN_TIMEOUT"); raw != "" {
-		d, err := time.ParseDuration(raw)
+	if crudo := os.Getenv("SHUTDOWN_TIMEOUT"); crudo != "" {
+		d, err := time.ParseDuration(crudo)
 		if err != nil || d <= 0 {
-			return Config{}, fmt.Errorf("SHUTDOWN_TIMEOUT inválido: %q (ejemplo válido: 30s)", raw)
+			return Config{}, fmt.Errorf("SHUTDOWN_TIMEOUT inválido: %q (ejemplo válido: 30s)", crudo)
 		}
-		cfg.ShutdownTimeout = d
+		cfg.TimeoutApagado = d
 	}
 
 	return cfg, nil
 }
 
-func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
+func leerEntorno(clave, porDefecto string) string {
+	if v := os.Getenv(clave); v != "" {
 		return v
 	}
-	return fallback
+	return porDefecto
 }
 
-func parseLogLevel(raw string) (slog.Level, error) {
-	switch raw {
+func parsearNivelLog(crudo string) (slog.Level, error) {
+	switch crudo {
 	case "debug":
 		return slog.LevelDebug, nil
 	case "info":
@@ -4973,7 +4973,7 @@ func parseLogLevel(raw string) (slog.Level, error) {
 	case "error":
 		return slog.LevelError, nil
 	default:
-		return 0, fmt.Errorf("LOG_LEVEL inválido: %q (debe ser debug, info, warn o error)", raw)
+		return 0, fmt.Errorf("LOG_LEVEL inválido: %q (debe ser debug, info, warn o error)", crudo)
 	}
 }
 ```
@@ -5008,20 +5008,20 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
+	if err := ejecutar(); err != nil {
 		fmt.Fprintln(os.Stderr, "error fatal:", err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
-	cfg, err := config.Load()
+func ejecutar() error {
+	cfg, err := config.Cargar()
 	if err != nil {
 		return err
 	}
 
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: cfg.LogLevel,
+		Level: cfg.NivelLog,
 	})))
 
 	// El cableado de dependencias, explícito y de arriba abajo. Sin
@@ -5029,21 +5029,21 @@ func run() error {
 	// mañana.
 	//
 	// Migrar a PostgreSQL es cambiar esta línea por
-	// postgres.NewProfessional(db). Nada más.
-	repo := memory.NewProfessional()
+	// postgres.NuevoProfesional(db). Nada más.
+	repo := memory.NuevoProfesional()
 
-	if cfg.IsDevelopment() {
-		if err := memory.Seed(context.Background(), repo); err != nil {
+	if cfg.EsDesarrollo() {
+		if err := memory.Sembrar(context.Background(), repo); err != nil {
 			return fmt.Errorf("cargando el seed: %w", err)
 		}
 		slog.Info("seed de desarrollo cargado")
 	}
 
-	svc := service.NewProfessional(repo)
-	router := handler.NewRouter(handler.NewProfessional(svc))
+	svc := service.NuevoProfesional(repo)
+	router := handler.NuevoRouter(handler.NuevoProfesional(svc))
 
 	srv := &http.Server{
-		Addr:    ":" + cfg.Port,
+		Addr:    ":" + cfg.Puerto,
 		Handler: router,
 		// Los valores por defecto de http.Server son cero, o sea sin límite:
 		// una conexión lenta puede quedarse tomada para siempre.
@@ -5053,30 +5053,30 @@ func run() error {
 		IdleTimeout:       60 * time.Second,
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	ctx, detener := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer detener()
 
-	serverErr := make(chan error, 1)
+	errServidor := make(chan error, 1)
 	go func() {
-		slog.Info("servidor escuchando", "addr", srv.Addr, "env", cfg.Env)
+		slog.Info("servidor escuchando", "direccion", srv.Addr, "entorno", cfg.Entorno)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			serverErr <- err
+			errServidor <- err
 		}
 	}()
 
 	select {
-	case err := <-serverErr:
+	case err := <-errServidor:
 		return fmt.Errorf("el servidor falló: %w", err)
 
 	case <-ctx.Done():
 		// Apagado gracioso: sin esto, cada deploy corta los requests que
 		// están a mitad de camino.
-		slog.Info("apagando", "timeout", cfg.ShutdownTimeout)
+		slog.Info("apagando", "timeout", cfg.TimeoutApagado)
 
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
-		defer cancel()
+		ctxApagado, cancelar := context.WithTimeout(context.Background(), cfg.TimeoutApagado)
+		defer cancelar()
 
-		if err := srv.Shutdown(shutdownCtx); err != nil {
+		if err := srv.Shutdown(ctxApagado); err != nil {
 			return fmt.Errorf("apagado forzado: %w", err)
 		}
 		slog.Info("apagado limpio")
@@ -5113,14 +5113,14 @@ go build ./...
 APP_ENV=development go run ./cmd/api &
 sleep 2
 curl -s http://localhost:8080/healthz
-curl -s "http://localhost:8080/api/v1/professionals?q=gonzalez" | head -c 400
+curl -s "http://localhost:8080/api/v1/profesionales?busqueda=gonzalez" | head -c 400
 kill %1
 ```
 
 Expected:
-- `{"status":"ok"}`
-- Un JSON con `"data":[...]` conteniendo a Martín González y `"total":1`.
-- En los logs, líneas JSON con `"msg":"request"` y `"requestId"`.
+- `{"estado":"ok"}`
+- Un JSON con `"datos":[...]` conteniendo a Martín González y `"total":1`.
+- En los logs, líneas JSON con `"msg":"peticion"` y `"idPeticion"`.
 
 En PowerShell, el equivalente:
 ```powershell
@@ -5129,7 +5129,7 @@ go build ./...
 $env:APP_ENV="development"; Start-Job { go run ./cmd/api }
 Start-Sleep 3
 Invoke-RestMethod http://localhost:8080/healthz
-Invoke-RestMethod "http://localhost:8080/api/v1/professionals?q=gonzalez"
+Invoke-RestMethod "http://localhost:8080/api/v1/profesionales?busqueda=gonzalez"
 Get-Job | Stop-Job; Get-Job | Remove-Job
 ```
 
@@ -5145,7 +5145,7 @@ git add apps/api/internal/config/ apps/api/cmd/ apps/api/.env.example
 git commit -m "feat(api): configuración por entorno y composition root
 
 El cableado de dependencias es explícito y vive entero en main.go.
-Migrar a PostgreSQL es cambiar la línea de memory.NewProfessional().
+Migrar a PostgreSQL es cambiar la línea de memory.NuevoProfesional().
 
 La configuración falla rápido: arrancar mal configurado es peor que no
 arrancar. El servidor tiene timeouts explícitos porque los de
@@ -5335,7 +5335,7 @@ docker stop salud-api-test
 
 Expected:
 - La imagen pesa menos de 25 MB.
-- `{"status":"ok"}`.
+- `{"estado":"ok"}`.
 - El listado viene vacío: en `production` no se carga el seed.
 
 - [ ] **Step 8: Escribir el README del backend**
@@ -5378,7 +5378,7 @@ handler ──▶ service ──▶ repository (interfaz)
 
 ## Migrar a PostgreSQL
 
-Implementar `repository.Professional` en `internal/repository/postgres/` y
+Implementar `repository.Profesional` en `internal/repository/postgres/` y
 cambiar una línea de `cmd/api/main.go`. Nada más.
 
 ## Contrato
@@ -5408,8 +5408,11 @@ docker run --rm -p 8081:8080 \
 
 - Sin mocks. El repositorio en memoria es el doble de test.
 - Dinero en `int64` de centavos, nunca `float64`.
-- Identificadores en inglés; en español solo los términos del dominio que
-  no traducen: `Matricula`, `Especialidad`, `ObraSocial`, `Zona`.
+- Todo lo que escribimos nosotros va en español: tipos, funciones, campos,
+  constantes, comentarios, mensajes y los nombres de campo del JSON. Quedan
+  en inglés los paquetes (`domain`, `service`, ...), `String()` y `Error()`,
+  las variables de entorno y las claves `type`/`title`/`status`/`detail`
+  del RFC 7807.
 - Una sola dependencia externa: `github.com/google/uuid`.
 ```
 
@@ -5556,7 +5559,7 @@ Expected: exactamente una línea, `github.com/joaquinfochoa/Salud/apps/api/inter
 Levantar el servidor con `make run` y correr:
 
 ```bash
-BASE=http://localhost:8080/api/v1/professionals
+BASE=http://localhost:8080/api/v1/profesionales
 
 # healthz
 curl -s http://localhost:8080/healthz
@@ -5565,41 +5568,41 @@ curl -s http://localhost:8080/healthz
 curl -s "$BASE" | head -c 300
 
 # búsqueda sin acentos: tiene que encontrar a González
-curl -s "$BASE?q=gonzalez" | head -c 300
+curl -s "$BASE?busqueda=gonzalez" | head -c 300
 
 # alta
 ID=$(curl -s -X POST "$BASE" -H 'Content-Type: application/json' -d '{
-  "firstName":"Ana","lastName":"Pérez","matricula":"MP 55.123",
+  "nombre":"Ana","apellido":"Pérez","matricula":"MP 55.123",
   "especialidad":"odontologia","bio":"Odontóloga general.",
-  "consultaPriceCents":1800000,"modalidades":["presencial"],
+  "precioConsultaCentavos":1800000,"modalidades":["presencial"],
   "zona":"CABA","obrasSociales":["OSDE"]
 }' | python -c "import sys,json; print(json.load(sys.stdin)['id'])")
 
 # lectura por id y por slug
 curl -s "$BASE/$ID" | head -c 200
-curl -s "$BASE/by-slug/ana-perez" | head -c 200
+curl -s "$BASE/por-slug/ana-perez" | head -c 200
 
 # edición
 curl -s -X PUT "$BASE/$ID" -H 'Content-Type: application/json' -d '{
-  "firstName":"Ana","lastName":"Pérez","matricula":"MP 55.123",
+  "nombre":"Ana","apellido":"Pérez","matricula":"MP 55.123",
   "especialidad":"odontologia","bio":"Bio editada.",
-  "consultaPriceCents":1800000,"modalidades":["presencial","telemedicina"],
+  "precioConsultaCentavos":1800000,"modalidades":["presencial","telemedicina"],
   "zona":"GBA Norte","obrasSociales":["OSDE"]
 }' | head -c 200
 
 # baja y reactivación
 curl -s -o /dev/null -w "DELETE: %{http_code}\n" -X DELETE "$BASE/$ID"
 curl -s -o /dev/null -w "DELETE otra vez: %{http_code}\n" -X DELETE "$BASE/$ID"
-curl -s -o /dev/null -w "reactivate: %{http_code}\n" -X POST "$BASE/$ID/reactivate"
+curl -s -o /dev/null -w "reactivar: %{http_code}\n" -X POST "$BASE/$ID/reactivar"
 
 # los códigos de error
 curl -s -o /dev/null -w "JSON roto: %{http_code}\n" -X POST "$BASE" -H 'Content-Type: application/json' -d '{'
-curl -s -o /dev/null -w "datos inválidos: %{http_code}\n" -X POST "$BASE" -H 'Content-Type: application/json' -d '{"firstName":"","lastName":"","matricula":"x","especialidad":"y","consultaPriceCents":0,"modalidades":[],"zona":""}'
+curl -s -o /dev/null -w "datos inválidos: %{http_code}\n" -X POST "$BASE" -H 'Content-Type: application/json' -d '{"nombre":"","apellido":"","matricula":"x","especialidad":"y","precioConsultaCentavos":0,"modalidades":[],"zona":""}'
 curl -s -o /dev/null -w "id inexistente: %{http_code}\n" "$BASE/6ba7b810-9dad-11d1-80b4-00c04fd430c8"
 curl -s -o /dev/null -w "id mal formado: %{http_code}\n" "$BASE/no-es-uuid"
 ```
 
-Expected: `DELETE: 204`, `DELETE otra vez: 204`, `reactivate: 200`, `JSON roto: 400`, `datos inválidos: 422`, `id inexistente: 404`, `id mal formado: 400`.
+Expected: `DELETE: 204`, `DELETE otra vez: 204`, `reactivar: 200`, `JSON roto: 400`, `datos inválidos: 422`, `id inexistente: 404`, `id mal formado: 400`.
 
 - [ ] **Step 5: La imagen de Docker arranca y responde**
 
@@ -5613,14 +5616,14 @@ curl -s http://localhost:8080/healthz
 docker stop salud-check
 ```
 
-Expected: `{"status":"ok"}`.
+Expected: `{"estado":"ok"}`.
 
 - [ ] **Step 6: El punto de cambio a PostgreSQL es una sola línea**
 
 Verificación por lectura, sin escribir código: buscar todas las menciones a `memory.` fuera de su propio paquete y de los tests.
 
 Run: `cd apps/api && grep -rn "repository/memory" --include="*.go" . | grep -v "_test.go" | grep -v "internal/repository/memory/"`
-Expected: exactamente dos líneas, ambas en `cmd/api/main.go` — el import y la llamada a `memory.NewProfessional()`. La de `memory.Seed` es la tercera y también es esperada. Si aparece cualquier otra, alguna capa se acopló a la implementación y hay que revisarla.
+Expected: exactamente dos líneas, ambas en `cmd/api/main.go` — el import y la llamada a `memory.NuevoProfesional()`. La de `memory.Sembrar` es la tercera y también es esperada. Si aparece cualquier otra, alguna capa se acopló a la implementación y hay que revisarla.
 
 - [ ] **Step 7: Actualizar el spec con lo que se aprendió**
 
@@ -5648,8 +5651,8 @@ Registrado también en la sección 10 del spec.
 | CORS | Cuando exista `apps/web` |
 | `Patient` y `Appointment` | Después de que este esqueleto esté cerrado |
 | PostgreSQL | Cuando el modelo de dominio deje de moverse |
-| Integración con REFEPS | Spec propia. Hoy `verification` queda en `pending` para siempre. |
-| `StatusSuspended` | Cuando REFEPS pueda disparar una suspensión |
+| Integración con REFEPS | Spec propia. Hoy `verificacion` queda en `pendiente` para siempre. |
+| `EstadoSuspendido` | Cuando REFEPS pueda disparar una suspensión |
 | Endpoint de purga (Ley 25.326 art. 16) | Cuando el abogado defina qué se está obligado a conservar |
 | Rating, reseñas, horarios, coseguros | Son entidades propias, no campos |
 | Cliente TypeScript generado del OpenAPI | Etapa del frontend |
