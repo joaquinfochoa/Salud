@@ -27,3 +27,6 @@ dist-ssr
 apps/api/bin/
 *.exe
 coverage.out
+
+# Configuración local de Claude Code
+.claude/settings.local.json
