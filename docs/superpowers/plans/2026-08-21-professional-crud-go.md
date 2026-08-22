@@ -5413,6 +5413,24 @@ docker run --rm -p 8081:8080 \
 | `make check` | fmt + test-race + lint. Correr antes de commitear. |
 | `make docker-build` | Imagen local |
 
+### El detector de carreras en Windows
+
+`-race` necesita cgo, y cgo necesita un compilador de C. Windows no trae uno.
+Sin él, `go test -race` falla con `gcc: executable file not found`.
+
+```powershell
+winget install BrechtSanders.WinLibs.POSIX.UCRT
+```
+
+El paquete no se agrega solo al PATH. Hay que apuntarlo a mano:
+
+```bash
+export PATH="$LOCALAPPDATA/Microsoft/WinGet/Packages/BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe/mingw64/bin:$PATH"
+export CGO_ENABLED=1
+```
+
+En Linux y macOS no hace falta nada: `gcc` o `clang` ya están.
+
 ## Convenciones
 
 - Sin mocks. El repositorio en memoria es el doble de test.
