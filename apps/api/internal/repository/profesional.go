@@ -16,7 +16,7 @@ type Filtro struct {
 	Zona           *string
 	Estado         *domain.Estado
 	Busqueda       *string // busca en nombre y apellido, sin distinguir acentos
-	Limite         int
+	Limite         int     // cero o menos significa sin límite; el servicio aplica el valor por defecto y el techo
 	Desplazamiento int
 }
 

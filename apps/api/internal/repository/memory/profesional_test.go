@@ -283,6 +283,42 @@ func TestListarPaginacionEsEstable(t *testing.T) {
 	}
 }
 
+func TestListarNormalizaPaginacionInvalida(t *testing.T) {
+	ctx := context.Background()
+	repo := NuevoProfesional()
+
+	for i := range 3 {
+		p := hacerProfesional(t, fmt.Sprintf("Nombre%d", i), "Apellido",
+			fmt.Sprintf("MN %d", 30000+i), domain.EspecialidadPsicologia, "CABA")
+		p.CreadoEn = ahoraDePrueba.Add(time.Duration(i) * time.Minute)
+		if err := repo.Crear(ctx, p); err != nil {
+			t.Fatalf("Crear devolvió error: %v", err)
+		}
+	}
+
+	// un Desplazamiento negativo no es válido en SQL, pero acá además hace
+	// que Go panique al cortar el slice con un índice bajo negativo
+	obtenido, total, err := repo.Listar(ctx, repository.Filtro{Limite: 2, Desplazamiento: -1})
+	if err != nil {
+		t.Fatalf("Listar devolvió error: %v", err)
+	}
+	if total != 3 {
+		t.Errorf("total = %d, se esperaba 3", total)
+	}
+	if len(obtenido) != 2 {
+		t.Errorf("len(obtenido) = %d, se esperaba 2 (primera página)", len(obtenido))
+	}
+
+	// un Limite negativo se trata como "sin límite", igual que cero
+	obtenido, total, err = repo.Listar(ctx, repository.Filtro{Limite: -1})
+	if err != nil {
+		t.Fatalf("Listar devolvió error: %v", err)
+	}
+	if total != 3 || len(obtenido) != 3 {
+		t.Errorf("total=%d len=%d, se esperaba 3 y 3 con Limite negativo", total, len(obtenido))
+	}
+}
+
 func TestAccesoConcurrente(t *testing.T) {
 	ctx := context.Background()
 	repo := NuevoProfesional()

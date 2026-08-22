@@ -79,6 +79,16 @@ func (r *Profesional) Listar(_ context.Context, f repository.Filtro) ([]domain.P
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
+	// El slice de Go entra en pánico con un índice negativo, a diferencia de un
+	// OFFSET de SQL. El servicio ya normaliza estos valores, pero el que corta el
+	// slice es este método, así que la guarda va acá.
+	if f.Desplazamiento < 0 {
+		f.Desplazamiento = 0
+	}
+	if f.Limite < 0 {
+		f.Limite = 0
+	}
+
 	// ponytail: scan O(n), correcto para un store en memoria. La
 	// implementación Postgres resuelve esto con índices sobre especialidad,
 	// zona y estado.
