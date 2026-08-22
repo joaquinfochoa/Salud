@@ -1,0 +1,401 @@
+openapi: 3.1.0
+
+info:
+  title: Salud API
+  version: 0.1.0
+  description: |
+    API de la plataforma de salud digital. Esta versión cubre únicamente el
+    CRUD de profesionales, sin autenticación y sin persistencia real.
+
+    Los montos viajan como enteros en centavos. Nunca como decimales: un
+    número de JSON se convierte en float64 del otro lado.
+
+servers:
+  - url: http://localhost:8080
+    description: Desarrollo local
+
+tags:
+  - name: profesionales
+  - name: salud
+
+paths:
+  /healthz:
+    get:
+      tags: [salud]
+      summary: Verifica que el servidor responde
+      responses:
+        '200':
+          description: El servidor está vivo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  estado: { type: string, example: ok }
+
+  /api/v1/profesionales:
+    get:
+      tags: [profesionales]
+      summary: Lista profesionales
+      description: |
+        Por defecto devuelve solo los activos. Para ver los dados de baja hay
+        que pedir `estado=inactivo` explícitamente.
+      parameters:
+        - name: especialidad
+          in: query
+          schema: { $ref: '#/components/schemas/Especialidad' }
+        - name: zona
+          in: query
+          description: Compara sin distinguir mayúsculas ni acentos
+          schema: { type: string }
+        - name: estado
+          in: query
+          schema: { $ref: '#/components/schemas/Estado' }
+        - name: busqueda
+          in: query
+          description: |
+            Busca en nombre y apellido, sin distinguir mayúsculas ni acentos.
+            Buscar `gonzalez` encuentra a `González`.
+          schema: { type: string }
+        - name: limite
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: desplazamiento
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ListaProfesionales' }
+
+    post:
+      tags: [profesionales]
+      summary: Da de alta un profesional
+      description: |
+        El profesional nace con `estado: activo` y `verificacion: pendiente`.
+        Nadie nace verificado: la verificación es un acto contra REFEPS que
+        todavía no está implementado.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PeticionProfesional' }
+      responses:
+        '201':
+          description: Creado
+          headers:
+            Location:
+              description: URL del recurso creado
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profesional' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+        '422': { $ref: '#/components/responses/ValidacionFallida' }
+
+  /api/v1/profesionales/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+
+    get:
+      tags: [profesionales]
+      summary: Trae un profesional por ID
+      description: |
+        Un profesional dado de baja devuelve 200 con `estado: inactivo`. El
+        recurso existe, simplemente no opera.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profesional' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+    put:
+      tags: [profesionales]
+      summary: Reemplaza los campos editables
+      description: |
+        Reemplazo total, no parcial. `id`, `slug`, `estado`, `verificacion` y
+        las marcas de tiempo no son editables.
+
+        El slug no se regenera al cambiar el nombre: es una URL pública y
+        romperla rompe enlaces y posicionamiento.
+
+        Cambiar la matrícula o la especialidad devuelve `verificacion` a
+        `pendiente`: la verificación se hizo sobre esos datos.
+
+        Funciona sobre profesionales inactivos y no cambia su estado.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PeticionProfesional' }
+      responses:
+        '200':
+          description: Actualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profesional' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+        '422': { $ref: '#/components/responses/ValidacionFallida' }
+
+    delete:
+      tags: [profesionales]
+      summary: Da de baja al profesional
+      description: |
+        Baja lógica, no borrado. Pone `estado` en `inactivo` y sella
+        `dadoDeBajaEn`. El registro se queda: los turnos y comprobantes
+        históricos apuntan a él.
+
+        Es idempotente: dar de baja algo ya dado de baja devuelve 204.
+      responses:
+        '204': { description: Dado de baja }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+  /api/v1/profesionales/{id}/reactivar:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [profesionales]
+      summary: Revierte la baja
+      description: Idempotente. Sobre alguien ya activo devuelve 200 sin cambios.
+      responses:
+        '200':
+          description: Reactivado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profesional' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+  /api/v1/profesionales/por-slug/{slug}:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [profesionales]
+      summary: Trae un profesional por su slug público
+      description: Es lo que consume la página `/p/{slug}` del frontend.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profesional' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+components:
+  schemas:
+    Especialidad:
+      type: string
+      enum: [psicologia, kinesiologia, odontologia]
+
+    Modalidad:
+      type: string
+      enum: [telemedicina, presencial, domicilio]
+
+    Estado:
+      type: string
+      enum: [activo, inactivo]
+      description: Si el profesional opera hoy en la plataforma
+
+    Verificacion:
+      type: string
+      enum: [pendiente, verificada, rechazada]
+      description: Si su matrícula fue verificada contra el mundo real
+
+    Profesional:
+      type: object
+      required:
+        - id
+        - slug
+        - nombre
+        - apellido
+        - matricula
+        - especialidad
+        - bio
+        - precioConsultaCentavos
+        - modalidades
+        - zona
+        - obrasSociales
+        - estado
+        - verificacion
+        - creadoEn
+        - actualizadoEn
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+          example: martin-gonzalez
+        nombre:
+          type: string
+          example: Martín
+        apellido:
+          type: string
+          example: González
+        matricula:
+          type: string
+          description: Forma canónica. Distintas escrituras convergen acá.
+          example: MN 98234
+        especialidad:
+          $ref: '#/components/schemas/Especialidad'
+        bio:
+          type: string
+        precioConsultaCentavos:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Centavos. 1200000 son $12.000,00.
+          example: 1200000
+        modalidades:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/Modalidad' }
+        zona:
+          type: string
+          example: CABA
+        obrasSociales:
+          type: array
+          items: { type: string }
+          example: [OSDE, Swiss Medical]
+        estado:
+          $ref: '#/components/schemas/Estado'
+        verificacion:
+          $ref: '#/components/schemas/Verificacion'
+        creadoEn:
+          type: string
+          format: date-time
+        actualizadoEn:
+          type: string
+          format: date-time
+        dadoDeBajaEn:
+          type: [string, 'null']
+          format: date-time
+
+    PeticionProfesional:
+      type: object
+      required:
+        - nombre
+        - apellido
+        - matricula
+        - especialidad
+        - precioConsultaCentavos
+        - modalidades
+        - zona
+      properties:
+        nombre:
+          type: string
+          maxLength: 100
+        apellido:
+          type: string
+          maxLength: 100
+        matricula:
+          type: string
+          description: |
+            Acepta las formas reales del mercado: "MN 98.234", "M.N. 45321",
+            "mn98234", "MP 12345". Se normaliza al guardar.
+          example: MN 98.234
+        especialidad:
+          $ref: '#/components/schemas/Especialidad'
+        bio:
+          type: string
+          maxLength: 2000
+        precioConsultaCentavos:
+          type: integer
+          format: int64
+          minimum: 0
+        modalidades:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/Modalidad' }
+        zona:
+          type: string
+          maxLength: 100
+        obrasSociales:
+          type: array
+          items: { type: string }
+      additionalProperties: false
+
+    ListaProfesionales:
+      type: object
+      required: [datos, paginacion]
+      properties:
+        datos:
+          type: array
+          items: { $ref: '#/components/schemas/Profesional' }
+        paginacion:
+          type: object
+          required: [total, limite, desplazamiento]
+          properties:
+            total:
+              type: integer
+              description: Cuántos hay en total con esos filtros, no en la página
+            limite: { type: integer }
+            desplazamiento: { type: integer }
+
+    Problema:
+      type: object
+      description: Detalles del problema según RFC 7807
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        errores:
+          type: array
+          description: Presente solo en errores de validación
+          items:
+            type: object
+            required: [campo, mensaje]
+            properties:
+              campo: { type: string }
+              mensaje: { type: string }
+
+  responses:
+    PeticionInvalida:
+      description: JSON malformado o parámetro con formato inválido
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problema' }
+
+    NoEncontrado:
+      description: No existe
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problema' }
+
+    Conflicto:
+      description: La matrícula ya está registrada por otro profesional
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problema' }
+
+    ValidacionFallida:
+      description: |
+        JSON válido pero datos inválidos. Distinto de 400: "entendí perfecto
+        y está mal" es otro problema que "no entiendo lo que mandaste".
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/Problema'
+              - type: object
+                required: [errores]
