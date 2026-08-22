@@ -28,19 +28,19 @@
 | Archivo | Responsabilidad |
 |---|---|
 | `apps/api/go.mod` | Módulo y dependencias |
-| `apps/api/internal/domain/money.go` | Tipo `Dinero` y su formato |
-| `apps/api/internal/domain/text.go` | `Normalizar` y `GenerarSlug` — compartidos por slug y búsqueda |
+| `apps/api/internal/domain/dinero.go` | Tipo `Dinero` y su formato |
+| `apps/api/internal/domain/texto.go` | `Normalizar` y `GenerarSlug` — compartidos por slug y búsqueda |
 | `apps/api/internal/domain/enums.go` | `Especialidad`, `Modalidad`, `Estado`, `EstadoVerificacion` |
 | `apps/api/internal/domain/matricula.go` | Value object `Matricula` y su parser |
-| `apps/api/internal/domain/errors.go` | Errores centinela y `ErrorValidacion` |
-| `apps/api/internal/domain/professional.go` | La entidad, su constructor y sus transiciones |
-| `apps/api/internal/repository/professional.go` | La interfaz y el `Filtro` |
-| `apps/api/internal/repository/memory/professional.go` | Implementación en memoria |
-| `apps/api/internal/repository/memory/seed.go` | Datos de desarrollo |
-| `apps/api/internal/service/professional.go` | Casos de uso |
-| `apps/api/internal/handler/problem.go` | Errores de dominio → HTTP |
+| `apps/api/internal/domain/errores.go` | Errores centinela y `ErrorValidacion` |
+| `apps/api/internal/domain/profesional.go` | La entidad, su constructor y sus transiciones |
+| `apps/api/internal/repository/profesional.go` | La interfaz y el `Filtro` |
+| `apps/api/internal/repository/memory/profesional.go` | Implementación en memoria |
+| `apps/api/internal/repository/memory/semilla.go` | Datos de desarrollo |
+| `apps/api/internal/service/profesional.go` | Casos de uso |
+| `apps/api/internal/handler/problema.go` | Errores de dominio → HTTP |
 | `apps/api/internal/handler/dto.go` | Structs de request y response |
-| `apps/api/internal/handler/professional.go` | Controllers |
+| `apps/api/internal/handler/profesional.go` | Controllers |
 | `apps/api/internal/handler/middleware.go` | `IDPeticion`, logging, recover |
 | `apps/api/internal/handler/router.go` | Tabla de rutas |
 | `apps/api/internal/config/config.go` | Configuración por variables de entorno |
@@ -184,10 +184,10 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 Dos piezas puras, sin dependencias, que el resto del dominio usa.
 
 **Files:**
-- Create: `apps/api/internal/domain/money.go`
-- Create: `apps/api/internal/domain/text.go`
-- Test: `apps/api/internal/domain/money_test.go`
-- Test: `apps/api/internal/domain/text_test.go`
+- Create: `apps/api/internal/domain/dinero.go`
+- Create: `apps/api/internal/domain/texto.go`
+- Test: `apps/api/internal/domain/dinero_test.go`
+- Test: `apps/api/internal/domain/texto_test.go`
 
 **Interfaces:**
 - Consumes: nada
@@ -198,7 +198,7 @@ Dos piezas puras, sin dependencias, que el resto del dominio usa.
 
 - [ ] **Step 1: Escribir los tests de `Dinero`**
 
-Archivo `apps/api/internal/domain/money_test.go`:
+Archivo `apps/api/internal/domain/dinero_test.go`:
 
 ```go
 package domain
@@ -238,7 +238,7 @@ Expected: FAIL con `undefined: Dinero`
 
 - [ ] **Step 3: Implementar `Dinero`**
 
-Archivo `apps/api/internal/domain/money.go`:
+Archivo `apps/api/internal/domain/dinero.go`:
 
 ```go
 package domain
@@ -295,7 +295,7 @@ Expected: PASS, los ocho subtests en verde.
 
 - [ ] **Step 5: Escribir los tests de normalización**
 
-Archivo `apps/api/internal/domain/text_test.go`:
+Archivo `apps/api/internal/domain/texto_test.go`:
 
 ```go
 package domain
@@ -359,7 +359,7 @@ Expected: FAIL con `undefined: Normalizar` y `undefined: GenerarSlug`
 
 - [ ] **Step 7: Implementar la normalización**
 
-Archivo `apps/api/internal/domain/text.go`:
+Archivo `apps/api/internal/domain/texto.go`:
 
 ```go
 package domain
@@ -830,9 +830,9 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 El corazón del dominio: la invariante de que no se puede construir un profesional inválido.
 
 **Files:**
-- Create: `apps/api/internal/domain/errors.go`
-- Create: `apps/api/internal/domain/professional.go`
-- Test: `apps/api/internal/domain/professional_test.go`
+- Create: `apps/api/internal/domain/errores.go`
+- Create: `apps/api/internal/domain/profesional.go`
+- Test: `apps/api/internal/domain/profesional_test.go`
 
 **Interfaces:**
 - Consumes: `Matricula`, `Especialidad`, `Modalidad`, `Estado`, `EstadoVerificacion`, `Dinero`, `GenerarSlug`, `Normalizar` (Tasks 2 y 3)
@@ -849,11 +849,11 @@ El corazón del dominio: la invariante de que no se puede construir un profesion
   - `func (Profesional) Clonar() Profesional`
   - `func (Profesional) NombreCompleto() string`
 
-- [ ] **Step 1: Escribir `errors.go`**
+- [ ] **Step 1: Escribir `errores.go`**
 
 Este archivo no lleva test propio: sus dos funciones se ejercitan enteras desde los tests de la entidad del paso 3.
 
-Archivo `apps/api/internal/domain/errors.go`:
+Archivo `apps/api/internal/domain/errores.go`:
 
 ```go
 package domain
@@ -905,7 +905,7 @@ func (e ErrorValidacion) tieneErrores() bool {
 
 - [ ] **Step 2: Escribir los tests de la entidad**
 
-Archivo `apps/api/internal/domain/professional_test.go`:
+Archivo `apps/api/internal/domain/profesional_test.go`:
 
 ```go
 package domain
@@ -1216,7 +1216,7 @@ Expected: FAIL con `undefined: EntradaProfesional` y `undefined: NuevoProfesiona
 
 - [ ] **Step 4: Implementar la entidad**
 
-Archivo `apps/api/internal/domain/professional.go`:
+Archivo `apps/api/internal/domain/profesional.go`:
 
 ```go
 package domain
@@ -1509,9 +1509,9 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ## Task 5: Interfaz del repositorio e implementación en memoria
 
 **Files:**
-- Create: `apps/api/internal/repository/professional.go`
-- Create: `apps/api/internal/repository/memory/professional.go`
-- Test: `apps/api/internal/repository/memory/professional_test.go`
+- Create: `apps/api/internal/repository/profesional.go`
+- Create: `apps/api/internal/repository/memory/profesional.go`
+- Test: `apps/api/internal/repository/memory/profesional_test.go`
 
 **Interfaces:**
 - Consumes: todo el paquete `domain` (Tasks 2-4)
@@ -1524,7 +1524,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 No lleva test: es una declaración de tipos. El test de que la implementación la cumple es la aserción de compilación del paso 4.
 
-Archivo `apps/api/internal/repository/professional.go`:
+Archivo `apps/api/internal/repository/profesional.go`:
 
 ```go
 package repository
@@ -1569,7 +1569,7 @@ type Profesional interface {
 
 - [ ] **Step 2: Escribir los tests del repositorio en memoria**
 
-Archivo `apps/api/internal/repository/memory/professional_test.go`:
+Archivo `apps/api/internal/repository/memory/profesional_test.go`:
 
 ```go
 package memory
@@ -1889,7 +1889,7 @@ Expected: FAIL con `undefined: NuevoProfesional`
 
 - [ ] **Step 4: Implementar el repositorio en memoria**
 
-Archivo `apps/api/internal/repository/memory/professional.go`:
+Archivo `apps/api/internal/repository/memory/profesional.go`:
 
 ```go
 package memory
@@ -2068,8 +2068,8 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ## Task 6: El servicio — alta y lecturas
 
 **Files:**
-- Create: `apps/api/internal/service/professional.go`
-- Test: `apps/api/internal/service/professional_test.go`
+- Create: `apps/api/internal/service/profesional.go`
+- Test: `apps/api/internal/service/profesional_test.go`
 
 **Interfaces:**
 - Consumes: `domain` (Tasks 2-4), `repository.Profesional` y `repository.Filtro` (Task 5), `memory.NuevoProfesional` (Task 5, solo en tests)
@@ -2083,7 +2083,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 - [ ] **Step 1: Escribir los tests del alta y las lecturas**
 
-Archivo `apps/api/internal/service/professional_test.go`:
+Archivo `apps/api/internal/service/profesional_test.go`:
 
 ```go
 package service
@@ -2297,7 +2297,7 @@ Expected: FAIL con `undefined: NuevoProfesional`
 
 - [ ] **Step 3: Implementar el servicio con alta y lecturas**
 
-Archivo `apps/api/internal/service/professional.go`:
+Archivo `apps/api/internal/service/profesional.go`:
 
 ```go
 package service
@@ -2450,8 +2450,8 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ## Task 7: El servicio — edición, baja y reactivación
 
 **Files:**
-- Modify: `apps/api/internal/service/professional.go` (agregar tres métodos)
-- Modify: `apps/api/internal/service/professional_test.go` (agregar los tests)
+- Modify: `apps/api/internal/service/profesional.go` (agregar tres métodos)
+- Modify: `apps/api/internal/service/profesional_test.go` (agregar los tests)
 
 **Interfaces:**
 - Consumes: todo lo de la Task 6
@@ -2462,7 +2462,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 - [ ] **Step 1: Escribir los tests**
 
-Agregar al final de `apps/api/internal/service/professional_test.go`:
+Agregar al final de `apps/api/internal/service/profesional_test.go`:
 
 ```go
 func TestActualizar(t *testing.T) {
@@ -2645,7 +2645,7 @@ Expected: FAIL con `svc.Actualizar undefined` y `svc.DarDeBaja undefined`
 
 - [ ] **Step 3: Implementar los tres métodos y el filtro por defecto**
 
-En `apps/api/internal/service/professional.go`, reemplazar el método `Listar` por esta versión:
+En `apps/api/internal/service/profesional.go`, reemplazar el método `Listar` por esta versión:
 
 ```go
 func (s *Profesional) Listar(ctx context.Context, f repository.Filtro) ([]domain.Profesional, int, error) {
@@ -3198,9 +3198,9 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 La traducción entre el dominio y el mundo HTTP. Es la única capa que conoce códigos de estado.
 
 **Files:**
-- Create: `apps/api/internal/handler/problem.go`
+- Create: `apps/api/internal/handler/problema.go`
 - Create: `apps/api/internal/handler/dto.go`
-- Test: `apps/api/internal/handler/problem_test.go`
+- Test: `apps/api/internal/handler/problema_test.go`
 - Test: `apps/api/internal/handler/dto_test.go`
 
 **Interfaces:**
@@ -3215,7 +3215,7 @@ La traducción entre el dominio y el mundo HTTP. Es la única capa que conoce c�
 
 - [ ] **Step 1: Escribir los tests del mapeo de errores**
 
-Archivo `apps/api/internal/handler/problem_test.go`:
+Archivo `apps/api/internal/handler/problema_test.go`:
 
 ```go
 package handler
@@ -3340,9 +3340,9 @@ func TestDecodificarJSONRechazaBasuraDespuesDelObjeto(t *testing.T) {
 Run: `cd apps/api && go test ./internal/handler/ -v`
 Expected: FAIL con `undefined: escribirError`
 
-- [ ] **Step 3: Implementar `problem.go`**
+- [ ] **Step 3: Implementar `problema.go`**
 
-Archivo `apps/api/internal/handler/problem.go`:
+Archivo `apps/api/internal/handler/problema.go`:
 
 ```go
 package handler
@@ -3674,7 +3674,7 @@ func TestARespuestaListadoConListaVacia(t *testing.T) {
 - [ ] **Step 6: Correr los tests y verificar que pasan**
 
 Run: `cd apps/api && go test ./internal/handler/ -v`
-Expected: PASS en los tests de `problem_test.go` y `dto_test.go`.
+Expected: PASS en los tests de `problema_test.go` y `dto_test.go`.
 
 - [ ] **Step 7: Commit**
 
@@ -3704,7 +3704,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Test: `apps/api/internal/handler/middleware_test.go`
 
 **Interfaces:**
-- Consumes: `problem.go` (Task 9). No depende de los handlers: por eso va antes.
+- Consumes: `problema.go` (Task 9). No depende de los handlers: por eso va antes.
 - Produces:
   - `func handler.Encadenar(http.Handler, ...func(http.Handler) http.Handler) http.Handler`
   - `func handler.IDPeticion(http.Handler) http.Handler`
@@ -3943,7 +3943,7 @@ func RecuperarPanic(siguiente http.Handler) http.Handler {
 - [ ] **Step 4: Correr toda la suite del paquete handler**
 
 Run: `cd apps/api && go test ./internal/handler/ -v`
-Expected: PASS en los tests del middleware y en los de `problem.go` y `dto.go` de la Task 9.
+Expected: PASS en los tests del middleware y en los de `problema.go` y `dto.go` de la Task 9.
 
 - [ ] **Step 5: Commit**
 
@@ -3966,12 +3966,12 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ## Task 11: Handlers y router
 
 **Files:**
-- Create: `apps/api/internal/handler/professional.go`
+- Create: `apps/api/internal/handler/profesional.go`
 - Create: `apps/api/internal/handler/router.go`
-- Test: `apps/api/internal/handler/professional_test.go`
+- Test: `apps/api/internal/handler/profesional_test.go`
 
 **Interfaces:**
-- Consumes: `service.Profesional` (Tasks 6-7), `problem.go` y `dto.go` (Task 9), el middleware (Task 10)
+- Consumes: `service.Profesional` (Tasks 6-7), `problema.go` y `dto.go` (Task 9), el middleware (Task 10)
 - Produces:
   - `func handler.NuevoProfesional(*service.Profesional) *handler.ManejadorProfesional`
   - Métodos `Crear`, `Listar`, `ObtenerPorID`, `ObtenerPorSlug`, `Actualizar`, `DarDeBaja`, `Reactivar`
@@ -3981,7 +3981,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 Estos tests corren contra el stack completo cableado: router, handler, servicio y repositorio en memoria. No hay mocks.
 
-Archivo `apps/api/internal/handler/professional_test.go`:
+Archivo `apps/api/internal/handler/profesional_test.go`:
 
 ```go
 package handler
@@ -4314,7 +4314,7 @@ Expected: FAIL con `undefined: NuevoRouter`
 
 - [ ] **Step 3: Implementar los handlers**
 
-Archivo `apps/api/internal/handler/professional.go`:
+Archivo `apps/api/internal/handler/profesional.go`:
 
 ```go
 package handler
@@ -4594,8 +4594,8 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ## Task 12: Sembrar de desarrollo
 
 **Files:**
-- Create: `apps/api/internal/repository/memory/seed.go`
-- Test: `apps/api/internal/repository/memory/seed_test.go`
+- Create: `apps/api/internal/repository/memory/semilla.go`
+- Test: `apps/api/internal/repository/memory/semilla_test.go`
 
 **Interfaces:**
 - Consumes: `domain` (Task 4), `memory.Profesional` (Task 5)
@@ -4603,7 +4603,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 - [ ] **Step 1: Escribir el test**
 
-Archivo `apps/api/internal/repository/memory/seed_test.go`:
+Archivo `apps/api/internal/repository/memory/semilla_test.go`:
 
 ```go
 package memory
@@ -4666,7 +4666,7 @@ Expected: FAIL con `undefined: Sembrar`
 
 Los datos salen de `legacy/prototype/src/data/profesionales.js`, adaptados al modelo nuevo. Los precios del prototipo estaban en pesos; acá van en centavos.
 
-Archivo `apps/api/internal/repository/memory/seed.go`:
+Archivo `apps/api/internal/repository/memory/semilla.go`:
 
 ```go
 package memory
@@ -4758,7 +4758,7 @@ Expected: PASS en todos.
 
 ```bash
 cd "c:/Users/gianl/Desktop/Salud"
-git add apps/api/internal/repository/memory/seed.go apps/api/internal/repository/memory/seed_test.go
+git add apps/api/internal/repository/memory/semilla.go apps/api/internal/repository/memory/semilla_test.go
 git commit -m "feat(repository): seed de desarrollo con los datos del prototipo
 
 Cuatro profesionales adaptados de legacy/prototype. Los precios pasan
@@ -5267,7 +5267,7 @@ Expected: sin hallazgos.
 Si `golangci-lint` no está instalado: `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest`.
 
 Hallazgos probables y cómo se resuelven:
-- `errcheck` sobre `json.NewEncoder(w).Encode(...)`: ya está silenciado con `_ =` en `problem.go`.
+- `errcheck` sobre `json.NewEncoder(w).Encode(...)`: ya está silenciado con `_ =` en `problema.go`.
 - `bodyclose` en los tests HTTP: ya se cierran con `t.Cleanup`.
 - `errorlint` sobre comparaciones con `==`: usar `errors.Is`.
 

@@ -161,24 +161,24 @@ apps/api/
 ├── cmd/api/main.go              # composition root
 ├── internal/
 │   ├── domain/                  # entidades, value objects, reglas, errores
-│   │   ├── professional.go
+│   │   ├── profesional.go
 │   │   ├── matricula.go
 │   │   ├── enums.go
-│   │   ├── money.go
-│   │   ├── text.go              # Normalizar y GenerarSlug
-│   │   └── errors.go
+│   │   ├── dinero.go
+│   │   ├── texto.go              # Normalizar y GenerarSlug
+│   │   └── errores.go
 │   ├── repository/
-│   │   ├── professional.go      # la INTERFAZ
+│   │   ├── profesional.go      # la INTERFAZ
 │   │   └── memory/
-│   │       ├── professional.go  # implementación en memoria
-│   │       └── seed.go
+│   │       ├── profesional.go  # implementación en memoria
+│   │       └── semilla.go
 │   ├── service/
-│   │   └── professional.go      # casos de uso
+│   │   └── profesional.go      # casos de uso
 │   ├── handler/
 │   │   ├── router.go
-│   │   ├── professional.go      # controllers
+│   │   ├── profesional.go      # controllers
 │   │   ├── dto.go
-│   │   ├── problem.go           # errores de dominio → HTTP
+│   │   ├── problema.go           # errores de dominio → HTTP
 │   │   └── middleware.go
 │   └── config/
 │       └── config.go            # variables de entorno
