@@ -3817,6 +3817,73 @@ func TestEncadenarAplicaEnOrden(t *testing.T) {
 		}
 	}
 }
+
+func TestGrabadorEstadoRegistraElEstadoExplicito(t *testing.T) {
+	rec := &grabadorEstado{ResponseWriter: httptest.NewRecorder()}
+	rec.WriteHeader(http.StatusCreated)
+
+	if rec.estado != http.StatusCreated {
+		t.Errorf("estado = %d, se esperaba %d", rec.estado, http.StatusCreated)
+	}
+}
+
+func TestGrabadorEstadoUsa200PorDefectoSiNuncaSeLlamaWriteHeader(t *testing.T) {
+	rec := &grabadorEstado{ResponseWriter: httptest.NewRecorder()}
+	rec.Write([]byte("hola"))
+
+	// nadie llamó WriteHeader: net/http asume 200 en ese caso, y grabadorEstado
+	// tiene que replicar esa suposición para que el log no mienta
+	if rec.estado != http.StatusOK {
+		t.Errorf("estado = %d, se esperaba %d", rec.estado, http.StatusOK)
+	}
+}
+
+func TestGrabadorEstadoNoPisaUnEstadoExplicitoAlEscribirDespues(t *testing.T) {
+	rec := &grabadorEstado{ResponseWriter: httptest.NewRecorder()}
+	rec.WriteHeader(http.StatusNotFound)
+	rec.Write([]byte("no encontrado"))
+
+	// una implementación que ponga 200 en cada Write sin chequear pisaría esto
+	if rec.estado != http.StatusNotFound {
+		t.Errorf("estado = %d, se esperaba %d", rec.estado, http.StatusNotFound)
+	}
+}
+
+func TestGrabadorEstadoAcumulaBytesEntreVariasEscrituras(t *testing.T) {
+	rec := &grabadorEstado{ResponseWriter: httptest.NewRecorder()}
+	rec.Write([]byte("hola"))   // 4 bytes
+	rec.Write([]byte("mundo!")) // 6 bytes
+
+	if rec.bytes != 10 {
+		t.Errorf("bytes = %d, se esperaba 10", rec.bytes)
+	}
+}
+
+func TestRegistrarPeticionesPasaElRequestSinTocarlo(t *testing.T) {
+	var metodoVisto, rutaVista string
+	h := RegistrarPeticiones(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		metodoVisto = r.Method
+		rutaVista = r.URL.Path
+		w.WriteHeader(http.StatusCreated)
+		w.Write([]byte("cuerpo de respuesta"))
+	}))
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/algo", nil))
+
+	if metodoVisto != http.MethodPost {
+		t.Errorf("metodo visto por el handler interno = %q, se esperaba %q", metodoVisto, http.MethodPost)
+	}
+	if rutaVista != "/algo" {
+		t.Errorf("ruta vista por el handler interno = %q, se esperaba %q", rutaVista, "/algo")
+	}
+	if rec.Code != http.StatusCreated {
+		t.Errorf("status = %d, se esperaba %d", rec.Code, http.StatusCreated)
+	}
+	if rec.Body.String() != "cuerpo de respuesta" {
+		t.Errorf("body = %q, se esperaba %q", rec.Body.String(), "cuerpo de respuesta")
+	}
+}
 ```
 
 - [ ] **Step 2: Correr los tests y verificar que fallan**
