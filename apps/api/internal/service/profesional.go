@@ -82,6 +82,12 @@ func (s *Profesional) Listar(ctx context.Context, f repository.Filtro) ([]domain
 	if f.Desplazamiento < 0 {
 		f.Desplazamiento = 0
 	}
+	// Por defecto solo los activos: un profesional dado de baja no tiene que
+	// aparecer en una búsqueda de pacientes. Para verlos hay que pedirlos.
+	if f.Estado == nil {
+		activo := domain.EstadoActivo
+		f.Estado = &activo
+	}
 	return s.repo.Listar(ctx, f)
 }
 
@@ -117,4 +123,54 @@ func (s *Profesional) slugUnico(ctx context.Context, base string) (string, error
 		}
 		candidato = fmt.Sprintf("%s-%d", base, i)
 	}
+}
+
+// Actualizar reemplaza los campos editables. Funciona también sobre profesionales
+// dados de baja: editar los datos de alguien inactivo no tiene por qué
+// bloquearse, y no cambia su estado.
+func (s *Profesional) Actualizar(ctx context.Context, id uuid.UUID, entrada domain.EntradaProfesional) (domain.Profesional, error) {
+	actual, err := s.repo.ObtenerPorID(ctx, id)
+	if err != nil {
+		return domain.Profesional{}, err
+	}
+
+	actualizado, err := actual.AplicarCambios(entrada, s.ahora())
+	if err != nil {
+		return domain.Profesional{}, err
+	}
+
+	if actualizado.Matricula != actual.Matricula {
+		if err := s.verificarMatriculaLibre(ctx, actualizado.Matricula, id); err != nil {
+			return domain.Profesional{}, err
+		}
+	}
+
+	if err := s.repo.Actualizar(ctx, actualizado); err != nil {
+		return domain.Profesional{}, err
+	}
+	return actualizado, nil
+}
+
+// DarDeBaja da de baja. No borra: los turnos, comprobantes y pagos históricos
+// siguen apuntando a este registro, y sin él el comprobante que un paciente
+// presentó para un reintegro queda huérfano.
+func (s *Profesional) DarDeBaja(ctx context.Context, id uuid.UUID) error {
+	actual, err := s.repo.ObtenerPorID(ctx, id)
+	if err != nil {
+		return err
+	}
+	return s.repo.Actualizar(ctx, actual.DarDeBaja(s.ahora()))
+}
+
+func (s *Profesional) Reactivar(ctx context.Context, id uuid.UUID) (domain.Profesional, error) {
+	actual, err := s.repo.ObtenerPorID(ctx, id)
+	if err != nil {
+		return domain.Profesional{}, err
+	}
+
+	reactivado := actual.Reactivar(s.ahora())
+	if err := s.repo.Actualizar(ctx, reactivado); err != nil {
+		return domain.Profesional{}, err
+	}
+	return reactivado, nil
 }

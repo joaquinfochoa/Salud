@@ -199,3 +199,173 @@ func TestListarDefaults(t *testing.T) {
 		}
 	})
 }
+
+func TestActualizar(t *testing.T) {
+	ctx := context.Background()
+	svc := nuevoServicioDePrueba()
+
+	p, err := svc.Crear(ctx, entradaValida())
+	if err != nil {
+		t.Fatalf("Crear devolvió error: %v", err)
+	}
+
+	entrada := entradaValida()
+	entrada.Bio = "Bio actualizada."
+	entrada.Zona = "GBA Norte"
+
+	actualizado, err := svc.Actualizar(ctx, p.ID, entrada)
+	if err != nil {
+		t.Fatalf("Actualizar devolvió error: %v", err)
+	}
+	if actualizado.Bio != "Bio actualizada." || actualizado.Zona != "GBA Norte" {
+		t.Error("los campos editables no se aplicaron")
+	}
+	if actualizado.Slug != p.Slug {
+		t.Error("el slug es una URL pública y no debía cambiar")
+	}
+
+	// tiene que haber quedado persistido
+	obtenido, _ := svc.ObtenerPorID(ctx, p.ID)
+	if obtenido.Zona != "GBA Norte" {
+		t.Error("el cambio no quedó guardado")
+	}
+}
+
+func TestActualizarNoExiste(t *testing.T) {
+	_, err := nuevoServicioDePrueba().Actualizar(context.Background(), uuid.New(), entradaValida())
+	if !errors.Is(err, domain.ErrNoEncontrado) {
+		t.Errorf("se esperaba ErrNoEncontrado, se obtuvo %v", err)
+	}
+}
+
+func TestActualizarMatriculaDeOtro(t *testing.T) {
+	ctx := context.Background()
+	svc := nuevoServicioDePrueba()
+
+	primero, err := svc.Crear(ctx, entradaValida())
+	if err != nil {
+		t.Fatalf("alta 1 falló: %v", err)
+	}
+
+	entrada2 := entradaValida()
+	entrada2.Nombre = "Carolina"
+	entrada2.Apellido = "Vega"
+	entrada2.Matricula = "MN 11111"
+	if _, err := svc.Crear(ctx, entrada2); err != nil {
+		t.Fatalf("alta 2 falló: %v", err)
+	}
+
+	// el primero intenta quedarse con la matrícula del segundo
+	robo := entradaValida()
+	robo.Matricula = "MN 11111"
+	if _, err := svc.Actualizar(ctx, primero.ID, robo); !errors.Is(err, domain.ErrMatriculaEnUso) {
+		t.Errorf("se esperaba ErrMatriculaEnUso, se obtuvo %v", err)
+	}
+}
+
+func TestActualizarConservaLaPropiaMatricula(t *testing.T) {
+	ctx := context.Background()
+	svc := nuevoServicioDePrueba()
+
+	p, err := svc.Crear(ctx, entradaValida())
+	if err != nil {
+		t.Fatalf("Crear devolvió error: %v", err)
+	}
+
+	// editar sin cambiar la matrícula no puede chocar consigo mismo
+	entrada := entradaValida()
+	entrada.Bio = "Otra bio."
+	if _, err := svc.Actualizar(ctx, p.ID, entrada); err != nil {
+		t.Errorf("editar conservando la matrícula propia falló: %v", err)
+	}
+}
+
+func TestActualizarResetaVerificacion(t *testing.T) {
+	ctx := context.Background()
+	repo := memory.NuevoProfesional()
+	svc := NuevoProfesional(repo)
+
+	p, err := svc.Crear(ctx, entradaValida())
+	if err != nil {
+		t.Fatalf("Crear devolvió error: %v", err)
+	}
+
+	// simular que ya fue verificado
+	p.Verificacion = domain.VerificacionVerificada
+	if err := repo.Actualizar(ctx, p); err != nil {
+		t.Fatalf("no se pudo preparar el estado: %v", err)
+	}
+
+	entrada := entradaValida()
+	entrada.Matricula = "MN 55555"
+	actualizado, err := svc.Actualizar(ctx, p.ID, entrada)
+	if err != nil {
+		t.Fatalf("Actualizar devolvió error: %v", err)
+	}
+	if actualizado.Verificacion != domain.VerificacionPendiente {
+		t.Error("cambiar la matrícula tenía que invalidar la verificación")
+	}
+}
+
+func TestDarDeBajaYReactivar(t *testing.T) {
+	ctx := context.Background()
+	svc := nuevoServicioDePrueba()
+
+	p, err := svc.Crear(ctx, entradaValida())
+	if err != nil {
+		t.Fatalf("Crear devolvió error: %v", err)
+	}
+
+	if err := svc.DarDeBaja(ctx, p.ID); err != nil {
+		t.Fatalf("DarDeBaja devolvió error: %v", err)
+	}
+
+	// el registro sigue existiendo: un turno pasado apunta acá
+	obtenido, err := svc.ObtenerPorID(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("el profesional dado de baja tenía que seguir existiendo: %v", err)
+	}
+	if obtenido.Estado != domain.EstadoInactivo {
+		t.Errorf("Estado = %q, se esperaba inactivo", obtenido.Estado)
+	}
+	if obtenido.DadoDeBajaEn == nil {
+		t.Error("DadoDeBajaEn debía sellarse")
+	}
+
+	// pero no aparece en el listado por defecto
+	_, total, _ := svc.Listar(ctx, repository.Filtro{})
+	if total != 0 {
+		t.Errorf("el listado por defecto devolvió %d, se esperaba 0", total)
+	}
+
+	// filtrando explícitamente sí aparece
+	inactivo := domain.EstadoInactivo
+	_, total, _ = svc.Listar(ctx, repository.Filtro{Estado: &inactivo})
+	if total != 1 {
+		t.Errorf("el listado de inactivos devolvió %d, se esperaba 1", total)
+	}
+
+	// dar de baja dos veces es idempotente, no un error
+	if err := svc.DarDeBaja(ctx, p.ID); err != nil {
+		t.Errorf("la segunda baja debía ser idempotente, devolvió %v", err)
+	}
+
+	reactivado, err := svc.Reactivar(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("Reactivar devolvió error: %v", err)
+	}
+	if reactivado.Estado != domain.EstadoActivo || reactivado.DadoDeBajaEn != nil {
+		t.Error("reactivar debía dejarlo activo y limpiar DadoDeBajaEn")
+	}
+
+	_, total, _ = svc.Listar(ctx, repository.Filtro{})
+	if total != 1 {
+		t.Errorf("después de reactivar el listado devolvió %d, se esperaba 1", total)
+	}
+}
+
+func TestDarDeBajaNoExiste(t *testing.T) {
+	if err := nuevoServicioDePrueba().DarDeBaja(context.Background(), uuid.New()); !errors.Is(err, domain.ErrNoEncontrado) {
+		t.Errorf("se esperaba ErrNoEncontrado, se obtuvo %v", err)
+	}
+}
