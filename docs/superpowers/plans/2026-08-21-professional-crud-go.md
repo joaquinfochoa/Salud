@@ -4556,8 +4556,11 @@ func NuevoRouter(ph *ManejadorProfesional) http.Handler {
 	mux.HandleFunc("DELETE /api/v1/profesionales/{id}", ph.DarDeBaja)
 	mux.HandleFunc("POST /api/v1/profesionales/{id}/reactivar", ph.Reactivar)
 
-	// No colisiona con /{id}: tiene un segmento más y el ServeMux resuelve
-	// por especificidad.
+	// Esta ruta y la de reactivar tienen la misma cantidad de segmentos y la
+	// misma forma: `.../profesionales/por-slug/reactivar` encajaría en las dos.
+	// Lo que las separa es el método, no la especificidad — por eso todos los
+	// patrones acá llevan el verbo adelante. Si alguno lo pierde, el ServeMux
+	// entra en pánico al registrar, no al recibir la petición.
 	mux.HandleFunc("GET /api/v1/profesionales/por-slug/{slug}", ph.ObtenerPorSlug)
 
 	// El orden es de afuera hacia adentro. IDPeticion va primero para que el
