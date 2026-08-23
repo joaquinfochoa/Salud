@@ -155,8 +155,13 @@ miles de huecos por pedido.
 ```go
 // HorarioSemanal es un bloque del horario habitual. Un profesional que atiende
 // mañana y tarde tiene dos filas para el mismo día.
+//
+// No tiene ID a propósito: la semana se reemplaza entera, así que ningún
+// endpoint direcciona un bloque suelto y nada lo referencia. Un ID sería peso
+// muerto que además cambiaría en cada guardado, confundiendo a cualquier
+// cliente que lo guarde. Un horario es un valor, no una entidad con identidad.
+// Bloqueo sí conserva el suyo, porque se borra de a uno.
 type HorarioSemanal struct {
-    ID            uuid.UUID
     ProfesionalID uuid.UUID
     DiaSemana     DiaSemana
     Desde         HoraDelDia
@@ -403,11 +408,20 @@ Reglas que necesitan más de una entidad, y por eso viven acá:
 1. **Todas las operaciones verifican que el profesional exista.** Cargar
    horarios para un ID inexistente devuelve `ErrNoEncontrado`, no un éxito
    silencioso.
-2. **`EliminarBloqueo` verifica que el bloqueo sea de ese profesional.** Sin
+2. **La modalidad de cada bloque tiene que estar entre las que el profesional
+   declara.** Cargar un bloque presencial cuando el perfil dice que solo hace
+   telemedicina es incoherente, y produce huecos que el paciente ve y no puede
+   usar. Es una regla entre dos entidades, por eso no puede vivir en el dominio:
+   el bloque solo no sabe qué ofrece su profesional.
+
+   Devuelve `ErrorValidacion` sobre el campo `modalidad`, nombrando cuáles sí
+   están disponibles.
+
+3. **`EliminarBloqueo` verifica que el bloqueo sea de ese profesional.** Sin
    auth cualquiera puede llamarlo, pero al menos la ruta y el recurso tienen que
    ser coherentes: borrar el bloqueo de otro profesional desde la ruta de este
    es un 404.
-3. **`HuecosLibres` recorta el rango al horizonte del profesional.** Recorta,
+4. **`HuecosLibres` recorta el rango al horizonte del profesional.** Recorta,
    no rechaza: pedir noventa días a alguien que expone sesenta devuelve sesenta
    y lo informa, igual que `paginacion.limite` en el listado de profesionales.
    Lo único que sí rechaza es un rango invertido, que no es una preferencia sino
@@ -417,11 +431,11 @@ Reglas que necesitan más de una entidad, y por eso viven acá:
    validación de la sección 3, el recorte alcanza para proteger el cálculo: no
    hace falta un segundo tope en la API.
 
-4. **`ListarBloqueos` sin rango devuelve los vigentes y futuros**, es decir
+5. **`ListarBloqueos` sin rango devuelve los vigentes y futuros**, es decir
    aquellos cuyo `Hasta` es posterior a `ahora`. El handler traduce la ausencia
    de parámetros a ese rango antes de llamar al repositorio, así la interfaz del
    repositorio no necesita punteros ni valores centinela.
-5. **Un profesional inactivo devuelve una lista vacía**, no un error: el recurso
+6. **Un profesional inactivo devuelve una lista vacía**, no un error: el recurso
    existe, simplemente no tiene disponibilidad.
 
 ---
@@ -480,7 +494,6 @@ Español y camelCase, como el resto.
 {
   "horarios": [
     {
-      "id": "…",
       "diaSemana": "lunes",
       "desde": "09:00",
       "hasta": "13:00",
