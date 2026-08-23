@@ -1,6 +1,9 @@
 package domain
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestEspecialidadEsValida(t *testing.T) {
 	validas := []Especialidad{
@@ -56,5 +59,55 @@ func TestEstadoVerificacionEsValido(t *testing.T) {
 	}
 	if EstadoVerificacion("desconocido").EsValido() {
 		t.Error("desconocido no debía ser válido")
+	}
+}
+
+func TestDiaSemanaEsValido(t *testing.T) {
+	validos := []DiaSemana{DiaLunes, DiaMartes, DiaMiercoles, DiaJueves, DiaViernes, DiaSabado, DiaDomingo}
+	for _, d := range validos {
+		if !d.EsValido() {
+			t.Errorf("DiaSemana(%q) debía ser válido", d)
+		}
+	}
+
+	invalidos := []DiaSemana{"", "Lunes", "LUNES", "miércoles", "monday"}
+	for _, d := range invalidos {
+		if d.EsValido() {
+			t.Errorf("DiaSemana(%q) no debía ser válido", d)
+		}
+	}
+}
+
+func TestDiaSemanaIdaYVuelta(t *testing.T) {
+	// la conversión contra time.Weekday tiene que cerrar en los dos sentidos,
+	// o el cálculo de huecos va a mirar el día equivocado
+	casos := map[DiaSemana]time.Weekday{
+		DiaDomingo:   time.Sunday,
+		DiaLunes:     time.Monday,
+		DiaMartes:    time.Tuesday,
+		DiaMiercoles: time.Wednesday,
+		DiaJueves:    time.Thursday,
+		DiaViernes:   time.Friday,
+		DiaSabado:    time.Saturday,
+	}
+
+	for dia, weekday := range casos {
+		if obtenido := dia.AWeekday(); obtenido != weekday {
+			t.Errorf("%q.AWeekday() = %v, se esperaba %v", dia, obtenido, weekday)
+		}
+		if obtenido := DiaSemanaDe(weekday); obtenido != dia {
+			t.Errorf("DiaSemanaDe(%v) = %q, se esperaba %q", weekday, obtenido, dia)
+		}
+	}
+}
+
+func TestDiaSemanaOrdenArrancaEnLunes(t *testing.T) {
+	// time.Weekday pone el domingo en cero, que no es cómo se lee una agenda
+	// en Argentina
+	esperado := []DiaSemana{DiaLunes, DiaMartes, DiaMiercoles, DiaJueves, DiaViernes, DiaSabado, DiaDomingo}
+	for i, dia := range esperado {
+		if dia.Orden() != i {
+			t.Errorf("%q.Orden() = %d, se esperaba %d", dia, dia.Orden(), i)
+		}
 	}
 }

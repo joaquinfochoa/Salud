@@ -1,5 +1,7 @@
 package domain
 
+import "time"
+
 // Especialidad son los tres verticales de lanzamiento definidos en
 // research/data/vertical_scores.csv. Es un enum cerrado a propósito: con texto
 // libre terminás con "Psicología", "psicologia" y "Psicólogo clínico" como tres
@@ -74,4 +76,62 @@ func (v EstadoVerificacion) EsValido() bool {
 		return true
 	}
 	return false
+}
+
+// DiaSemana usa el mismo vocabulario que el resto de los enums: español y sin
+// acentos.
+//
+// Existe en vez de usar time.Weekday directo para mantener la frontera del
+// dominio y para no exponer una numeración donde el domingo vale cero, que es
+// una convención heredada de C que nadie recuerda de memoria.
+type DiaSemana string
+
+const (
+	DiaLunes     DiaSemana = "lunes"
+	DiaMartes    DiaSemana = "martes"
+	DiaMiercoles DiaSemana = "miercoles"
+	DiaJueves    DiaSemana = "jueves"
+	DiaViernes   DiaSemana = "viernes"
+	DiaSabado    DiaSemana = "sabado"
+	DiaDomingo   DiaSemana = "domingo"
+)
+
+var diasPorWeekday = map[time.Weekday]DiaSemana{
+	time.Sunday:    DiaDomingo,
+	time.Monday:    DiaLunes,
+	time.Tuesday:   DiaMartes,
+	time.Wednesday: DiaMiercoles,
+	time.Thursday:  DiaJueves,
+	time.Friday:    DiaViernes,
+	time.Saturday:  DiaSabado,
+}
+
+// El mapa inverso se deriva del primero en vez de escribirse a mano: dos
+// literales pueden desincronizarse y nadie lo nota hasta que la agenda muestra
+// el día equivocado.
+var weekdaysPorDia = func() map[DiaSemana]time.Weekday {
+	m := make(map[DiaSemana]time.Weekday, len(diasPorWeekday))
+	for weekday, dia := range diasPorWeekday {
+		m[dia] = weekday
+	}
+	return m
+}()
+
+func (d DiaSemana) EsValido() bool {
+	_, existe := weekdaysPorDia[d]
+	return existe
+}
+
+func (d DiaSemana) AWeekday() time.Weekday {
+	return weekdaysPorDia[d]
+}
+
+// Orden pone el lunes en cero, que es como se lee una agenda acá. time.Weekday
+// arranca en domingo y ordenar por ese número dejaría el domingo primero.
+func (d DiaSemana) Orden() int {
+	return (int(d.AWeekday()) + 6) % 7
+}
+
+func DiaSemanaDe(w time.Weekday) DiaSemana {
+	return diasPorWeekday[w]
 }
