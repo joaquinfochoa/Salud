@@ -95,6 +95,7 @@ paths:
               schema: { $ref: '#/components/schemas/Profesional' }
         '400': { $ref: '#/components/responses/PeticionInvalida' }
         '409': { $ref: '#/components/responses/Conflicto' }
+        '413': { $ref: '#/components/responses/CuerpoDemasiadoGrande' }
         '422': { $ref: '#/components/responses/ValidacionFallida' }
 
   /api/v1/profesionales/{id}:
@@ -147,6 +148,7 @@ paths:
         '400': { $ref: '#/components/responses/PeticionInvalida' }
         '404': { $ref: '#/components/responses/NoEncontrado' }
         '409': { $ref: '#/components/responses/Conflicto' }
+        '413': { $ref: '#/components/responses/CuerpoDemasiadoGrande' }
         '422': { $ref: '#/components/responses/ValidacionFallida' }
 
     delete:
@@ -385,6 +387,12 @@ components:
 
     Conflicto:
       description: La matrícula ya está registrada por otro profesional
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problema' }
+
+    CuerpoDemasiadoGrande:
+      description: El cuerpo de la petición supera el límite permitido
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problema' }

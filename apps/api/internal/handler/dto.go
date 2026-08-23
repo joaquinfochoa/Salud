@@ -3,7 +3,9 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/joaquinfochoa/Salud/apps/api/internal/domain"
@@ -14,13 +16,17 @@ const maxBytesCuerpo = 1 << 20 // 1 MB
 // peticionProfesional es lo que entra. Deliberadamente no incluye id, slug,
 // estado, verificacion ni marcas de tiempo: son campos que el servidor decide,
 // y aceptarlos sería dejar que el cliente se autoverifique.
+//
+// PrecioConsultaCentavos es un puntero: 0 es un precio válido, pero el campo
+// ausente no lo es. Con int64 plano las dos formas decodifican igual y un alta
+// sin el campo terminaba cobrando gratis sin que el 422 lo avisara.
 type peticionProfesional struct {
 	Nombre                 string   `json:"nombre"`
 	Apellido               string   `json:"apellido"`
 	Matricula              string   `json:"matricula"`
 	Especialidad           string   `json:"especialidad"`
 	Bio                    string   `json:"bio"`
-	PrecioConsultaCentavos int64    `json:"precioConsultaCentavos"`
+	PrecioConsultaCentavos *int64   `json:"precioConsultaCentavos"`
 	Modalidades            []string `json:"modalidades"`
 	Zona                   string   `json:"zona"`
 	ObrasSociales          []string `json:"obrasSociales"`
@@ -130,4 +136,37 @@ func decodificarJSON(w http.ResponseWriter, r *http.Request, destino any) error 
 		return errors.New("el cuerpo debe contener un único objeto JSON")
 	}
 	return nil
+}
+
+// escribirErrorDeDecodificacion traduce un error de decodificarJSON al
+// problema HTTP que corresponde. El error de Go puede nombrar el struct
+// interno y el tipo real del campo (p. ej. "json: cannot unmarshal string
+// into Go struct field peticionProfesional.precioConsultaCentavos of type
+// int64"): eso va al log, nunca al cliente. El nombre del campo del contrato
+// (Field, sin el prefijo del struct) sí es información del cliente y se
+// conserva porque hace el mensaje accionable.
+func escribirErrorDeDecodificacion(w http.ResponseWriter, r *http.Request, err error) {
+	slog.ErrorContext(r.Context(), "cuerpo JSON inválido",
+		"error", err,
+		"metodo", r.Method,
+		"ruta", r.URL.Path,
+	)
+
+	var errTamaño *http.MaxBytesError
+	if errors.As(err, &errTamaño) {
+		escribirProblema(w, Problema{
+			Tipo:    tipoCuerpoDemasiadoGrande,
+			Titulo:  "Cuerpo demasiado grande",
+			Estado:  http.StatusRequestEntityTooLarge,
+			Detalle: "el cuerpo no puede superar los " + strconv.Itoa(maxBytesCuerpo) + " bytes",
+		})
+		return
+	}
+
+	detalle := "el cuerpo no es un JSON válido"
+	var errTipo *json.UnmarshalTypeError
+	if errors.As(err, &errTipo) && errTipo.Field != "" {
+		detalle += ": el campo " + errTipo.Field + " tiene un tipo inválido"
+	}
+	escribirPeticionInvalida(w, detalle)
 }

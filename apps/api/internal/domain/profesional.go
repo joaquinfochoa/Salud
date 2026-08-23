@@ -43,13 +43,18 @@ type Profesional struct {
 // EntradaProfesional es la entrada cruda, en tipos primitivos. Que sea primitiva
 // no es descuido: obliga a que todo el parseo y toda la validación ocurran acá
 // adentro, y no repartidos por los handlers.
+//
+// PrecioConsulta es un puntero porque cero es un precio legítimo: si el campo
+// fuera un int64 plano, "no vino en el JSON" y "vino en 0" serían
+// indistinguibles, y un alta sin el campo terminaría cobrando gratis sin que
+// nadie se entere.
 type EntradaProfesional struct {
 	Nombre         string
 	Apellido       string
 	Matricula      string
 	Especialidad   string
 	Bio            string
-	PrecioConsulta int64
+	PrecioConsulta *int64
 	Modalidades    []string
 	Zona           string
 	ObrasSociales  []string
@@ -177,10 +182,13 @@ func construir(entrada EntradaProfesional) (Profesional, ErrorValidacion) {
 		verr.agregar("bio", fmt.Sprintf("no puede superar los %d caracteres", maxLargoBio))
 	}
 
-	if entrada.PrecioConsulta < 0 {
+	switch {
+	case entrada.PrecioConsulta == nil:
+		verr.agregar("precioConsultaCentavos", "es obligatorio")
+	case *entrada.PrecioConsulta < 0:
 		verr.agregar("precioConsultaCentavos", "no puede ser negativo")
-	} else {
-		p.PrecioConsulta = Dinero(entrada.PrecioConsulta)
+	default:
+		p.PrecioConsulta = Dinero(*entrada.PrecioConsulta)
 	}
 
 	p.Modalidades = construirModalidades(entrada.Modalidades, &verr)

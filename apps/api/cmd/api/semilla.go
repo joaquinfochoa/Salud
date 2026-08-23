@@ -20,6 +20,13 @@ import (
 //
 // Los datos vienen del prototipo React, en legacy/prototype/src/data. Los
 // precios estaban en pesos y acá van en centavos.
+// precio devuelve un puntero al monto. EntradaProfesional.PrecioConsulta es
+// *int64 justamente para distinguir "no lo mandaron" de "vale cero", así que
+// no hay forma de escribir el literal inline.
+func precio(centavos int64) *int64 {
+	return &centavos
+}
+
 func sembrar(ctx context.Context, svc *service.Profesional) error {
 	entradas := []domain.EntradaProfesional{
 		{
@@ -28,7 +35,7 @@ func sembrar(ctx context.Context, svc *service.Profesional) error {
 			Matricula:      "MN 98.234",
 			Especialidad:   string(domain.EspecialidadPsicologia),
 			Bio:            "Psicólogo clínico con orientación cognitivo-conductual. Atiendo adultos y adolescentes con ansiedad, depresión y crisis vitales. Más de 8 años de experiencia.",
-			PrecioConsulta: 1_200_000,
+			PrecioConsulta: precio(1_200_000),
 			Modalidades:    []string{"telemedicina", "presencial"},
 			Zona:           "CABA",
 			ObrasSociales:  []string{"OSDE", "Swiss Medical", "Galeno", "Medifé"},
@@ -39,7 +46,7 @@ func sembrar(ctx context.Context, svc *service.Profesional) error {
 			Matricula:      "MN 112.087",
 			Especialidad:   string(domain.EspecialidadPsicologia),
 			Bio:            "Especializada en terapia sistémica y de parejas. Trabajo con adultos en procesos de cambio, duelos y conflictos relacionales.",
-			PrecioConsulta: 1_400_000,
+			PrecioConsulta: precio(1_400_000),
 			Modalidades:    []string{"telemedicina"},
 			Zona:           "GBA Norte",
 			ObrasSociales:  []string{"OSDE", "OMINT", "Swiss Medical", "Sanitas"},
@@ -50,7 +57,7 @@ func sembrar(ctx context.Context, svc *service.Profesional) error {
 			Matricula:      "MN 45.321",
 			Especialidad:   string(domain.EspecialidadKinesiologia),
 			Bio:            "Kinesiólogo especializado en traumatología deportiva y rehabilitación postquirúrgica. Atiendo a domicilio y en consultorio.",
-			PrecioConsulta: 950_000,
+			PrecioConsulta: precio(950_000),
 			Modalidades:    []string{"presencial", "domicilio"},
 			Zona:           "CABA",
 			ObrasSociales:  []string{"OSDE", "Galeno", "IOMA", "PAMI"},
@@ -61,7 +68,7 @@ func sembrar(ctx context.Context, svc *service.Profesional) error {
 			Matricula:      "MN 67.890",
 			Especialidad:   string(domain.EspecialidadOdontologia),
 			Bio:            "Odontóloga general con especialización en estética dental. Trabajo con materiales de primera calidad en un consultorio moderno en Palermo.",
-			PrecioConsulta: 1_500_000,
+			PrecioConsulta: precio(1_500_000),
 			Modalidades:    []string{"presencial"},
 			Zona:           "CABA",
 			ObrasSociales:  []string{"OSDE", "Swiss Medical", "Galeno", "Medifé", "OMINT"},

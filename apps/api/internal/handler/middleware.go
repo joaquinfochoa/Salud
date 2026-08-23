@@ -11,6 +11,11 @@ import (
 
 const headerIDPeticion = "X-Request-ID"
 
+// maxLargoIDPeticion acota lo que se acepta del cliente. Sin este límite, un
+// cliente puede adjuntar hasta 1 MB de basura (el tope de maxBytesCuerpo no
+// aplica a los headers) que termina en cada línea de log de ese request.
+const maxLargoIDPeticion = 128
+
 type claveContexto string
 
 const claveIDPeticion claveContexto = "requestID"
@@ -25,18 +30,40 @@ func Encadenar(h http.Handler, mw ...func(http.Handler) http.Handler) http.Handl
 }
 
 // IDPeticion asegura que todo request tenga un identificador. Si el cliente
-// manda uno, se respeta: permite seguir una operación a través de varios
-// servicios en los logs.
+// manda uno con forma razonable, se respeta: permite seguir una operación a
+// través de varios servicios en los logs.
+//
+// No autenticamos al cliente en esta etapa, así que el valor que manda no es
+// de fiar: Go ya neutraliza CRLF al escribir el header de respuesta y slog
+// escapa el JSON al loguearlo, pero nada impide que sea gigante (hasta 1 MB,
+// el límite de maxBytesCuerpo no cubre headers) o que sea el mismo ID que otro
+// request está usando, lo que arruina la correlación en los logs sin que se
+// note. Por eso se valida forma, no solo presencia.
 func IDPeticion(siguiente http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get(headerIDPeticion)
-		if id == "" {
+		if !idPeticionValida(id) {
 			id = uuid.NewString()
 		}
 
 		w.Header().Set(headerIDPeticion, id)
 		siguiente.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), claveIDPeticion, id)))
 	})
+}
+
+// idPeticionValida acepta el ID del cliente solo si tiene una forma
+// razonable: no vacío, acotado en longitud y compuesto por ASCII imprimible.
+// Cualquier otra cosa se descarta a favor de un UUID propio.
+func idPeticionValida(id string) bool {
+	if id == "" || len(id) > maxLargoIDPeticion {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		if id[i] < 0x20 || id[i] > 0x7e {
+			return false
+		}
+	}
+	return true
 }
 
 // IDPeticionDe devuelve el identificador del request, o cadena vacía si el

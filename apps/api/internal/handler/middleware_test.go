@@ -41,6 +41,42 @@ func TestIDPeticionRespetaElQueViene(t *testing.T) {
 	}
 }
 
+// TestIDPeticionReemplazaUnoInvalido es hermano de
+// TestIDPeticionRespetaElQueViene: el que viene se respeta solo si tiene
+// forma razonable. Sin este límite, un cliente sin autenticar puede adjuntar
+// hasta 1 MB de basura en cada request, o forjar el mismo ID que otro para
+// arruinar la correlación de logs sin que nadie lo note.
+func TestIDPeticionReemplazaUnoInvalido(t *testing.T) {
+	casos := []struct {
+		nombre string
+		id     string
+	}{
+		{"demasiado largo", strings.Repeat("a", 129)},
+		{"con caracteres no imprimibles", "abc\ndef"},
+	}
+
+	for _, caso := range casos {
+		t.Run(caso.nombre, func(t *testing.T) {
+			var visto string
+			h := IDPeticion(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+				visto = IDPeticionDe(r.Context())
+			}))
+
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req.Header.Set("X-Request-ID", caso.id)
+
+			h.ServeHTTP(httptest.NewRecorder(), req)
+
+			if visto == caso.id {
+				t.Error("un id inválido no debía respetarse")
+			}
+			if visto == "" {
+				t.Error("tenía que generarse un id de reemplazo")
+			}
+		})
+	}
+}
+
 func TestRecuperarPanicDevuelve500(t *testing.T) {
 	h := RecuperarPanic(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("algo explotó")

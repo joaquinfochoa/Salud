@@ -146,6 +146,44 @@ func TestCrearDatosInvalidosDevuelve422(t *testing.T) {
 	}
 }
 
+// TestCrearSinPrecioDevuelve422 es la regresión de la plata: precio ausente y
+// precio en 0 decodifican distinto solo porque el campo es *int64. Antes de
+// este cambio, un precioConsultaCentavos ausente decodificaba a 0, el dominio
+// lo aceptaba (solo rechaza negativos) y el alta volvía 201 con una consulta
+// gratis. Sigue siendo un 422 aunque el resto del cuerpo sea válido.
+func TestCrearSinPrecioDevuelve422(t *testing.T) {
+	srv := nuevoServidorDePrueba(t)
+	cuerpo := `{
+	  "nombre": "Martín",
+	  "apellido": "González",
+	  "matricula": "MN 98.234",
+	  "especialidad": "psicologia",
+	  "bio": "Psicólogo clínico.",
+	  "modalidades": ["telemedicina"],
+	  "zona": "CABA"
+	}`
+	resp := postear(t, srv, "/api/v1/profesionales", cuerpo)
+
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, se esperaba 422", resp.StatusCode)
+	}
+
+	var p Problema
+	if err := json.NewDecoder(resp.Body).Decode(&p); err != nil {
+		t.Fatalf("no se pudo decodificar el problem: %v", err)
+	}
+
+	encontrado := false
+	for _, f := range p.Errores {
+		if f.Campo == "precioConsultaCentavos" {
+			encontrado = true
+		}
+	}
+	if !encontrado {
+		t.Errorf("se esperaba un error en precioConsultaCentavos, se obtuvo %+v", p.Errores)
+	}
+}
+
 func TestCrearMatriculaDuplicadaDevuelve409(t *testing.T) {
 	srv := nuevoServidorDePrueba(t)
 	postear(t, srv, "/api/v1/profesionales", cuerpoValido)

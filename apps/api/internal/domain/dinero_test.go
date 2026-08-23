@@ -16,6 +16,9 @@ func TestDineroString(t *testing.T) {
 		{"millones", 123456789, "$1.234.567,89"},
 		{"tres digitos", 99900, "$999,00"},
 		{"negativo", -50, "-$0,50"},
+		// el signo y el separador de miles se calculan por separado: este es
+		// el único caso donde se cruzan
+		{"negativo con miles", -1200000, "-$12.000,00"},
 	}
 
 	for _, caso := range casos {

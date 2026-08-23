@@ -584,7 +584,22 @@ Swagger UI (la única forma de probar la API mientras no exista el front), gener
 después el cliente TypeScript, y obligar a decidir la forma de la API antes de
 codearla.
 
-Se valida en CI. Si el YAML y los handlers se separan, el build falla.
+**Se valida en CI, pero solo contra sí mismo.** El job corre `redocly lint`,
+que verifica el YAML contra el meta-esquema de OpenAPI: refs que no resuelven,
+schemas inválidos, paths mal formados. Redocly no sabe que Go existe. Nada en
+este repo compara el contrato con los handlers, así que la deriva entre los dos
+la atrapa una revisión humana o no la atrapa nadie.
+
+Vale decirlo porque es fácil leer "se valida en CI" y confiar de más: esa
+brecha ya dejó pasar tres divergencias reales — un campo declarado `required`
+que el servidor no exigía, un `maximum` que el código recortaba en vez de
+rechazar, y un `dadoDeBajaEn` nullable que faltaba en `required`.
+
+Lo que haría cierta la promesa: reproducir los ejemplos del contrato contra el
+servidor en los tests de handler, o validar pedidos y respuestas contra el spec
+ahí mismo. No está hecho, y el momento de hacerlo es antes de generar el
+cliente TypeScript — un cliente generado congela lo que el contrato dice, así
+que arreglarlo después es un cambio que rompe, y ahora es una edición de YAML.
 
 ---
 

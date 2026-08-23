@@ -23,13 +23,14 @@ func nuevoServicioDePrueba() *Profesional {
 }
 
 func entradaValida() domain.EntradaProfesional {
+	precio := int64(1200000)
 	return domain.EntradaProfesional{
 		Nombre:         "Martín",
 		Apellido:       "González",
 		Matricula:      "MN 98.234",
 		Especialidad:   "psicologia",
 		Bio:            "Psicólogo clínico.",
-		PrecioConsulta: 1200000,
+		PrecioConsulta: &precio,
 		Modalidades:    []string{"telemedicina"},
 		Zona:           "CABA",
 		ObrasSociales:  []string{"OSDE"},

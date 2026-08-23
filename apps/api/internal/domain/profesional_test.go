@@ -12,13 +12,14 @@ var ahoraDePrueba = time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
 // entradaValida devuelve una entrada correcta. Cada test la copia y rompe un
 // solo campo, así el que falla es siempre el campo bajo prueba.
 func entradaValida() EntradaProfesional {
+	precio := int64(1200000)
 	return EntradaProfesional{
 		Nombre:         "Martín",
 		Apellido:       "González",
 		Matricula:      "MN 98.234",
 		Especialidad:   "psicologia",
 		Bio:            "Psicólogo clínico con orientación cognitivo-conductual.",
-		PrecioConsulta: 1200000,
+		PrecioConsulta: &precio,
 		Modalidades:    []string{"telemedicina", "presencial"},
 		Zona:           "CABA",
 		ObrasSociales:  []string{"OSDE", "Swiss Medical"},
@@ -70,7 +71,8 @@ func TestNuevoProfesionalCamposInvalidos(t *testing.T) {
 		{"matricula invalida", func(entrada *EntradaProfesional) { entrada.Matricula = "XX 123" }, "matricula"},
 		{"especialidad desconocida", func(entrada *EntradaProfesional) { entrada.Especialidad = "cardiologia" }, "especialidad"},
 		{"bio muy larga", func(entrada *EntradaProfesional) { entrada.Bio = strings.Repeat("a", 2001) }, "bio"},
-		{"precio negativo", func(entrada *EntradaProfesional) { entrada.PrecioConsulta = -1 }, "precioConsultaCentavos"},
+		{"precio negativo", func(entrada *EntradaProfesional) { v := int64(-1); entrada.PrecioConsulta = &v }, "precioConsultaCentavos"},
+		{"precio ausente", func(entrada *EntradaProfesional) { entrada.PrecioConsulta = nil }, "precioConsultaCentavos"},
 		{"sin modalidades", func(entrada *EntradaProfesional) { entrada.Modalidades = nil }, "modalidades"},
 		{"modalidad desconocida", func(entrada *EntradaProfesional) { entrada.Modalidades = []string{"online"} }, "modalidades"},
 		{"modalidad repetida", func(entrada *EntradaProfesional) { entrada.Modalidades = []string{"presencial", "presencial"} }, "modalidades"},

@@ -32,7 +32,12 @@ jobs:
 
       - name: Verificar que el dominio no depende de otras capas
         run: |
-          deps=$(go list -deps ./internal/domain | grep 'joaquinfochoa' | grep -v 'internal/domain$' || true)
+          # El módulo se lee de go.mod y no se escribe a mano: si alguien
+          # renombra el módulo, un literal dejaría de matchear, el chequeo
+          # pasaría siempre y la guarda arquitectónica más fuerte del repo
+          # se apagaría sin que nadie se entere.
+          modulo=$(go list -m)
+          deps=$(go list -deps ./internal/domain | grep "^$modulo" | grep -v 'internal/domain$' || true)
           if [ -n "$deps" ]; then
             echo "internal/domain importa otras capas del proyecto:"
             echo "$deps"
@@ -47,9 +52,14 @@ jobs:
         with:
           go-version: '1.24'
           cache-dependency-path: apps/api/go.sum
-      - uses: golangci/golangci-lint-action@v6
+      # La acción v6 apunta a la línea v1 de golangci-lint y no entiende un
+      # config con `version: "2"`. El soporte de v2 llegó en la v7.
+      - uses: golangci/golangci-lint-action@v7
         with:
-          version: latest
+          # Versión fija, no `latest`: un gate que cambia solo un martes
+          # cualquiera por algo que agregaron aguas arriba enseña a la gente a
+          # ignorar el CI en rojo, y ahí deja de ser un gate.
+          version: v2.13.1
           working-directory: apps/api
 
   openapi:
@@ -60,7 +70,10 @@ jobs:
         with:
           node-version: '22'
       - name: Validar el contrato OpenAPI
-        run: npx --yes @redocly/cli@latest lint apps/api/api/openapi.yaml
+        # `redocly.yaml` en la raíz baja el ruleset a `minimal`: conserva las
+        # reglas estructurales y descarta las de estilo, que este contrato no
+        # cumple a propósito (todavía no hay auth ni operationId).
+        run: npx --yes @redocly/cli@2.47.0 lint apps/api/api/openapi.yaml
         working-directory: .
 
   docker:
@@ -68,5 +81,29 @@ jobs:
     needs: [test, lint]
     steps:
       - uses: actions/checkout@v4
+
       - name: Construir la imagen
         run: docker build -t salud-api:ci .
+
+      # Construir no es arrancar. Este paso es el que atrapa un ENTRYPOINT
+      # mal puesto, un binario que igual necesita libc, o una configuración
+      # que falla al validar en el arranque. Sin él, esa clase de error se
+      # descubre recién en un deploy.
+      #
+      # La imagen fija APP_ENV=production, así que esto además ejercita el
+      # arranque sin seed, que no lo prueba nada más.
+      - name: Verificar que la imagen arranca y responde
+        run: |
+          docker run -d -p 8080:8080 --name api-ci salud-api:ci
+          for i in $(seq 1 15); do
+            if curl -fsS http://localhost:8080/healthz; then
+              echo
+              docker rm -f api-ci
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "la imagen no respondió /healthz en 15s"
+          docker logs api-ci
+          docker rm -f api-ci
+          exit 1

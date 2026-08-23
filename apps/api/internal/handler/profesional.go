@@ -24,7 +24,7 @@ func NuevoProfesional(svc *service.Profesional) *ManejadorProfesional {
 func (h *ManejadorProfesional) Crear(w http.ResponseWriter, r *http.Request) {
 	var req peticionProfesional
 	if err := decodificarJSON(w, r, &req); err != nil {
-		escribirPeticionInvalida(w, "el cuerpo no es un JSON válido: "+err.Error())
+		escribirErrorDeDecodificacion(w, r, err)
 		return
 	}
 
@@ -87,7 +87,7 @@ func (h *ManejadorProfesional) Actualizar(w http.ResponseWriter, r *http.Request
 
 	var req peticionProfesional
 	if err := decodificarJSON(w, r, &req); err != nil {
-		escribirPeticionInvalida(w, "el cuerpo no es un JSON válido: "+err.Error())
+		escribirErrorDeDecodificacion(w, r, err)
 		return
 	}
 

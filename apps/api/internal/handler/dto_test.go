@@ -11,13 +11,14 @@ import (
 
 func TestARespuestaSerializaLosCamposDelContrato(t *testing.T) {
 	ahora := time.Date(2026, 8, 21, 14, 2, 11, 0, time.UTC)
+	precio := int64(1200000)
 	p, err := domain.NuevoProfesional(domain.EntradaProfesional{
 		Nombre:         "Martín",
 		Apellido:       "González",
 		Matricula:      "MN 98.234",
 		Especialidad:   "psicologia",
 		Bio:            "Psicólogo clínico.",
-		PrecioConsulta: 1200000,
+		PrecioConsulta: &precio,
 		Modalidades:    []string{"telemedicina", "presencial"},
 		Zona:           "CABA",
 		ObrasSociales:  []string{"OSDE"},

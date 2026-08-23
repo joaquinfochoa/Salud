@@ -15,11 +15,13 @@ const tipoContenidoProblema = "application/problem+json"
 // hace falta que resuelvan a una página, alcanza con que identifiquen la clase
 // de problema de forma estable.
 const (
-	tipoPeticionInvalida = "https://salud.app/errors/bad-request"
-	tipoValidacion       = "https://salud.app/errors/validation"
-	tipoNoEncontrado     = "https://salud.app/errors/not-found"
-	tipoConflicto        = "https://salud.app/errors/conflict"
-	tipoInterno          = "https://salud.app/errors/internal"
+	tipoPeticionInvalida      = "https://salud.app/errors/bad-request"
+	tipoValidacion            = "https://salud.app/errors/validation"
+	tipoNoEncontrado          = "https://salud.app/errors/not-found"
+	tipoConflicto             = "https://salud.app/errors/conflict"
+	tipoInterno               = "https://salud.app/errors/internal"
+	tipoCuerpoDemasiadoGrande = "https://salud.app/errors/payload-too-large"
+	tipoMetodoNoPermitido     = "https://salud.app/errors/method-not-allowed"
 )
 
 // Problema es la representación de un error según RFC 7807.

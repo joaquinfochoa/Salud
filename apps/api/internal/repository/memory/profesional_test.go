@@ -16,21 +16,28 @@ import (
 
 var ahoraDePrueba = time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
 
+// hacerProfesional se llama desde 50 goroutines en TestAccesoConcurrente, así
+// que no puede usar t.Fatalf: Fatalf llama a runtime.Goexit, y desde una
+// goroutine que no es la del test eso no detiene el test como parece —
+// go vet no lo detecta porque la llamada es indirecta. t.Error sí es segura
+// desde cualquier goroutine.
 func hacerProfesional(t *testing.T, nombre, apellido, matricula string, esp domain.Especialidad, zona string) domain.Profesional {
 	t.Helper()
+	precio := int64(1000000)
 	p, err := domain.NuevoProfesional(domain.EntradaProfesional{
 		Nombre:         nombre,
 		Apellido:       apellido,
 		Matricula:      matricula,
 		Especialidad:   string(esp),
 		Bio:            "bio",
-		PrecioConsulta: 1000000,
+		PrecioConsulta: &precio,
 		Modalidades:    []string{"telemedicina"},
 		Zona:           zona,
 		ObrasSociales:  []string{"OSDE"},
 	}, ahoraDePrueba)
 	if err != nil {
-		t.Fatalf("no se pudo construir el profesional de prueba: %v", err)
+		t.Errorf("no se pudo construir el profesional de prueba: %v", err)
+		return domain.Profesional{}
 	}
 	return p
 }
