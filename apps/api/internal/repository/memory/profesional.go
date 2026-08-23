@@ -2,7 +2,6 @@ package memory
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -34,9 +33,43 @@ func (r *Profesional) Crear(_ context.Context, p domain.Profesional) error {
 	defer r.mu.Unlock()
 
 	if _, existe := r.datos[p.ID]; existe {
-		return fmt.Errorf("ya existe un profesional con id %s", p.ID)
+		return domain.ErrIDEnUso
+	}
+	if err := r.conflicto(p); err != nil {
+		return err
 	}
 	r.datos[p.ID] = p.Clonar()
+	return nil
+}
+
+// conflicto busca un registro ajeno que ya ocupe la matrícula o el slug de p.
+// Solo se llama con el lock de escritura tomado, y ahí está todo el punto:
+// chequear la unicidad en una llamada y escribir en otra son dos operaciones,
+// y entre las dos entra otro request. Bajo un mismo lock son una sola.
+//
+// Es el equivalente en memoria de las dos constraints UNIQUE que la
+// implementación PostgreSQL va a declarar sobre la tabla, y por eso el servicio
+// no cambia cuando se migre: allá el motor rechaza el INSERT y el repositorio
+// traduce la violación a estos mismos sentinelas.
+//
+// Excluye al propio registro para que Actualizar no lo haga chocar consigo
+// mismo: editar la bio conservando la matrícula propia no es un conflicto.
+//
+// ponytail: scan O(n), igual que Listar. Con índices por matrícula y slug se
+// evita, pero para un store en memoria de desarrollo no vale el mapa extra que
+// hay que mantener sincronizado en cada escritura.
+func (r *Profesional) conflicto(p domain.Profesional) error {
+	for _, otro := range r.datos {
+		if otro.ID == p.ID {
+			continue
+		}
+		if otro.Matricula == p.Matricula {
+			return domain.ErrMatriculaEnUso
+		}
+		if otro.Slug == p.Slug {
+			return domain.ErrSlugEnUso
+		}
+	}
 	return nil
 }
 
@@ -126,6 +159,9 @@ func (r *Profesional) Actualizar(_ context.Context, p domain.Profesional) error 
 
 	if _, existe := r.datos[p.ID]; !existe {
 		return domain.ErrNoEncontrado
+	}
+	if err := r.conflicto(p); err != nil {
+		return err
 	}
 	r.datos[p.ID] = p.Clonar()
 	return nil

@@ -1,21 +1,26 @@
-package memory
+package main
 
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/joaquinfochoa/Salud/apps/api/internal/domain"
+	"github.com/joaquinfochoa/Salud/apps/api/internal/service"
 )
 
-// Sembrar carga profesionales de prueba. Solo se llama en desarrollo: main.go lo
+// sembrar carga profesionales de prueba. Solo se llama en desarrollo: main lo
 // invoca únicamente cuando APP_ENV=development.
+//
+// Escribe a través del servicio y no del repositorio a propósito. Un seed que
+// escribe por abajo se saltea las reglas de todas las altas: agregar un quinto
+// profesional homónimo de otro metía dos registros con el mismo slug y sin
+// error. Y al recibir el servicio en vez de un *memory.Profesional, este
+// paquete deja de ser otro lugar que sabe qué repositorio está en juego:
+// cambiar de repositorio vuelve a ser una sola línea, la de main.
 //
 // Los datos vienen del prototipo React, en legacy/prototype/src/data. Los
 // precios estaban en pesos y acá van en centavos.
-func Sembrar(ctx context.Context, repo *Profesional) error {
-	ahora := time.Now().UTC()
-
+func sembrar(ctx context.Context, svc *service.Profesional) error {
 	entradas := []domain.EntradaProfesional{
 		{
 			Nombre:         "Martín",
@@ -63,13 +68,11 @@ func Sembrar(ctx context.Context, repo *Profesional) error {
 		},
 	}
 
-	for i, entrada := range entradas {
-		p, err := domain.NuevoProfesional(entrada, ahora.Add(time.Duration(i)*time.Second))
-		if err != nil {
-			return fmt.Errorf("seed: profesional %d (%s %s): %w", i, entrada.Nombre, entrada.Apellido, err)
-		}
-		if err := repo.Crear(ctx, p); err != nil {
-			return fmt.Errorf("seed: guardando %s %s: %w", entrada.Nombre, entrada.Apellido, err)
+	// El servicio pone la fecha de alta y resuelve slug y matrícula, igual que
+	// en cualquier POST.
+	for _, entrada := range entradas {
+		if _, err := svc.Crear(ctx, entrada); err != nil {
+			return fmt.Errorf("seed: dando de alta a %s %s: %w", entrada.Nombre, entrada.Apellido, err)
 		}
 	}
 	return nil

@@ -42,14 +42,18 @@ func ejecutar() error {
 	// postgres.NuevoProfesional(db). Nada más.
 	repo := memory.NuevoProfesional()
 
+	svc := service.NuevoProfesional(repo)
+
+	// El seed va después del servicio y escribe a través de él: así queda
+	// sujeto a las mismas reglas que cualquier alta, y esta función sigue
+	// siendo el único lugar que sabe qué repositorio está en juego.
 	if cfg.EsDesarrollo() {
-		if err := memory.Sembrar(context.Background(), repo); err != nil {
+		if err := sembrar(context.Background(), svc); err != nil {
 			return fmt.Errorf("cargando el seed: %w", err)
 		}
 		slog.Info("seed de desarrollo cargado")
 	}
 
-	svc := service.NuevoProfesional(repo)
 	router := handler.NuevoRouter(handler.NuevoProfesional(svc))
 
 	srv := &http.Server{

@@ -76,6 +76,18 @@ func escribirError(w http.ResponseWriter, r *http.Request, err error) {
 			Detalle: "Otro profesional ya tiene registrada esa matrícula",
 		})
 
+	// El repositorio rechaza estos dos al escribir, así que pueden llegar hasta
+	// acá. Son choques con otro registro, no fallas del servidor: si cayeran en
+	// el default, el cliente vería un 500 por un conflicto que puede resolver
+	// reintentando.
+	case errors.Is(err, domain.ErrSlugEnUso), errors.Is(err, domain.ErrIDEnUso):
+		escribirProblema(w, Problema{
+			Tipo:    tipoConflicto,
+			Titulo:  "Conflicto con otro registro",
+			Estado:  http.StatusConflict,
+			Detalle: "El alta chocó con un profesional existente. Volvé a intentar.",
+		})
+
 	default:
 		// El error real va al log, nunca al cliente: puede contener nombres
 		// de tablas, rutas del servidor o datos de otro usuario.

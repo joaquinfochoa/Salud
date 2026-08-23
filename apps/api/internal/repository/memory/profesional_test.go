@@ -149,6 +149,64 @@ func TestActualizar(t *testing.T) {
 	}
 }
 
+// La unicidad se decide acá, bajo el lock de escritura, porque es lo que va a
+// hacer la constraint UNIQUE de PostgreSQL. Cada conflicto tiene que ser
+// distinguible con errors.Is o el handler no puede mapearlo a un 409.
+func TestCrearRechazaDuplicados(t *testing.T) {
+	ctx := context.Background()
+	repo := NuevoProfesional()
+	p := hacerProfesional(t, "Martín", "González", "MN 98234", domain.EspecialidadPsicologia, "CABA")
+	if err := repo.Crear(ctx, p); err != nil {
+		t.Fatalf("Crear devolvió error: %v", err)
+	}
+
+	t.Run("misma matricula", func(t *testing.T) {
+		otro := hacerProfesional(t, "Otro", "Nombre", "MN 98234", domain.EspecialidadOdontologia, "CABA")
+		if err := repo.Crear(ctx, otro); !errors.Is(err, domain.ErrMatriculaEnUso) {
+			t.Errorf("se esperaba ErrMatriculaEnUso, se obtuvo %v", err)
+		}
+	})
+
+	t.Run("mismo slug", func(t *testing.T) {
+		homonimo := hacerProfesional(t, "Martín", "González", "MN 11111", domain.EspecialidadPsicologia, "CABA")
+		if err := repo.Crear(ctx, homonimo); !errors.Is(err, domain.ErrSlugEnUso) {
+			t.Errorf("se esperaba ErrSlugEnUso, se obtuvo %v", err)
+		}
+	})
+
+	t.Run("mismo id", func(t *testing.T) {
+		if err := repo.Crear(ctx, p); !errors.Is(err, domain.ErrIDEnUso) {
+			t.Errorf("se esperaba ErrIDEnUso, se obtuvo %v", err)
+		}
+	})
+}
+
+func TestActualizarRechazaLaMatriculaDeOtro(t *testing.T) {
+	ctx := context.Background()
+	repo := NuevoProfesional()
+
+	uno := hacerProfesional(t, "Martín", "González", "MN 98234", domain.EspecialidadPsicologia, "CABA")
+	dos := hacerProfesional(t, "Carolina", "Vega", "MN 11111", domain.EspecialidadPsicologia, "CABA")
+	for _, p := range []domain.Profesional{uno, dos} {
+		if err := repo.Crear(ctx, p); err != nil {
+			t.Fatalf("Crear devolvió error: %v", err)
+		}
+	}
+
+	robo := uno
+	robo.Matricula = dos.Matricula
+	if err := repo.Actualizar(ctx, robo); !errors.Is(err, domain.ErrMatriculaEnUso) {
+		t.Errorf("se esperaba ErrMatriculaEnUso, se obtuvo %v", err)
+	}
+
+	// y el caso que no puede romperse: editar conservando la matrícula propia
+	// no es un choque consigo mismo
+	uno.Zona = "GBA Norte"
+	if err := repo.Actualizar(ctx, uno); err != nil {
+		t.Errorf("editar conservando la matrícula propia falló: %v", err)
+	}
+}
+
 func TestListarFiltros(t *testing.T) {
 	ctx := context.Background()
 	repo := NuevoProfesional()

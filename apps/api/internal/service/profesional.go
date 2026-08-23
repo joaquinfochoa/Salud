@@ -20,6 +20,12 @@ const (
 	// LimiteMaximo es el techo. Sin techo, un cliente puede pedir el padrón
 	// entero en una llamada.
 	LimiteMaximo = 100
+
+	// maxIntentosSlug acota el reintento del alta. El bucle ya termina solo,
+	// porque cada vuelta prueba un sufijo distinto y hay una cantidad finita de
+	// homónimos; el techo está para que un repositorio con un bug que devuelva
+	// ErrSlugEnUso siempre no deje el request girando para siempre.
+	maxIntentosSlug = 100
 )
 
 // Profesional resuelve los casos de uso que necesitan mirar más de un
@@ -45,23 +51,42 @@ func (s *Profesional) Crear(ctx context.Context, entrada domain.EntradaProfesion
 		return domain.Profesional{}, err
 	}
 
-	// La matrícula es la única identidad real de una persona en este sistema.
-	// El parser ya normalizó "M.N. 98.234" y "MN 98234" a lo mismo, así que
-	// esta comparación atrapa los duplicados escritos distinto.
+	// Camino rápido. La matrícula es la única identidad real de una persona en
+	// este sistema; el parser ya normalizó "M.N. 98.234" y "MN 98234" a lo
+	// mismo, así que esta comparación atrapa los duplicados escritos distinto y
+	// devuelve el 409 sin llegar a intentar la escritura.
+	//
+	// No es la garantía, y por eso el repositorio vuelve a chequear: entre este
+	// Obtener y el Crear de abajo se suelta el lock de lectura y se toma el de
+	// escritura, y en el medio entra otra alta con la misma matrícula. Las dos
+	// pasarían por acá. Los dos chequeos existen a propósito: este da el error
+	// lindo en el caso común, el del repositorio es el que realmente sostiene
+	// la invariante.
 	if err := s.verificarMatriculaLibre(ctx, p.Matricula, uuid.Nil); err != nil {
 		return domain.Profesional{}, err
 	}
 
-	slug, err := s.slugUnico(ctx, p.Slug)
-	if err != nil {
-		return domain.Profesional{}, err
-	}
-	p.Slug = slug
+	// Un choque de slug nunca es un error para el cliente: dos "Martín
+	// González" son perfectamente posibles y no hay razón para rechazar al
+	// segundo. Se reintenta con el sufijo siguiente hasta que entre, que es la
+	// misma forma en que habría que resolverlo contra una constraint UNIQUE de
+	// PostgreSQL. La secuencia visible es la de siempre: base, base-2, base-3.
+	base := p.Slug
+	for intento := 1; intento <= maxIntentosSlug; intento++ {
+		if intento > 1 {
+			p.Slug = fmt.Sprintf("%s-%d", base, intento)
+		}
 
-	if err := s.repo.Crear(ctx, p); err != nil {
-		return domain.Profesional{}, err
+		err := s.repo.Crear(ctx, p)
+		if errors.Is(err, domain.ErrSlugEnUso) {
+			continue
+		}
+		if err != nil {
+			return domain.Profesional{}, err
+		}
+		return p, nil
 	}
-	return p, nil
+	return domain.Profesional{}, fmt.Errorf("no se encontró un slug libre para %q en %d intentos", base, maxIntentosSlug)
 }
 
 func (s *Profesional) ObtenerPorID(ctx context.Context, id uuid.UUID) (domain.Profesional, error) {
@@ -107,6 +132,9 @@ func NormalizarFiltro(f repository.Filtro) repository.Filtro {
 
 // verificarMatriculaLibre falla si otro profesional ya tiene esa matrícula.
 // excluir permite ignorar al propio profesional durante una edición.
+//
+// Es un chequeo previo, no una garantía: lee y suelta el lock. Quien sostiene
+// la invariante es la escritura del repositorio.
 func (s *Profesional) verificarMatriculaLibre(ctx context.Context, m domain.Matricula, excluir uuid.UUID) error {
 	existente, err := s.repo.ObtenerPorMatricula(ctx, m)
 	switch {
@@ -118,24 +146,6 @@ func (s *Profesional) verificarMatriculaLibre(ctx context.Context, m domain.Matr
 		return nil
 	default:
 		return domain.ErrMatriculaEnUso
-	}
-}
-
-// slugUnico resuelve las colisiones agregando un sufijo numérico.
-//
-// Nunca es un error para el cliente: dos "Martín González" son perfectamente
-// posibles y no hay razón para rechazar al segundo.
-func (s *Profesional) slugUnico(ctx context.Context, base string) (string, error) {
-	candidato := base
-	for i := 2; ; i++ {
-		_, err := s.repo.ObtenerPorSlug(ctx, candidato)
-		if errors.Is(err, domain.ErrNoEncontrado) {
-			return candidato, nil
-		}
-		if err != nil {
-			return "", err
-		}
-		candidato = fmt.Sprintf("%s-%d", base, i)
 	}
 }
 
@@ -153,6 +163,9 @@ func (s *Profesional) Actualizar(ctx context.Context, id uuid.UUID, entrada doma
 		return domain.Profesional{}, err
 	}
 
+	// Mismo camino rápido que en el alta, y con la misma salvedad: el que
+	// garantiza que la matrícula no se duplique es repo.Actualizar, que la
+	// chequea bajo el lock de escritura excluyendo a este mismo registro.
 	if actualizado.Matricula != actual.Matricula {
 		if err := s.verificarMatriculaLibre(ctx, actualizado.Matricula, id); err != nil {
 			return domain.Profesional{}, err

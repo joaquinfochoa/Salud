@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -124,6 +126,122 @@ func TestCrearSlugUnico(t *testing.T) {
 	}
 	if tercero.Slug != "martin-gonzalez-3" {
 		t.Errorf("slug 3 = %q, se esperaba martin-gonzalez-3", tercero.Slug)
+	}
+}
+
+// enLargada lanza n goroutines y las hace arrancar todas juntas. Sin la
+// barrera, la primera termina antes de que la última empiece y el test no
+// llega a solapar nada.
+func enLargada(n int, cuerpo func(i int)) {
+	var listas sync.WaitGroup
+	var terminadas sync.WaitGroup
+	listas.Add(n)
+	terminadas.Add(n)
+
+	largada := make(chan struct{})
+	for i := range n {
+		go func() {
+			defer terminadas.Done()
+			listas.Done()
+			<-largada
+			cuerpo(i)
+		}()
+	}
+
+	listas.Wait()
+	close(largada)
+	terminadas.Wait()
+}
+
+// TestCrearConcurrenteConMatriculaCompartida prueba que la unicidad de la
+// matrícula no puede depender de un chequeo previo al alta: verificar y
+// escribir bajo dos locks distintos no es una invariante, y entre los dos
+// entra otro request con la misma matrícula.
+//
+// El detector de carreras no ve nada acá: no hay carrera de datos, todos los
+// accesos están bien sincronizados. Es una carrera de lógica, y solo la
+// atrapa contar los resultados.
+func TestCrearConcurrenteConMatriculaCompartida(t *testing.T) {
+	ctx := context.Background()
+	svc := nuevoServicioDePrueba()
+
+	const n = 24
+	errores := make([]error, n)
+
+	enLargada(n, func(i int) {
+		entrada := entradaValida() // todos con la misma matrícula
+		// nombres distintos: así el único conflicto posible es la matrícula
+		entrada.Nombre = fmt.Sprintf("Nombre%d", i)
+		_, errores[i] = svc.Crear(ctx, entrada)
+	})
+
+	exitos := 0
+	for _, err := range errores {
+		switch {
+		case err == nil:
+			exitos++
+		case errors.Is(err, domain.ErrMatriculaEnUso):
+		default:
+			t.Errorf("se esperaba nil o ErrMatriculaEnUso, se obtuvo %v", err)
+		}
+	}
+	if exitos != 1 {
+		t.Errorf("altas exitosas = %d, se esperaba exactamente 1: la matrícula es única", exitos)
+	}
+
+	_, total, err := svc.Listar(ctx, repository.Filtro{Limite: 100})
+	if err != nil {
+		t.Fatalf("Listar devolvió error: %v", err)
+	}
+	if total != 1 {
+		t.Errorf("quedaron %d profesionales guardados con la misma matrícula, se esperaba 1", total)
+	}
+}
+
+// TestCrearConcurrenteConMismoNombre prueba el otro lado de la moneda: un
+// choque de slug nunca es un error para el cliente, así que las n altas tienen
+// que entrar todas, y con slugs distintos. Si dos comparten slug, la ficha
+// pública de esa URL cambia de persona entre request y request.
+func TestCrearConcurrenteConMismoNombre(t *testing.T) {
+	ctx := context.Background()
+	svc := nuevoServicioDePrueba()
+
+	const n = 24
+	slugs := make([]string, n)
+	errores := make([]error, n)
+
+	enLargada(n, func(i int) {
+		entrada := entradaValida() // todos "Martín González"
+		// matrículas distintas: así el único conflicto posible es el slug
+		entrada.Matricula = fmt.Sprintf("MN %d", 40000+i)
+		p, err := svc.Crear(ctx, entrada)
+		slugs[i], errores[i] = p.Slug, err
+	})
+
+	vistos := make(map[string]bool, n)
+	for i, err := range errores {
+		if err != nil {
+			t.Errorf("alta %d falló: %v — dos homónimos son válidos", i, err)
+			continue
+		}
+		if vistos[slugs[i]] {
+			t.Errorf("slug repetido: %q", slugs[i])
+		}
+		vistos[slugs[i]] = true
+	}
+
+	// la secuencia visible desde afuera no cambia: base, base-2, base-3...
+	esperados := map[string]bool{"martin-gonzalez": true}
+	for i := 2; i <= n; i++ {
+		esperados[fmt.Sprintf("martin-gonzalez-%d", i)] = true
+	}
+	for slug := range vistos {
+		if !esperados[slug] {
+			t.Errorf("slug fuera de la secuencia esperada: %q", slug)
+		}
+	}
+	if len(vistos) != n {
+		t.Errorf("slugs distintos = %d, se esperaban %d", len(vistos), n)
 	}
 }
 

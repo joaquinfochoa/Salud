@@ -9,9 +9,22 @@ var (
 	// ErrNoEncontrado lo devuelve el repositorio cuando no existe el registro.
 	ErrNoEncontrado = errors.New("profesional no encontrado")
 
-	// ErrMatriculaEnUso lo devuelve el servicio: la matrícula es la única
-	// identidad real de una persona en este sistema y no puede repetirse.
+	// ErrMatriculaEnUso lo devuelve el repositorio al escribir: la matrícula es
+	// la única identidad real de una persona en este sistema y no puede
+	// repetirse. El servicio también lo devuelve desde su chequeo previo, pero
+	// la garantía está en la escritura.
 	ErrMatriculaEnUso = errors.New("matricula ya registrada")
+
+	// ErrSlugEnUso lo devuelve el repositorio cuando otro registro ya ocupa ese
+	// slug. Casi nunca llega al cliente: dos homónimos son perfectamente
+	// posibles, así que el servicio reintenta con el sufijo siguiente en vez de
+	// rechazar el alta.
+	ErrSlugEnUso = errors.New("slug ya registrado")
+
+	// ErrIDEnUso lo devuelve el repositorio ante un alta con un ID que ya
+	// existe. Es un conflicto como los otros dos y no un error interno: si
+	// cayera en el default del handler, el cliente vería un 500.
+	ErrIDEnUso = errors.New("id ya registrado")
 )
 
 // ErrorCampo señala un campo puntual. Las etiquetas JSON coinciden con el
