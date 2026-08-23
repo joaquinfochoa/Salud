@@ -59,6 +59,11 @@ paths:
           schema: { type: string }
         - name: limite
           in: query
+          description: |
+            Un valor por encima del máximo no se rechaza: se recorta al
+            máximo, y `paginacion.limite` en la respuesta informa el que de
+            verdad se aplicó. Paginar sumando el valor pedido en vez del
+            devuelto saltea registros.
           schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
         - name: desplazamiento
           in: query
@@ -240,6 +245,9 @@ components:
         - verificacion
         - creadoEn
         - actualizadoEn
+        # siempre presente: es null cuando el profesional está activo, nunca
+        # se omite. Sin esto un cliente estricto la trataría como opcional.
+        - dadoDeBajaEn
       properties:
         id:
           type: string
