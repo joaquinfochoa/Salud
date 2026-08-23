@@ -643,9 +643,10 @@ que agregar un caso sea agregar una línea.
   (`development`), `LOG_LEVEL` (`info`), `SHUTDOWN_TIMEOUT` (10s). Un struct que
   se lee al arrancar y falla rápido si algo está mal. Sin librería de config.
 - **Logs con `log/slog`** en JSON, con request ID propagado por `context`.
-- **Middleware**: request ID, logging de acceso, recuperación de panics, timeout.
-  **CORS todavía no**: no hay navegador que lo necesite hasta que exista
-  `apps/web`.
+- **Middleware**: request ID, logging de acceso, recuperación de panics. No hay
+  middleware de timeout: los timeouts se resuelven a nivel de `http.Server`
+  (ver el punto siguiente). **CORS todavía no**: no hay navegador que lo
+  necesite hasta que exista `apps/web`.
 - **Apagado gracioso**: `signal.NotifyContext` + `srv.Shutdown`. Evita cortar un
   request a la mitad en cada deploy.
 - **Timeouts del servidor**: `ReadTimeout`, `WriteTimeout`, `IdleTimeout`
@@ -653,10 +654,12 @@ que agregar un caso sea agregar una línea.
   es decir, sin límite.
 - **Dockerfile multi-etapa** sobre `distroless`, usuario no-root. Imagen final
   alrededor de 15 MB.
-- **Makefile**: `run`, `test`, `test-race`, `lint`, `openapi-lint`, `build`,
-  `docker-build`.
+- **Makefile**: `run`, `test`, `test-race`, `cover`, `lint`, `fmt`, `build`,
+  `docker-build`, `tidy`, `check` (`fmt` + `test-race` + `lint`, lo que corre
+  antes de commitear). La validación del OpenAPI no vive en el Makefile: corre
+  en CI con `@redocly/cli`.
 - **CI en GitHub Actions**: `golangci-lint`, `go test -race ./...`, validación del
-  OpenAPI, build de la imagen.
+  OpenAPI con Redocly, build de la imagen.
 
 ---
 
