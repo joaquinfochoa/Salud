@@ -28,5 +28,5 @@ apps/api/bin/
 *.exe
 coverage.out
 
-# Configuración local de Claude Code
-.claude/settings.local.json
+# Configuración de Claude Code: el harness la regenera con cada permiso
+.claude/
