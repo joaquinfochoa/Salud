@@ -2657,7 +2657,16 @@ Expected: FAIL con `svc.Actualizar undefined` y `svc.DarDeBaja undefined`
 En `apps/api/internal/service/profesional.go`, reemplazar el método `Listar` por esta versión:
 
 ```go
-func (s *Profesional) Listar(ctx context.Context, f repository.Filtro) ([]domain.Profesional, int, error) {
+// NormalizarFiltro aplica los límites y valores por defecto de la paginación.
+//
+// Es exportada a propósito: el handler necesita informar en la respuesta el
+// límite que realmente se aplicó, no el que pidió el cliente. El Filtro viaja
+// por valor, así que si cada capa aplicara su propia versión de la regla, un
+// `limite=5000` devolvería 100 registros diciendo que devolvió 5000, y el que
+// pagine sumando ese número se saltea 4900 sin que falle nada.
+//
+// Es idempotente: aplicarla dos veces da lo mismo que aplicarla una.
+func NormalizarFiltro(f repository.Filtro) repository.Filtro {
 	if f.Limite <= 0 {
 		f.Limite = LimitePorDefecto
 	}
@@ -2673,6 +2682,11 @@ func (s *Profesional) Listar(ctx context.Context, f repository.Filtro) ([]domain
 		activo := domain.EstadoActivo
 		f.Estado = &activo
 	}
+	return f
+}
+
+func (s *Profesional) Listar(ctx context.Context, f repository.Filtro) ([]domain.Profesional, int, error) {
+	f = NormalizarFiltro(f)
 	return s.repo.Listar(ctx, f)
 }
 ```
@@ -2847,6 +2861,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ListaProfesionales' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
 
     post:
       tags: [profesionales]
@@ -4463,17 +4478,18 @@ func (h *ManejadorProfesional) Listar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Normalizar acá y no solo dentro del servicio es lo que permite informar
+	// el límite que de verdad se aplicó: el Filtro viaja por valor, así que lo
+	// que el servicio recorte en su copia nunca vuelve.
+	f = service.NormalizarFiltro(f)
+
 	ps, total, err := h.svc.Listar(r.Context(), f)
 	if err != nil {
 		escribirError(w, r, err)
 		return
 	}
 
-	limite := f.Limite
-	if limite <= 0 {
-		limite = service.LimitePorDefecto
-	}
-	escribirJSON(w, http.StatusOK, aRespuestaListado(ps, total, limite, f.Desplazamiento))
+	escribirJSON(w, http.StatusOK, aRespuestaListado(ps, total, f.Limite, f.Desplazamiento))
 }
 
 func (h *ManejadorProfesional) Actualizar(w http.ResponseWriter, r *http.Request) {
