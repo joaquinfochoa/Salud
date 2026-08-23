@@ -54,7 +54,7 @@ func TestParsearHoraDelDiaInvalida(t *testing.T) {
 
 func TestHoraDelDiaString(t *testing.T) {
 	casos := []struct {
-		minutos int
+		minutos  int
 		esperado string
 	}{
 		{0, "00:00"},
