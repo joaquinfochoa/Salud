@@ -10,21 +10,38 @@ linters:
     - bodyclose     # response bodies sin cerrar
     - errorlint     # comparaciones de error sin errors.Is/As
     - gosec
-    - misspell
     - revive
     - unconvert
+    # misspell no se habilita: valida contra diccionario inglés y este
+    # proyecto escribe identificadores, comentarios y mensajes en español
+    # a propósito (ver README, "Convenciones"). No hay nada que arreglar.
 
   settings:
     gosec:
       excludes:
         # G104 se solapa con errcheck
         - G104
+    revive:
+      rules:
+        # El proyecto documenta (README, "Convenciones") que los comentarios
+        # explican el porqué, no repiten el nombre. Estas dos reglas exigen
+        # exactamente el comentario de relleno que la convención rechaza.
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
 
   exclusions:
     rules:
       # En los tests se ignoran errores a propósito para armar estados
       - path: _test\.go
         linters: [errcheck, gosec]
+      # bodyclose no sigue el cierre del body cuando ocurre vía t.Cleanup
+      # dentro de una función helper (internal/handler/profesional_test.go);
+      # el body sí se cierra, es una limitación del análisis estático del
+      # linter, no un leak real.
+      - path: internal/handler/profesional_test\.go
+        linters: [bodyclose]
 
 formatters:
   enable:

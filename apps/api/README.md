@@ -87,3 +87,13 @@ En Linux y macOS no hace falta nada: `gcc` o `clang` ya están.
   las variables de entorno y las claves `type`/`title`/`status`/`detail`
   del RFC 7807.
 - Una sola dependencia externa: `github.com/google/uuid`.
+
+### Linting
+
+`misspell` está deliberadamente apagado en `.golangci.yml`: valida contra un
+diccionario en inglés y este proyecto escribe en español a propósito, así que
+cada hallazgo es una palabra española bien escrita. Las reglas `exported` y
+`package-comments` de `revive` también están apagadas porque exigen un
+comentario godoc en cada símbolo exportado, justo el relleno que la
+convención de arriba rechaza (comentarios que expliquen el porqué, no que
+repitan el nombre).
