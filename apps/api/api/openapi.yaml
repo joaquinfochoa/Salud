@@ -69,6 +69,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ListaProfesionales' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
 
     post:
       tags: [profesionales]

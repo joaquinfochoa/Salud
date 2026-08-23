@@ -200,6 +200,59 @@ func TestListarDefaults(t *testing.T) {
 	})
 }
 
+func TestNormalizarFiltro(t *testing.T) {
+	t.Run("limite por encima del maximo se recorta", func(t *testing.T) {
+		f := NormalizarFiltro(repository.Filtro{Limite: 5000})
+		if f.Limite != LimiteMaximo {
+			t.Errorf("Limite = %d, se esperaba %d", f.Limite, LimiteMaximo)
+		}
+	})
+
+	t.Run("limite cero toma el default", func(t *testing.T) {
+		f := NormalizarFiltro(repository.Filtro{Limite: 0})
+		if f.Limite != LimitePorDefecto {
+			t.Errorf("Limite = %d, se esperaba el default %d", f.Limite, LimitePorDefecto)
+		}
+	})
+
+	t.Run("limite negativo toma el default", func(t *testing.T) {
+		f := NormalizarFiltro(repository.Filtro{Limite: -5})
+		if f.Limite != LimitePorDefecto {
+			t.Errorf("Limite = %d, se esperaba el default %d", f.Limite, LimitePorDefecto)
+		}
+	})
+
+	t.Run("desplazamiento negativo se pisa en cero", func(t *testing.T) {
+		f := NormalizarFiltro(repository.Filtro{Desplazamiento: -10})
+		if f.Desplazamiento != 0 {
+			t.Errorf("Desplazamiento = %d, se esperaba 0", f.Desplazamiento)
+		}
+	})
+
+	t.Run("estado nil toma activo por defecto", func(t *testing.T) {
+		f := NormalizarFiltro(repository.Filtro{})
+		if f.Estado == nil || *f.Estado != domain.EstadoActivo {
+			t.Errorf("Estado = %v, se esperaba activo", f.Estado)
+		}
+	})
+
+	t.Run("un estado explícito no se toca", func(t *testing.T) {
+		inactivo := domain.EstadoInactivo
+		f := NormalizarFiltro(repository.Filtro{Estado: &inactivo})
+		if f.Estado == nil || *f.Estado != domain.EstadoInactivo {
+			t.Errorf("Estado = %v, se esperaba que se respetara inactivo", f.Estado)
+		}
+	})
+
+	t.Run("es idempotente", func(t *testing.T) {
+		una := NormalizarFiltro(repository.Filtro{Limite: 5000, Desplazamiento: -10})
+		dos := NormalizarFiltro(una)
+		if una != dos {
+			t.Errorf("normalizar dos veces dio distinto de normalizar una: %+v vs %+v", una, dos)
+		}
+	})
+}
+
 func TestActualizar(t *testing.T) {
 	ctx := context.Background()
 	svc := nuevoServicioDePrueba()

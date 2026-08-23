@@ -68,17 +68,15 @@ func (h *ManejadorProfesional) Listar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	f = service.NormalizarFiltro(f)
+
 	ps, total, err := h.svc.Listar(r.Context(), f)
 	if err != nil {
 		escribirError(w, r, err)
 		return
 	}
 
-	limite := f.Limite
-	if limite <= 0 {
-		limite = service.LimitePorDefecto
-	}
-	escribirJSON(w, http.StatusOK, aRespuestaListado(ps, total, limite, f.Desplazamiento))
+	escribirJSON(w, http.StatusOK, aRespuestaListado(ps, total, f.Limite, f.Desplazamiento))
 }
 
 func (h *ManejadorProfesional) Actualizar(w http.ResponseWriter, r *http.Request) {

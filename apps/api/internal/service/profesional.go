@@ -73,6 +73,20 @@ func (s *Profesional) ObtenerPorSlug(ctx context.Context, slug string) (domain.P
 }
 
 func (s *Profesional) Listar(ctx context.Context, f repository.Filtro) ([]domain.Profesional, int, error) {
+	f = NormalizarFiltro(f)
+	return s.repo.Listar(ctx, f)
+}
+
+// NormalizarFiltro aplica los límites y valores por defecto de la paginación.
+//
+// Es exportada a propósito: el handler necesita informar en la respuesta el
+// límite que realmente se aplicó, no el que pidió el cliente. Si cada capa
+// aplicara su propia versión de la regla, un `limite=5000` devolvería 100
+// registros diciendo que devolvió 5000, y el que pagine sumando ese número se
+// saltea 4900 sin que falle nada.
+//
+// Es idempotente: aplicarla dos veces da lo mismo que aplicarla una.
+func NormalizarFiltro(f repository.Filtro) repository.Filtro {
 	if f.Limite <= 0 {
 		f.Limite = LimitePorDefecto
 	}
@@ -88,7 +102,7 @@ func (s *Profesional) Listar(ctx context.Context, f repository.Filtro) ([]domain
 		activo := domain.EstadoActivo
 		f.Estado = &activo
 	}
-	return s.repo.Listar(ctx, f)
+	return f
 }
 
 // verificarMatriculaLibre falla si otro profesional ya tiene esa matrícula.

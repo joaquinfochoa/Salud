@@ -250,6 +250,45 @@ func TestListarPaginaYFiltra(t *testing.T) {
 	})
 }
 
+// TestListarInformaElLimiteRealmenteAplicado es la prueba de la regresión:
+// el filtro se pasaba por valor al servicio, así que el recorte a
+// LimiteMaximo que hacía el servicio quedaba en su copia y nunca volvía al
+// handler. La respuesta terminaba diciendo "limite": 5000 mientras devolvía
+// 100 registros, y quien pagina sumando ese número se saltea el resto sin
+// que nada falle.
+func TestListarInformaElLimiteRealmenteAplicado(t *testing.T) {
+	srv := nuevoServidorDePrueba(t)
+	postear(t, srv, "/api/v1/profesionales", cuerpoValido)
+
+	resp := obtener(t, srv, "/api/v1/profesionales?limite=5000")
+	var listado respuestaListado
+	if err := json.NewDecoder(resp.Body).Decode(&listado); err != nil {
+		t.Fatalf("no se pudo decodificar: %v", err)
+	}
+
+	if listado.Paginacion.Limite > service.LimiteMaximo {
+		t.Errorf("paginacion.limite = %d, no puede superar el máximo %d", listado.Paginacion.Limite, service.LimiteMaximo)
+	}
+	if len(listado.Datos) > listado.Paginacion.Limite {
+		t.Errorf("len(datos) = %d, no puede superar el limite informado %d", len(listado.Datos), listado.Paginacion.Limite)
+	}
+}
+
+func TestListarSinLimiteInformaElDefault(t *testing.T) {
+	srv := nuevoServidorDePrueba(t)
+	postear(t, srv, "/api/v1/profesionales", cuerpoValido)
+
+	resp := obtener(t, srv, "/api/v1/profesionales")
+	var listado respuestaListado
+	if err := json.NewDecoder(resp.Body).Decode(&listado); err != nil {
+		t.Fatalf("no se pudo decodificar: %v", err)
+	}
+
+	if listado.Paginacion.Limite != service.LimitePorDefecto {
+		t.Errorf("paginacion.limite = %d, se esperaba el default %d", listado.Paginacion.Limite, service.LimitePorDefecto)
+	}
+}
+
 func TestActualizar(t *testing.T) {
 	srv := nuevoServidorDePrueba(t)
 	creado := decodificarProfesional(t, postear(t, srv, "/api/v1/profesionales", cuerpoValido))
