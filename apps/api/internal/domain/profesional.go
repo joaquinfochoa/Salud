@@ -14,6 +14,11 @@ const (
 	maxLargoNombre = 100
 	maxLargoBio    = 2000
 	maxLargoZona   = 100
+
+	anticipacionMinimaPorDefecto = 120         // dos horas
+	maxAnticipacionMinimaMin     = 7 * 24 * 60 // una semana
+	horizonteDiasPorDefecto      = 60
+	maxHorizonteDias             = 180
 )
 
 // Profesional es un profesional de la salud dado de alta en la plataforma.
@@ -33,11 +38,18 @@ type Profesional struct {
 	Modalidades    []Modalidad
 	Zona           string
 	ObrasSociales  []string
-	Estado         Estado
-	Verificacion   EstadoVerificacion
-	CreadoEn       time.Time
-	ActualizadoEn  time.Time
-	DadoDeBajaEn   *time.Time
+
+	// Configuración de la agenda. Vive acá y no en una entidad aparte por la
+	// misma razón que PrecioConsulta: no es identidad, es cómo esa persona
+	// ejerce, y una entidad para dos campos es ceremonia.
+	AnticipacionMinimaMin int
+	HorizonteDias         int
+
+	Estado        Estado
+	Verificacion  EstadoVerificacion
+	CreadoEn      time.Time
+	ActualizadoEn time.Time
+	DadoDeBajaEn  *time.Time
 }
 
 // EntradaProfesional es la entrada cruda, en tipos primitivos. Que sea primitiva
@@ -58,6 +70,13 @@ type EntradaProfesional struct {
 	Modalidades    []string
 	Zona           string
 	ObrasSociales  []string
+
+	// Punteros para distinguir "no lo mandaron" de "mandaron cero". A
+	// diferencia de PrecioConsulta, acá la ausencia no es un error: significa
+	// usar el valor por defecto, porque nadie debería tener que decidir esto
+	// al registrarse.
+	AnticipacionMinimaMin *int
+	HorizonteDias         *int
 }
 
 // NuevoProfesional valida la entrada y devuelve un profesional consistente o un
@@ -202,6 +221,30 @@ func construir(entrada EntradaProfesional) (Profesional, ErrorValidacion) {
 	}
 
 	p.ObrasSociales = construirObrasSociales(entrada.ObrasSociales, &verr)
+
+	p.AnticipacionMinimaMin = anticipacionMinimaPorDefecto
+	if entrada.AnticipacionMinimaMin != nil {
+		switch valor := *entrada.AnticipacionMinimaMin; {
+		case valor < 0:
+			verr.agregar("anticipacionMinimaMin", "no puede ser negativa")
+		case valor > maxAnticipacionMinimaMin:
+			verr.agregar("anticipacionMinimaMin", "no puede superar una semana")
+		default:
+			p.AnticipacionMinimaMin = valor
+		}
+	}
+
+	p.HorizonteDias = horizonteDiasPorDefecto
+	if entrada.HorizonteDias != nil {
+		switch valor := *entrada.HorizonteDias; {
+		case valor < 1:
+			verr.agregar("horizonteDias", "tiene que ser al menos 1")
+		case valor > maxHorizonteDias:
+			verr.agregar("horizonteDias", fmt.Sprintf("no puede superar los %d días", maxHorizonteDias))
+		default:
+			p.HorizonteDias = valor
+		}
+	}
 
 	return p, verr
 }

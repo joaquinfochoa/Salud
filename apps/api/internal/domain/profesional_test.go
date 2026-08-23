@@ -299,3 +299,100 @@ func TestNombreCompleto(t *testing.T) {
 		t.Errorf("NombreCompleto() = %q, se esperaba %q", obtenido, "Martín González")
 	}
 }
+
+func TestNuevoProfesionalConfiguracionDeAgendaPorDefecto(t *testing.T) {
+	// no mandar los campos es lo normal: el profesional no debería tener que
+	// decidir esto al registrarse
+	p, err := NuevoProfesional(entradaValida(), ahoraDePrueba)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+
+	if p.AnticipacionMinimaMin != anticipacionMinimaPorDefecto {
+		t.Errorf("AnticipacionMinimaMin = %d, se esperaba %d", p.AnticipacionMinimaMin, anticipacionMinimaPorDefecto)
+	}
+	if p.HorizonteDias != horizonteDiasPorDefecto {
+		t.Errorf("HorizonteDias = %d, se esperaba %d", p.HorizonteDias, horizonteDiasPorDefecto)
+	}
+}
+
+func TestNuevoProfesionalConfiguracionDeAgendaExplicita(t *testing.T) {
+	entrada := entradaValida()
+	anticipacion := 30
+	horizonte := 90
+	entrada.AnticipacionMinimaMin = &anticipacion
+	entrada.HorizonteDias = &horizonte
+
+	p, err := NuevoProfesional(entrada, ahoraDePrueba)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+
+	if p.AnticipacionMinimaMin != 30 {
+		t.Errorf("AnticipacionMinimaMin = %d, se esperaba 30", p.AnticipacionMinimaMin)
+	}
+	if p.HorizonteDias != 90 {
+		t.Errorf("HorizonteDias = %d, se esperaba 90", p.HorizonteDias)
+	}
+}
+
+func TestNuevoProfesionalConfiguracionDeAgendaInvalida(t *testing.T) {
+	casos := []struct {
+		nombre        string
+		mutar         func(*EntradaProfesional)
+		campoEsperado string
+	}{
+		{"anticipacion negativa", func(e *EntradaProfesional) { v := -1; e.AnticipacionMinimaMin = &v }, "anticipacionMinimaMin"},
+		{"anticipacion mayor a una semana", func(e *EntradaProfesional) { v := 10081; e.AnticipacionMinimaMin = &v }, "anticipacionMinimaMin"},
+		{"horizonte en cero", func(e *EntradaProfesional) { v := 0; e.HorizonteDias = &v }, "horizonteDias"},
+		{"horizonte sobre el tope", func(e *EntradaProfesional) { v := 181; e.HorizonteDias = &v }, "horizonteDias"},
+	}
+
+	for _, caso := range casos {
+		t.Run(caso.nombre, func(t *testing.T) {
+			entrada := entradaValida()
+			caso.mutar(&entrada)
+
+			_, err := NuevoProfesional(entrada, ahoraDePrueba)
+
+			var verr ErrorValidacion
+			if !errors.As(err, &verr) {
+				t.Fatalf("se esperaba ErrorValidacion, se obtuvo %T: %v", err, err)
+			}
+			encontrado := false
+			for _, campo := range verr.Campos {
+				if campo.Campo == caso.campoEsperado {
+					encontrado = true
+				}
+			}
+			if !encontrado {
+				t.Errorf("se esperaba un error en %q, se obtuvo %+v", caso.campoEsperado, verr.Campos)
+			}
+		})
+	}
+}
+
+func TestAplicarCambiosVuelveAlDefaultSiNoMandanLaConfiguracion(t *testing.T) {
+	// PUT es reemplazo total: omitir un campo lo devuelve a su valor por
+	// defecto, igual que pasa con el resto
+	entrada := entradaValida()
+	anticipacion := 30
+	entrada.AnticipacionMinimaMin = &anticipacion
+
+	base, err := NuevoProfesional(entrada, ahoraDePrueba)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if base.AnticipacionMinimaMin != 30 {
+		t.Fatalf("no se pudo preparar el estado: %d", base.AnticipacionMinimaMin)
+	}
+
+	actualizado, err := base.AplicarCambios(entradaValida(), ahoraDePrueba)
+	if err != nil {
+		t.Fatalf("error inesperado: %v", err)
+	}
+	if actualizado.AnticipacionMinimaMin != anticipacionMinimaPorDefecto {
+		t.Errorf("AnticipacionMinimaMin = %d, se esperaba el default %d",
+			actualizado.AnticipacionMinimaMin, anticipacionMinimaPorDefecto)
+	}
+}
