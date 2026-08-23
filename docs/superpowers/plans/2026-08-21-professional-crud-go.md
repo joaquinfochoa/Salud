@@ -5260,6 +5260,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Create: `apps/api/.dockerignore`
 - Create: `apps/api/.golangci.yml`
 - Create: `apps/api/README.md`
+- Create: `redocly.yaml` (en la raíz del repo)
 - Create: `.github/workflows/api.yml`
 
 **Interfaces:**
@@ -5332,21 +5333,38 @@ linters:
     - bodyclose     # response bodies sin cerrar
     - errorlint     # comparaciones de error sin errors.Is/As
     - gosec
-    - misspell
     - revive
     - unconvert
+    # misspell no se habilita: valida contra diccionario inglés y este
+    # proyecto escribe identificadores, comentarios y mensajes en español
+    # a propósito (ver README, "Convenciones"). No hay nada que arreglar.
 
   settings:
     gosec:
       excludes:
         # G104 se solapa con errcheck
         - G104
+    revive:
+      rules:
+        # El proyecto documenta (README, "Convenciones") que los comentarios
+        # explican el porqué, no repiten el nombre. Estas dos reglas exigen
+        # exactamente el comentario de relleno que la convención rechaza.
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
 
   exclusions:
     rules:
       # En los tests se ignoran errores a propósito para armar estados
       - path: _test\.go
         linters: [errcheck, gosec]
+      # bodyclose no sigue el cierre del body cuando ocurre vía t.Cleanup
+      # dentro de una función helper (internal/handler/profesional_test.go);
+      # el body sí se cierra, es una limitación del análisis estático del
+      # linter, no un leak real.
+      - path: internal/handler/profesional_test\.go
+        linters: [bodyclose]
 
 formatters:
   enable:
@@ -5360,6 +5378,15 @@ Run: `cd apps/api && golangci-lint run ./...`
 Expected: sin hallazgos.
 
 Si `golangci-lint` no está instalado: `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest`.
+El binario queda en `$(go env GOPATH)/bin`, que puede no estar en el PATH.
+
+Dos linters quedan deliberadamente afuera y el config explica por qué:
+`misspell` valida contra un diccionario inglés y este proyecto escribe en
+español, así que sus hallazgos son todos falsos; y las reglas `exported` y
+`package-comments` de `revive` exigen godoc en cada símbolo exportado, que es
+exactamente el comentario de relleno que la convención del proyecto rechaza.
+Un linter que devuelve 58 hallazgos imposibles de arreglar sin contradecir
+decisiones del proyecto no se afina: se desactiva entero.
 
 Hallazgos probables y cómo se resuelven:
 - `errcheck` sobre `json.NewEncoder(w).Encode(...)`: ya está silenciado con `_ =` en `problema.go`.
@@ -5529,6 +5556,28 @@ En Linux y macOS no hace falta nada: `gcc` o `clang` ya están.
 - Una sola dependencia externa: `github.com/google/uuid`.
 ```
 
+- [ ] **Step 9a: Escribir la configuración de Redocly**
+
+Archivo `redocly.yaml`, en la **raíz del repo** (no bajo `apps/api`):
+
+```yaml
+extends:
+  - minimal
+```
+
+El ruleset por defecto de Redocly exige `operationId` en cada operación, un
+esquema de seguridad y una licencia en `info`. Este contrato todavía no tiene
+ninguna de las tres, y no debería: la autenticación es una spec aparte. Con el
+ruleset por defecto el job sale rojo en cada push, y un job que siempre falla
+deja de leerse — el día que haya un error de verdad va a estar escondido entre
+el ruido. `minimal` conserva lo que importa acá: refs que no resuelven,
+schemas inválidos, paths mal formados.
+
+El nombre del archivo importa: **sin punto adelante**. El CLI de Redocly solo
+autodescubre `redocly.yaml`; con `.redocly.yaml` ignora la configuración en
+silencio y vuelve al ruleset por defecto, que es peor que no tenerla porque
+parece que está aplicada.
+
 - [ ] **Step 9: Escribir el pipeline de CI**
 
 Archivo `.github/workflows/api.yml` (en la raíz del repo, no en `apps/api`):
@@ -5596,6 +5645,11 @@ jobs:
         with:
           node-version: '22'
       - name: Validar el contrato OpenAPI
+        # `redocly.yaml` en la raíz baja el ruleset a `minimal`: mantiene las
+        # reglas estructurales (refs que no resuelven, schemas inválidos) y
+        # descarta las opiniones de estilo. Sin él, el ruleset por defecto
+        # exige operationId, security y license, que este contrato todavía no
+        # tiene, y el job sale rojo en cada push hasta que nadie lo mira.
         run: npx --yes @redocly/cli@latest lint apps/api/api/openapi.yaml
         working-directory: .
 
