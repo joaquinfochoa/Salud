@@ -421,11 +421,17 @@ Reglas que necesitan más de una entidad, y por eso viven acá:
    auth cualquiera puede llamarlo, pero al menos la ruta y el recurso tienen que
    ser coherentes: borrar el bloqueo de otro profesional desde la ruta de este
    es un 404.
-4. **`HuecosLibres` recorta el rango al horizonte del profesional.** Recorta,
-   no rechaza: pedir noventa días a alguien que expone sesenta devuelve sesenta
-   y lo informa, igual que `paginacion.limite` en el listado de profesionales.
-   Lo único que sí rechaza es un rango invertido, que no es una preferencia sino
-   un error.
+4. **`HuecosLibres` recorta el rango al horizonte del profesional, contado
+   desde hoy.** Desde hoy y no desde la fecha pedida: el horizonte es cuánto de
+   su agenda el profesional expone hacia adelante, y contarlo desde `desde`
+   dejaría que un cliente pidiera septiembre de 2099 y reservara turnos a tres
+   años vista.
+
+   Recorta, no rechaza: pedir noventa días a alguien que expone sesenta
+   devuelve sesenta y lo informa, igual que `paginacion.limite` en el listado de
+   profesionales. Un rango que cae entero más allá del horizonte devuelve una
+   lista vacía, no un error. Lo único que sí rechaza es un rango invertido, que
+   no es una preferencia sino un error.
 
    Como el horizonte de cada profesional ya está acotado a 180 días por la
    validación de la sección 3, el recorte alcanza para proteger el cálculo: no
