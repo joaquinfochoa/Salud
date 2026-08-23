@@ -9,7 +9,7 @@ import (
 
 func TestIDPeticionGeneraUnoSiNoViene(t *testing.T) {
 	var visto string
-	h := IDPeticion(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := IDPeticion(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		visto = IDPeticionDe(r.Context())
 	}))
 
@@ -26,7 +26,7 @@ func TestIDPeticionGeneraUnoSiNoViene(t *testing.T) {
 
 func TestIDPeticionRespetaElQueViene(t *testing.T) {
 	var visto string
-	h := IDPeticion(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := IDPeticion(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		visto = IDPeticionDe(r.Context())
 	}))
 

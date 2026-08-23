@@ -1,0 +1,72 @@
+name: api
+
+on:
+  push:
+    branches: [main, refactor-gian]
+    paths: ['apps/api/**', '.github/workflows/api.yml']
+  pull_request:
+    paths: ['apps/api/**', '.github/workflows/api.yml']
+
+defaults:
+  run:
+    working-directory: apps/api
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: apps/api/go.sum
+
+      - name: Verificar que go.mod está ordenado
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Tests con detector de carreras
+        run: go test ./... -race
+
+      - name: Verificar que el dominio no depende de otras capas
+        run: |
+          deps=$(go list -deps ./internal/domain | grep 'joaquinfochoa' | grep -v 'internal/domain$' || true)
+          if [ -n "$deps" ]; then
+            echo "internal/domain importa otras capas del proyecto:"
+            echo "$deps"
+            exit 1
+          fi
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: apps/api/go.sum
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: apps/api
+
+  openapi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validar el contrato OpenAPI
+        run: npx --yes @redocly/cli@latest lint apps/api/api/openapi.yaml
+        working-directory: .
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construir la imagen
+        run: docker build -t salud-api:ci .

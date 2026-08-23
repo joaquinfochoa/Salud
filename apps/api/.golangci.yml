@@ -1,0 +1,32 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck      # errores ignorados
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose     # response bodies sin cerrar
+    - errorlint     # comparaciones de error sin errors.Is/As
+    - gosec
+    - misspell
+    - revive
+    - unconvert
+
+  settings:
+    gosec:
+      excludes:
+        # G104 se solapa con errcheck
+        - G104
+
+  exclusions:
+    rules:
+      # En los tests se ignoran errores a propósito para armar estados
+      - path: _test\.go
+        linters: [errcheck, gosec]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
