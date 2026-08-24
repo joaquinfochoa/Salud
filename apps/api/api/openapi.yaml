@@ -253,6 +253,7 @@ paths:
               schema: { $ref: '#/components/schemas/ListaHorarios' }
         '400': { $ref: '#/components/responses/PeticionInvalida' }
         '404': { $ref: '#/components/responses/NoEncontrado' }
+        '413': { $ref: '#/components/responses/CuerpoDemasiadoGrande' }
         '422': { $ref: '#/components/responses/ValidacionFallida' }
 
   /api/v1/profesionales/{id}/bloqueos:
@@ -304,6 +305,7 @@ paths:
               schema: { $ref: '#/components/schemas/Bloqueo' }
         '400': { $ref: '#/components/responses/PeticionInvalida' }
         '404': { $ref: '#/components/responses/NoEncontrado' }
+        '413': { $ref: '#/components/responses/CuerpoDemasiadoGrande' }
         '422': { $ref: '#/components/responses/ValidacionFallida' }
 
   /api/v1/profesionales/{id}/bloqueos/{bloqueoId}:
@@ -348,8 +350,13 @@ paths:
         `desde` y `hasta` son fechas y las dos entran: del 25 al 27 incluye los
         tres días.
 
+        `hasta` anterior a `desde` es 400: es un query param mal formado, no
+        una entidad semánticamente inválida.
+
         El rango se recorta al horizonte del profesional, no se rechaza, y
-        `rango` en la respuesta informa el que de verdad se usó.
+        `rango` en la respuesta informa el que de verdad se usó. También se
+        recorta hacia atrás: pedir una fecha pasada nunca produce huecos, así
+        que `desde` nunca queda antes de hoy.
 
         Un profesional dado de baja devuelve una lista vacía, no un error.
       responses:

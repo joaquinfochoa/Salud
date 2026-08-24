@@ -42,7 +42,7 @@ func (h *ManejadorAgenda) ReemplazarHorarios(w http.ResponseWriter, r *http.Requ
 
 	var peticion peticionHorarios
 	if err := decodificarJSON(w, r, &peticion); err != nil {
-		escribirPeticionInvalida(w, "el cuerpo no es un JSON válido")
+		escribirErrorDeDecodificacion(w, r, err)
 		return
 	}
 
@@ -61,19 +61,11 @@ func (h *ManejadorAgenda) ListarBloqueos(w http.ResponseWriter, r *http.Request)
 	}
 
 	consulta := r.URL.Query()
-	ahora := time.Now().In(domain.ZonaHoraria)
 
-	// Sin rango se devuelven los vigentes y futuros. La traducción se hace acá
-	// para que la interfaz del repositorio no necesite punteros ni centinelas.
-	//
-	// El dominio no le pone techo a cuán lejos se puede cargar un bloqueo (a
-	// diferencia del horizonte de huecos, que sí lo tiene), pero "sin límite"
-	// en la práctica es una ventana con un largo defendible, no "para
-	// siempre": dos años cubre cualquier agenda médica real (vacaciones,
-	// licencias, cierres programados) sin arrastrar el default a una fecha
-	// arbitrariamente lejana.
-	desde := ahora
-	hasta := ahora.AddDate(2, 0, 0)
+	// Sin rango se devuelven los vigentes y futuros: el servicio resuelve esa
+	// ventana con su propio reloj, así que acá solo se traduce "no vino" a
+	// nil, sin decidir nada de negocio.
+	var desde, hasta *time.Time
 
 	if crudo := consulta.Get("desde"); crudo != "" {
 		fecha, err := parsearFecha(crudo)
@@ -81,7 +73,7 @@ func (h *ManejadorAgenda) ListarBloqueos(w http.ResponseWriter, r *http.Request)
 			escribirPeticionInvalida(w, "el parámetro desde tiene que ser una fecha AAAA-MM-DD")
 			return
 		}
-		desde = fecha
+		desde = &fecha
 	}
 	if crudo := consulta.Get("hasta"); crudo != "" {
 		fecha, err := parsearFecha(crudo)
@@ -89,7 +81,8 @@ func (h *ManejadorAgenda) ListarBloqueos(w http.ResponseWriter, r *http.Request)
 			escribirPeticionInvalida(w, "el parámetro hasta tiene que ser una fecha AAAA-MM-DD")
 			return
 		}
-		hasta = fecha.AddDate(0, 0, 1) // el día pedido entra entero
+		fecha = fecha.AddDate(0, 0, 1) // el día pedido entra entero
+		hasta = &fecha
 	}
 
 	bloqueos, err := h.svc.ListarBloqueos(r.Context(), id, desde, hasta)
@@ -108,7 +101,7 @@ func (h *ManejadorAgenda) CrearBloqueo(w http.ResponseWriter, r *http.Request) {
 
 	var peticion peticionBloqueo
 	if err := decodificarJSON(w, r, &peticion); err != nil {
-		escribirPeticionInvalida(w, "el cuerpo no es un JSON válido")
+		escribirErrorDeDecodificacion(w, r, err)
 		return
 	}
 
@@ -158,6 +151,13 @@ func (h *ManejadorAgenda) HuecosLibres(w http.ResponseWriter, r *http.Request) {
 	hasta, err := parsearFecha(consulta.Get("hasta"))
 	if err != nil {
 		escribirPeticionInvalida(w, "el parámetro hasta es obligatorio y tiene que ser una fecha AAAA-MM-DD")
+		return
+	}
+
+	// Un rango invertido es un query param mal formado, no una entidad
+	// semánticamente inválida: el contrato pide 400, no 422.
+	if hasta.Before(desde) {
+		escribirPeticionInvalida(w, "el parámetro hasta tiene que ser posterior o igual a desde")
 		return
 	}
 

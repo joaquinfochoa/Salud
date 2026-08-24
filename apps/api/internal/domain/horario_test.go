@@ -176,6 +176,48 @@ func TestNuevaSemanaSolapamiento(t *testing.T) {
 	})
 }
 
+func TestNuevaSemanaAcotaLaCantidadDeBloques(t *testing.T) {
+	// Sin este tope, entradas suficientes en un cuerpo de 1 MB llegan al
+	// verificador de solapamiento, que es O(n²) y acumula un error por cada
+	// par: 101 bloques bastan para probar que el guard corta antes de eso.
+	entradas := make([]EntradaHorarioSemanal, 101)
+	for i := range entradas {
+		entradas[i] = entradaHorarioValida()
+	}
+
+	_, err := NuevaSemana(uuid.New(), entradas)
+
+	var verr ErrorValidacion
+	if !errors.As(err, &verr) {
+		t.Fatalf("se esperaba ErrorValidacion, se obtuvo %T: %v", err, err)
+	}
+	if len(verr.Campos) != 1 || verr.Campos[0].Campo != "horarios" {
+		t.Errorf("se esperaba un único error en el campo horarios, se obtuvo %+v", verr.Campos)
+	}
+}
+
+func TestNuevaSemanaConCienBloquesEsValida(t *testing.T) {
+	entradas := make([]EntradaHorarioSemanal, 100)
+	for i := range entradas {
+		desde := i * 10
+		entradas[i] = EntradaHorarioSemanal{
+			DiaSemana:   "lunes",
+			Desde:       HoraDelDia{Minutos: desde}.String(),
+			Hasta:       HoraDelDia{Minutos: desde + 10}.String(),
+			DuracionMin: 10,
+			Modalidad:   "telemedicina",
+		}
+	}
+
+	semana, err := NuevaSemana(uuid.New(), entradas)
+	if err != nil {
+		t.Fatalf("100 bloques que no se pisan tienen que ser válidos, devolvió: %v", err)
+	}
+	if len(semana) != 100 {
+		t.Errorf("len(semana) = %d, se esperaba 100", len(semana))
+	}
+}
+
 func TestNuevaSemanaAcumulaErroresDeVariosBloques(t *testing.T) {
 	entradas := []EntradaHorarioSemanal{
 		{DiaSemana: "lunez", Desde: "09:00", Hasta: "13:00", DuracionMin: 50, Modalidad: "telemedicina"},

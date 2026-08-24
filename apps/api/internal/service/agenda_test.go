@@ -28,6 +28,14 @@ func dia(t *testing.T, fecha string) time.Time {
 	return instante(t, fecha+" 00:00")
 }
 
+// pDia es dia pero en puntero, para los parámetros opcionales de
+// ListarBloqueos.
+func pDia(t *testing.T, fecha string) *time.Time {
+	t.Helper()
+	d := dia(t, fecha)
+	return &d
+}
+
 // bancoDePrueba arma el stack real: repositorios en memoria, sin mocks.
 type bancoDePrueba struct {
 	profesionales *memory.Profesional
@@ -128,7 +136,7 @@ func TestCrearYListarBloqueos(t *testing.T) {
 		t.Fatalf("CrearBloqueo devolvió error: %v", err)
 	}
 
-	obtenidos, err := banco.agenda.ListarBloqueos(ctx, p.ID, dia(t, "2099-09-01"), dia(t, "2099-10-01"))
+	obtenidos, err := banco.agenda.ListarBloqueos(ctx, p.ID, pDia(t, "2099-09-01"), pDia(t, "2099-10-01"))
 	if err != nil {
 		t.Fatalf("ListarBloqueos devolvió error: %v", err)
 	}
@@ -163,7 +171,7 @@ func TestEliminarBloqueoDeOtroProfesional(t *testing.T) {
 	}
 
 	// y el bloqueo sigue existiendo
-	obtenidos, _ := banco.agenda.ListarBloqueos(ctx, uno.ID, dia(t, "2099-09-01"), dia(t, "2099-10-01"))
+	obtenidos, _ := banco.agenda.ListarBloqueos(ctx, uno.ID, pDia(t, "2099-09-01"), pDia(t, "2099-10-01"))
 	if len(obtenidos) != 1 {
 		t.Error("el bloqueo se borró igual")
 	}
@@ -257,5 +265,101 @@ func TestHuecosLibresRangoInvertido(t *testing.T) {
 	var verr domain.ErrorValidacion
 	if !errors.As(err, &verr) {
 		t.Errorf("se esperaba ErrorValidacion, se obtuvo %T: %v", err, err)
+	}
+}
+
+// TestHuecosLibresDesdeEnElPasadoSeAcotaAHoy es la regresión del agujero de
+// disponibilidad: pedir desde una fecha arbitrariamente vieja no tiene que
+// recorrer un día por cada uno de los últimos siglos, y el rango que informa
+// la respuesta tiene que ser honesto sobre eso.
+func TestHuecosLibresDesdeEnElPasadoSeAcotaAHoy(t *testing.T) {
+	ctx := context.Background()
+	banco := nuevoBancoDePrueba()
+	p := banco.crearProfesional(t)
+
+	banco.agenda.ahora = func() time.Time { return instante(t, lunesDePrueba+" 08:00") }
+
+	resultado, err := banco.agenda.HuecosLibres(ctx, p.ID, dia(t, "0001-01-01"), dia(t, lunesDePrueba))
+	if err != nil {
+		t.Fatalf("HuecosLibres devolvió error: %v", err)
+	}
+	if !resultado.Desde.Equal(dia(t, lunesDePrueba)) {
+		t.Errorf("Desde = %v, se esperaba hoy (%v), no la fecha pedida", resultado.Desde, dia(t, lunesDePrueba))
+	}
+}
+
+// TestHuecosLibresFiltraModalidadesQueElProfesionalYaNoOfrece cubre el
+// invariante entre servicios: verificarModalidades solo corre al escribir el
+// horario, y Profesional.Actualizar es otro camino de escritura del mismo
+// dato que no lo revalida.
+func TestHuecosLibresFiltraModalidadesQueElProfesionalYaNoOfrece(t *testing.T) {
+	ctx := context.Background()
+	banco := nuevoBancoDePrueba()
+
+	entrada := entradaValida()
+	entrada.Modalidades = []string{"telemedicina", "presencial"}
+	p, err := banco.svcProf.Crear(ctx, entrada)
+	if err != nil {
+		t.Fatalf("no se pudo crear el profesional: %v", err)
+	}
+
+	bloquePresencial := entradaHorarioLunes()
+	bloquePresencial.Modalidad = "presencial"
+	if _, err := banco.agenda.ReemplazarHorarios(ctx, p.ID, []domain.EntradaHorarioSemanal{bloquePresencial}); err != nil {
+		t.Fatalf("ReemplazarHorarios devolvió error: %v", err)
+	}
+
+	// el profesional deja de ofrecer presencial por otro camino de escritura,
+	// que no conoce el horario ya guardado
+	entradaSinPresencial := entrada
+	entradaSinPresencial.Modalidades = []string{"telemedicina"}
+	if _, err := banco.svcProf.Actualizar(ctx, p.ID, entradaSinPresencial); err != nil {
+		t.Fatalf("Actualizar devolvió error: %v", err)
+	}
+
+	banco.agenda.ahora = func() time.Time { return instante(t, "2026-08-01 00:00") }
+
+	resultado, err := banco.agenda.HuecosLibres(ctx, p.ID, dia(t, lunesDePrueba), dia(t, lunesDePrueba))
+	if err != nil {
+		t.Fatalf("HuecosLibres devolvió error: %v", err)
+	}
+	if len(resultado.Huecos) != 0 {
+		t.Errorf("se obtuvieron %d huecos presenciales de una modalidad que el profesional ya no ofrece", len(resultado.Huecos))
+	}
+}
+
+// TestListarBloqueosVentanaPorDefecto cubre el default de "vigentes y
+// futuros" con el reloj fijado por ConReloj, sin depender de time.Now ni
+// calcular fechas relativas al día en que corre el test.
+func TestListarBloqueosVentanaPorDefecto(t *testing.T) {
+	ctx := context.Background()
+	profesionales := memory.NuevoProfesional()
+	agenda := NuevaAgenda(profesionales, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo(),
+		ConReloj(func() time.Time { return instante(t, lunesDePrueba+" 00:00") }))
+
+	p, err := NuevoProfesional(profesionales).Crear(ctx, entradaValida())
+	if err != nil {
+		t.Fatalf("no se pudo crear el profesional: %v", err)
+	}
+
+	if _, err := agenda.CrearBloqueo(ctx, p.ID, domain.EntradaBloqueo{
+		Desde: dia(t, "2027-06-01"), // dentro de los dos años por defecto
+		Hasta: dia(t, "2027-06-10"),
+	}); err != nil {
+		t.Fatalf("CrearBloqueo devolvió error: %v", err)
+	}
+	if _, err := agenda.CrearBloqueo(ctx, p.ID, domain.EntradaBloqueo{
+		Desde: dia(t, "2029-06-01"), // más allá de los dos años por defecto
+		Hasta: dia(t, "2029-06-10"),
+	}); err != nil {
+		t.Fatalf("CrearBloqueo devolvió error: %v", err)
+	}
+
+	obtenidos, err := agenda.ListarBloqueos(ctx, p.ID, nil, nil)
+	if err != nil {
+		t.Fatalf("ListarBloqueos devolvió error: %v", err)
+	}
+	if len(obtenidos) != 1 {
+		t.Errorf("se obtuvieron %d bloqueos, se esperaba 1 dentro de la ventana de dos años", len(obtenidos))
 	}
 }

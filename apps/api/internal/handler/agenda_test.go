@@ -80,6 +80,27 @@ func TestPutHorarios(t *testing.T) {
 	}
 }
 
+// TestPutHorariosCuerpoDemasiadoGrande cubre que ReemplazarHorarios use
+// escribirErrorDeDecodificacion como el resto de los handlers: antes de eso,
+// un cuerpo de más de 1 MB daba 400 en esta ruta y 413 en las de profesional.
+func TestPutHorariosCuerpoDemasiadoGrande(t *testing.T) {
+	srv := servidorConAgenda(t)
+	p := crearProfesionalPorHTTP(t, srv)
+
+	entrada := `{"diaSemana":"lunes","desde":"09:00","hasta":"13:00","duracionMin":50,"modalidad":"telemedicina"},`
+	var sb strings.Builder
+	sb.WriteString(`{"horarios":[`)
+	for sb.Len() <= maxBytesCuerpo {
+		sb.WriteString(entrada)
+	}
+	cuerpo := strings.TrimSuffix(sb.String(), ",") + "]}"
+
+	resp := ejecutar(t, srv, http.MethodPut, "/api/v1/profesionales/"+p.ID+"/horarios", cuerpo)
+	if resp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Errorf("status = %d, se esperaba 413", resp.StatusCode)
+	}
+}
+
 func TestPutHorariosConBloqueSinHuecos(t *testing.T) {
 	srv := servidorConAgenda(t)
 	p := crearProfesionalPorHTTP(t, srv)
@@ -188,6 +209,21 @@ func TestCicloDeBloqueo(t *testing.T) {
 	}
 }
 
+// TestCrearBloqueoCuerpoDemasiadoGrande es la misma cobertura que
+// TestPutHorariosCuerpoDemasiadoGrande, para CrearBloqueo.
+func TestCrearBloqueoCuerpoDemasiadoGrande(t *testing.T) {
+	srv := servidorConAgenda(t)
+	p := crearProfesionalPorHTTP(t, srv)
+
+	motivo := strings.Repeat("x", maxBytesCuerpo+1)
+	cuerpo := `{"desde": "2099-01-01T00:00:00-03:00", "hasta": "2099-01-10T00:00:00-03:00", "motivo": "` + motivo + `"}`
+
+	resp := postear(t, srv, "/api/v1/profesionales/"+p.ID+"/bloqueos", cuerpo)
+	if resp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Errorf("status = %d, se esperaba 413", resp.StatusCode)
+	}
+}
+
 func TestCrearBloqueoEnElPasado(t *testing.T) {
 	srv := servidorConAgenda(t)
 	p := crearProfesionalPorHTTP(t, srv)
@@ -241,6 +277,20 @@ func TestGetHuecosConFechaMalFormada(t *testing.T) {
 	p := crearProfesionalPorHTTP(t, srv)
 
 	resp := obtener(t, srv, "/api/v1/profesionales/"+p.ID+"/huecos?desde=ayer&hasta=2099-09-07")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, se esperaba 400", resp.StatusCode)
+	}
+}
+
+// TestGetHuecosRangoInvertidoEs400 cubre el ajuste del contrato: un rango
+// invertido es un query param mal formado, no una entidad semánticamente
+// inválida, así que el handler lo rechaza con 400 antes de llegar al
+// servicio (que devolvería 422 vía ErrorValidacion).
+func TestGetHuecosRangoInvertidoEs400(t *testing.T) {
+	srv := servidorConAgenda(t)
+	p := crearProfesionalPorHTTP(t, srv)
+
+	resp := obtener(t, srv, "/api/v1/profesionales/"+p.ID+"/huecos?desde=2099-09-10&hasta=2099-09-01")
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, se esperaba 400", resp.StatusCode)
 	}

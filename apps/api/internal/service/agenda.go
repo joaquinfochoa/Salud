@@ -23,13 +23,34 @@ type Agenda struct {
 	ahora func() time.Time
 }
 
-func NuevaAgenda(profesionales repository.Profesional, horarios repository.HorarioSemanal, bloqueos repository.Bloqueo) *Agenda {
-	return &Agenda{
+// ventanaBloqueosAniosPorDefecto es cuánto hacia adelante se listan los
+// bloqueos vigentes y futuros cuando el cliente no pide un rango explícito.
+//
+// El dominio no le pone techo a cuán lejos se puede cargar un bloqueo (a
+// diferencia del horizonte de huecos, que sí lo tiene), pero "sin límite" en
+// la práctica es una ventana con un largo defendible, no "para siempre": dos
+// años cubre cualquier agenda médica real (vacaciones, licencias, cierres
+// programados) sin arrastrar el default a una fecha arbitrariamente lejana.
+const ventanaBloqueosAniosPorDefecto = 2
+
+// ConReloj fija el reloj que usa el servicio en vez del real. Sirve para que
+// los tests —de servicio o de handler— no dependan de time.Now ni tengan que
+// calcular fechas relativas al día en que corren.
+func ConReloj(ahora func() time.Time) func(*Agenda) {
+	return func(a *Agenda) { a.ahora = ahora }
+}
+
+func NuevaAgenda(profesionales repository.Profesional, horarios repository.HorarioSemanal, bloqueos repository.Bloqueo, opciones ...func(*Agenda)) *Agenda {
+	a := &Agenda{
 		profesionales: profesionales,
 		horarios:      horarios,
 		bloqueos:      bloqueos,
 		ahora:         func() time.Time { return time.Now().In(domain.ZonaHoraria) },
 	}
+	for _, opcion := range opciones {
+		opcion(a)
+	}
+	return a
 }
 
 // ResultadoHuecos lleva los huecos y el rango que de verdad se usó, que puede
@@ -84,11 +105,25 @@ func (s *Agenda) CrearBloqueo(ctx context.Context, profesionalID uuid.UUID, entr
 	return bloqueo, nil
 }
 
-func (s *Agenda) ListarBloqueos(ctx context.Context, profesionalID uuid.UUID, desde, hasta time.Time) ([]domain.Bloqueo, error) {
+// ListarBloqueos acepta desde y hasta opcionales: cuando el cliente no pide un
+// rango (nil), se listan los vigentes y futuros, una ventana que resuelve
+// s.ahora() y no la capa HTTP — es una regla de negocio, no de transporte, y
+// así queda testeable con el reloj fijo.
+func (s *Agenda) ListarBloqueos(ctx context.Context, profesionalID uuid.UUID, desde, hasta *time.Time) ([]domain.Bloqueo, error) {
 	if _, err := s.profesionales.ObtenerPorID(ctx, profesionalID); err != nil {
 		return nil, err
 	}
-	return s.bloqueos.ListarDeProfesional(ctx, profesionalID, desde, hasta)
+
+	ahora := s.ahora()
+	d, h := ahora, ahora.AddDate(ventanaBloqueosAniosPorDefecto, 0, 0)
+	if desde != nil {
+		d = *desde
+	}
+	if hasta != nil {
+		h = *hasta
+	}
+
+	return s.bloqueos.ListarDeProfesional(ctx, profesionalID, d, h)
 }
 
 // EliminarBloqueo exige que el bloqueo sea de ese profesional.
@@ -125,6 +160,18 @@ func (s *Agenda) HuecosLibres(ctx context.Context, profesionalID uuid.UUID, desd
 	desde = domain.InicioDelDia(desde)
 	hasta = domain.InicioDelDia(hasta)
 
+	// Un hueco en el pasado nunca es reservable, así que pedir desde 1900 no
+	// puede producir nada — pero sí puede recorrer 700.000 días. El horizonte
+	// acota hacia adelante; esto acota hacia atrás.
+	if hoy := domain.InicioDelDia(s.ahora()); desde.Before(hoy) {
+		desde = hoy
+	}
+
+	// El handler ya rechaza con 400 un rango invertido tal como lo mandó el
+	// cliente (ver ManejadorAgenda.HuecosLibres): esto es la defensa que
+	// sostiene la invariante para cualquier otro llamador del servicio, y
+	// también cubre el caso en que el recorte de arriba deja desde por delante
+	// de un hasta que era válido antes de recortar.
 	if hasta.Before(desde) {
 		return ResultadoHuecos{}, domain.ErrorValidacion{Campos: []domain.ErrorCampo{
 			{Campo: "hasta", Mensaje: "tiene que ser posterior o igual a desde"},
@@ -161,6 +208,14 @@ func (s *Agenda) HuecosLibres(ctx context.Context, profesionalID uuid.UUID, desd
 	if err != nil {
 		return ResultadoHuecos{}, err
 	}
+
+	// La modalidad se valida al guardar el horario, pero el profesional puede
+	// cambiar sus modalidades después por otro camino (service.Profesional.
+	// Actualizar, que no conoce el repositorio de horarios). Filtrar en la
+	// lectura es lo único que sobrevive a cualquier orden de escritura.
+	horarios = slices.DeleteFunc(horarios, func(h domain.HorarioSemanal) bool {
+		return !slices.Contains(profesional.Modalidades, h.Modalidad)
+	})
 
 	// el cálculo trabaja con el intervalo semiabierto [desde, finExclusivo)
 	finExclusivo := hasta.AddDate(0, 0, 1)

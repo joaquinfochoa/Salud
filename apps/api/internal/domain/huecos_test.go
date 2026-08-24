@@ -312,6 +312,38 @@ func TestGenerarRangoInvertido(t *testing.T) {
 	}
 }
 
+// TestGenerarRespetaLaHoraDeRelojEnUnCambioDeHuso es la única prueba del
+// repositorio que distingue construir el hueco con time.Date de sumarle una
+// duración al inicio del día. El 2008-10-19 (domingo) Argentina adelantó los
+// relojes: sumar aritmética de instantes desde la medianoche corre la hora en
+// vez de respetar la hora de reloj. Con fechas de 2026 esto no se nota porque
+// el país no tiene horario de verano desde 2009.
+//
+// El rango se pide más ancho que un solo día (17 al 20) para no chocar contra
+// el propio salto: pedir justo el 19 de 00:00 a 00:00 del día siguiente cae
+// exactamente en el instante que no existe, y el rango terminaría vacío antes
+// de llegar a generar nada.
+func TestGenerarRespetaLaHoraDeRelojEnUnCambioDeHuso(t *testing.T) {
+	desde, hasta := rango(t, "2008-10-18", "2008-10-20")
+
+	bloque := bloqueLunes()
+	bloque.DiaSemana = DiaDomingo
+
+	huecos := CalculoHuecos{
+		Horarios: []HorarioSemanal{bloque},
+		Desde:    desde,
+		Hasta:    hasta,
+		Ahora:    momento(t, "2008-10-01 00:00"),
+	}.Generar()
+
+	compararInicios(t, huecos, []string{
+		"2008-10-19 09:00",
+		"2008-10-19 09:50",
+		"2008-10-19 10:40",
+		"2008-10-19 11:30",
+	})
+}
+
 func TestGenerarSinHorarios(t *testing.T) {
 	desde, hasta := rango(t, lunes, lunesQueViene)
 

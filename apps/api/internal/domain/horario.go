@@ -11,6 +11,13 @@ import (
 const (
 	minDuracionMin = 10
 	maxDuracionMin = 480
+
+	// maxBloquesSemana acota cuántos bloques puede tener la semana de un
+	// profesional. Siete días de agenda no necesitan más que esto, y sin un
+	// tope el verificador de solapamiento —que es O(n²) y acumula un
+	// ErrorCampo por cada par que se pisa— convierte un cuerpo de 1 MB en
+	// varios GB de errores.
+	maxBloquesSemana = 100
 )
 
 // HorarioSemanal es un bloque del horario habitual de un profesional. El que
@@ -45,6 +52,12 @@ type EntradaHorarioSemanal struct {
 //
 // Una semana vacía es válida: un profesional puede dejar de atender.
 func NuevaSemana(profesionalID uuid.UUID, entradas []EntradaHorarioSemanal) ([]HorarioSemanal, error) {
+	if len(entradas) > maxBloquesSemana {
+		var verr ErrorValidacion
+		verr.agregar("horarios", fmt.Sprintf("no puede tener más de %d bloques", maxBloquesSemana))
+		return nil, verr
+	}
+
 	var verr ErrorValidacion
 	bloques := make([]HorarioSemanal, 0, len(entradas))
 
