@@ -207,6 +207,156 @@ paths:
               schema: { $ref: '#/components/schemas/Profesional' }
         '404': { $ref: '#/components/responses/NoEncontrado' }
 
+  /api/v1/profesionales/{id}/horarios:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+
+    get:
+      tags: [profesionales]
+      summary: El horario semanal del profesional
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ListaHorarios' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+    put:
+      tags: [profesionales]
+      summary: Reemplaza el horario semanal completo
+      description: |
+        Reemplazo total: la semana se edita como una unidad. Una lista vacía
+        deja al profesional sin horarios, que es legítimo.
+
+        Se rechaza con 422 si dos bloques del mismo día se solapan, si en algún
+        bloque no entra ninguna sesión, o si algún bloque usa una modalidad que
+        el profesional no declara ofrecer.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PeticionHorarios' }
+      responses:
+        '200':
+          description: La semana resultante, ordenada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ListaHorarios' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '422': { $ref: '#/components/responses/ValidacionFallida' }
+
+  /api/v1/profesionales/{id}/bloqueos:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+
+    get:
+      tags: [profesionales]
+      summary: Los bloqueos del profesional
+      parameters:
+        - name: desde
+          in: query
+          schema: { type: string, format: date }
+        - name: hasta
+          in: query
+          schema: { type: string, format: date }
+      description: |
+        Sin `desde` ni `hasta` devuelve los vigentes y futuros. Con rango,
+        devuelve los que lo pisan, aunque sea en parte.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ListaBloqueos' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+    post:
+      tags: [profesionales]
+      summary: Bloquea un rango de la agenda
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PeticionBloqueo' }
+      responses:
+        '201':
+          description: Creado
+          headers:
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Bloqueo' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '422': { $ref: '#/components/responses/ValidacionFallida' }
+
+  /api/v1/profesionales/{id}/bloqueos/{bloqueoId}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: bloqueoId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [profesionales]
+      summary: Elimina un bloqueo
+      description: |
+        El bloqueo tiene que ser de ese profesional. Borrar el de otro desde
+        esta ruta es un 404.
+      responses:
+        '204': { description: Eliminado }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+  /api/v1/profesionales/{id}/huecos:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: desde
+        in: query
+        required: true
+        schema: { type: string, format: date }
+      - name: hasta
+        in: query
+        required: true
+        schema: { type: string, format: date }
+    get:
+      tags: [profesionales]
+      summary: Los huecos reservables del profesional
+      description: |
+        `desde` y `hasta` son fechas y las dos entran: del 25 al 27 incluye los
+        tres días.
+
+        El rango se recorta al horizonte del profesional, no se rechaza, y
+        `rango` en la respuesta informa el que de verdad se usó.
+
+        Un profesional dado de baja devuelve una lista vacía, no un error.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ListaHuecos' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '422': { $ref: '#/components/responses/ValidacionFallida' }
+
 components:
   schemas:
     Especialidad:
@@ -248,6 +398,8 @@ components:
         # siempre presente: es null cuando el profesional está activo, nunca
         # se omite. Sin esto un cliente estricto la trataría como opcional.
         - dadoDeBajaEn
+        - anticipacionMinimaMin
+        - horizonteDias
       properties:
         id:
           type: string
@@ -299,6 +451,20 @@ components:
         dadoDeBajaEn:
           type: [string, 'null']
           format: date-time
+        anticipacionMinimaMin:
+          type: integer
+          minimum: 0
+          maximum: 10080
+          default: 120
+          description: |
+            Con cuánta anticipación mínima, en minutos, este profesional acepta
+            reservas. El tope es una semana.
+        horizonteDias:
+          type: integer
+          minimum: 1
+          maximum: 180
+          default: 60
+          description: Cuántos días de agenda expone hacia adelante.
 
     PeticionProfesional:
       type: object
@@ -342,6 +508,20 @@ components:
         obrasSociales:
           type: array
           items: { type: string }
+        anticipacionMinimaMin:
+          type: integer
+          minimum: 0
+          maximum: 10080
+          default: 120
+          description: |
+            Con cuánta anticipación mínima, en minutos, este profesional acepta
+            reservas. El tope es una semana.
+        horizonteDias:
+          type: integer
+          minimum: 1
+          maximum: 180
+          default: 60
+          description: Cuántos días de agenda expone hacia adelante.
       additionalProperties: false
 
     ListaProfesionales:
@@ -360,6 +540,119 @@ components:
               description: Cuántos hay en total con esos filtros, no en la página
             limite: { type: integer }
             desplazamiento: { type: integer }
+
+    DiaSemana:
+      type: string
+      enum: [lunes, martes, miercoles, jueves, viernes, sabado, domingo]
+
+    HorarioSemanal:
+      type: object
+      required: [diaSemana, desde, hasta, duracionMin, modalidad]
+      properties:
+        diaSemana:
+          $ref: '#/components/schemas/DiaSemana'
+        desde:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          description: |
+            Hora de reloj, no un instante. "Atiendo de 9 a 13" significa las 9
+            del reloj del profesional, siempre.
+          example: "09:00"
+        hasta:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          example: "13:00"
+        duracionMin:
+          type: integer
+          minimum: 10
+          maximum: 480
+          description: |
+            Duración de cada sesión. Va en el bloque y no en el profesional
+            porque una teleconsulta y una presencial no duran lo mismo.
+          example: 50
+        modalidad:
+          $ref: '#/components/schemas/Modalidad'
+
+    ListaHorarios:
+      type: object
+      required: [horarios]
+      properties:
+        horarios:
+          type: array
+          items: { $ref: '#/components/schemas/HorarioSemanal' }
+
+    Bloqueo:
+      type: object
+      required: [id, desde, hasta, motivo, creadoEn]
+      properties:
+        id: { type: string, format: uuid }
+        desde: { type: string, format: date-time }
+        hasta: { type: string, format: date-time }
+        motivo:
+          type: string
+          maxLength: 200
+          description: Opcional. Puede ser una cadena vacía.
+        creadoEn: { type: string, format: date-time }
+
+    PeticionBloqueo:
+      type: object
+      required: [desde, hasta]
+      properties:
+        desde: { type: string, format: date-time }
+        hasta: { type: string, format: date-time }
+        motivo: { type: string, maxLength: 200 }
+      additionalProperties: false
+
+    ListaBloqueos:
+      type: object
+      required: [datos]
+      properties:
+        datos:
+          type: array
+          items: { $ref: '#/components/schemas/Bloqueo' }
+
+    Hueco:
+      type: object
+      required: [inicio, fin, modalidad]
+      properties:
+        inicio: { type: string, format: date-time }
+        fin: { type: string, format: date-time }
+        modalidad: { $ref: '#/components/schemas/Modalidad' }
+
+    ListaHuecos:
+      type: object
+      required: [datos, rango]
+      properties:
+        datos:
+          type: array
+          items: { $ref: '#/components/schemas/Hueco' }
+        rango:
+          type: object
+          required: [desde, hasta]
+          description: |
+            El rango que de verdad se usó, que puede ser menor al pedido si el
+            horizonte del profesional lo recortó.
+          properties:
+            desde: { type: string, format: date }
+            hasta: { type: string, format: date }
+
+    PeticionHorarios:
+      type: object
+      required: [horarios]
+      properties:
+        horarios:
+          type: array
+          items:
+            type: object
+            required: [diaSemana, desde, hasta, duracionMin, modalidad]
+            properties:
+              diaSemana: { $ref: '#/components/schemas/DiaSemana' }
+              desde: { type: string, example: "09:00" }
+              hasta: { type: string, example: "13:00" }
+              duracionMin: { type: integer, example: 50 }
+              modalidad: { $ref: '#/components/schemas/Modalidad' }
+            additionalProperties: false
+      additionalProperties: false
 
     Problema:
       type: object
