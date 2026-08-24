@@ -270,6 +270,7 @@ convención de C que nadie recuerda.
 
 | Regla | Por qué |
 |---|---|
+| La semana no puede tener más de 100 bloques | `verificarSolapamiento` es O(n²) y acumula un error por cada par que se pisa. Sin tope, los ~10.700 bloques válidos que entran en el límite de 1 MB del cuerpo producen 57 millones de errores y matan el proceso. Siete días de agenda no necesitan más de 100. |
 | `Desde` < `Hasta` en un bloque | Un bloque que termina antes de empezar no es nada |
 | Dos bloques del mismo día no se solapan | "Lunes 9-13" y "Lunes 12-15" es ambiguo: casi siempre un error de carga |
 | `DuracionMin` entre 10 y 480 | Menos de diez minutos no es una consulta; más de ocho horas tampoco |
@@ -433,9 +434,14 @@ Reglas que necesitan más de una entidad, y por eso viven acá:
    lista vacía, no un error. Lo único que sí rechaza es un rango invertido, que
    no es una preferencia sino un error.
 
-   Como el horizonte de cada profesional ya está acotado a 180 días por la
-   validación de la sección 3, el recorte alcanza para proteger el cálculo: no
-   hace falta un segundo tope en la API.
+   **También acota hacia atrás.** Este párrafo decía antes que el horizonte
+   alcanzaba para proteger el cálculo, y era falso: el horizonte acota hacia
+   adelante y el bucle del cálculo corre hacia atrás. Un `desde` sin cota
+   —`0001-01-01` es una fecha válida— hace recorrer 739.911 días, medido en
+   casi once segundos de CPU con una semana de sesiones de diez minutos, en una
+   sola petición sin autenticar. `desde` se recorta a hoy: un hueco en el
+   pasado no es reservable, así que el recorte no pierde nada y además vuelve
+   honesto el `rango.desde` que informa la respuesta.
 
 5. **`ListarBloqueos` sin rango devuelve los vigentes y futuros**, es decir
    aquellos cuyo `Hasta` es posterior a `ahora`. El handler traduce la ausencia
