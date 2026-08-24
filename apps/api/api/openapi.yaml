@@ -647,9 +647,23 @@ components:
             required: [diaSemana, desde, hasta, duracionMin, modalidad]
             properties:
               diaSemana: { $ref: '#/components/schemas/DiaSemana' }
-              desde: { type: string, example: "09:00" }
-              hasta: { type: string, example: "13:00" }
-              duracionMin: { type: integer, example: 50 }
+              # Las restricciones repiten las de HorarioSemanal a propósito: si
+              # el pedido admitiera lo que la respuesta prohíbe, un cliente
+              # generado desde este contrato mandaría horarios que su propio
+              # schema de respuesta declara inválidos.
+              desde:
+                type: string
+                pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+                example: "09:00"
+              hasta:
+                type: string
+                pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+                example: "13:00"
+              duracionMin:
+                type: integer
+                minimum: 10
+                maximum: 480
+                example: 50
               modalidad: { $ref: '#/components/schemas/Modalidad' }
             additionalProperties: false
       additionalProperties: false
