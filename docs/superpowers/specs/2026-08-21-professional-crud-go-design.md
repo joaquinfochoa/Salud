@@ -450,7 +450,7 @@ Prefijo `/api/v1`.
 | `GET` | `/profesionales` | Lista con filtros y paginación |
 | `POST` | `/profesionales` | Crea |
 | `GET` | `/profesionales/{id}` | Trae por ID |
-| `GET` | `/profesionales/por-slug/{slug}` | Trae por slug — es lo que usará `/p/:slug` en el front |
+| `GET` | `/perfiles/{slug}` | Trae por slug — es lo que usará `/p/:slug` en el front (recurso propio, no bajo `/profesionales`: revisión posterior movió el slug para no chocar con las rutas de agenda de igual largo) |
 | `PUT` | `/profesionales/{id}` | Reemplaza los campos editables |
 | `DELETE` | `/profesionales/{id}` | Baja lógica |
 | `POST` | `/profesionales/{id}/reactivar` | Revierte la baja |

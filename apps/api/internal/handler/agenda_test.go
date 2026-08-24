@@ -144,7 +144,14 @@ func TestCicloDeBloqueo(t *testing.T) {
 	p := crearProfesionalPorHTTP(t, srv)
 	base := "/api/v1/profesionales/" + p.ID + "/bloqueos"
 
-	cuerpo := `{"desde": "2099-09-10T00:00:00-03:00", "hasta": "2099-09-20T00:00:00-03:00", "motivo": "Vacaciones"}`
+	// El listado se pide sin desde/hasta más abajo, así que cae en la ventana
+	// por defecto (dos años desde hoy): el bloqueo tiene que caer dentro de
+	// eso, no en una fecha clavada como 2099 que hoy queda afuera y además
+	// envejece mal.
+	ahora := time.Now().In(domain.ZonaHoraria)
+	desde := ahora.AddDate(0, 0, 30).Format(time.RFC3339)
+	hasta := ahora.AddDate(0, 0, 40).Format(time.RFC3339)
+	cuerpo := `{"desde": "` + desde + `", "hasta": "` + hasta + `", "motivo": "Vacaciones"}`
 	resp := postear(t, srv, base, cuerpo)
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, se esperaba 201", resp.StatusCode)

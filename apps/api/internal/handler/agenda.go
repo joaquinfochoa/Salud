@@ -67,11 +67,13 @@ func (h *ManejadorAgenda) ListarBloqueos(w http.ResponseWriter, r *http.Request)
 	// para que la interfaz del repositorio no necesite punteros ni centinelas.
 	//
 	// El dominio no le pone techo a cuán lejos se puede cargar un bloqueo (a
-	// diferencia del horizonte de huecos, que sí lo tiene), así que "sin
-	// límite" necesita un horizonte lo bastante lejano como para no recortar
-	// ningún bloqueo real.
+	// diferencia del horizonte de huecos, que sí lo tiene), pero "sin límite"
+	// en la práctica es una ventana con un largo defendible, no "para
+	// siempre": dos años cubre cualquier agenda médica real (vacaciones,
+	// licencias, cierres programados) sin arrastrar el default a una fecha
+	// arbitrariamente lejana.
 	desde := ahora
-	hasta := ahora.AddDate(100, 0, 0)
+	hasta := ahora.AddDate(2, 0, 0)
 
 	if crudo := consulta.Get("desde"); crudo != "" {
 		fecha, err := parsearFecha(crudo)

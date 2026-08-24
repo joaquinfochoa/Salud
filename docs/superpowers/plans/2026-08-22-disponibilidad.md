@@ -4067,7 +4067,9 @@ func NuevoRouter(ph *ManejadorProfesional, ah *ManejadorAgenda) http.Handler {
 }
 ```
 
-Nota sobre las colisiones: `POST /profesionales/{id}/reactivar` y `GET /profesionales/por-slug/{slug}` ya comparten forma y se separan por el método. Las rutas nuevas tienen literales distintos en la última posición (`horarios`, `bloqueos`, `huecos`), así que el `ServeMux` las prefiere sobre `{id}` por especificidad. Si alguna se registra sin su verbo adelante, el `ServeMux` entra en pánico al arrancar.
+Nota sobre las colisiones: `POST /profesionales/{id}/reactivar` y las rutas nuevas comparten forma con otras del mismo largo y se separan por el método. Las rutas nuevas tienen literales distintos en la última posición (`horarios`, `bloqueos`, `huecos`), así que el `ServeMux` las prefiere sobre `{id}` por especificidad. Si alguna se registra sin su verbo adelante, el `ServeMux` entra en pánico al arrancar.
+
+(Revisión posterior: la ruta vieja del perfil público por slug bajo `/profesionales` chocaba de forma irresoluble con estas tres rutas nuevas —mismo largo de cinco segmentos, literal nuevo en una posición distinta en cada par— y se movió a `GET /api/v1/perfiles/{slug}`, su propio recurso. Ver `apps/api/internal/handler/router.go`.)
 
 - [ ] **Step 7: Cablear en `main.go`**
 

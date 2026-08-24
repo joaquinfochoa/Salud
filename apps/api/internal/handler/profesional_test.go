@@ -204,12 +204,35 @@ func TestObtenerPorIDYPorSlug(t *testing.T) {
 		t.Errorf("GET por id: status = %d, se esperaba 200", porID.StatusCode)
 	}
 
-	porSlug := obtener(t, srv, "/api/v1/profesionales/por-slug/"+creado.Slug)
+	porSlug := obtener(t, srv, "/api/v1/perfiles/"+creado.Slug)
 	if porSlug.StatusCode != http.StatusOK {
 		t.Errorf("GET por slug: status = %d, se esperaba 200", porSlug.StatusCode)
 	}
 	if decodificarProfesional(t, porSlug).ID != creado.ID {
 		t.Error("GET por slug devolvió otro profesional")
+	}
+}
+
+// TestPerfilPorSlugReemplazaALaRutaVieja confirma la ruta nueva y que la
+// vieja (el slug bajo /profesionales, con un segmento fijo delante) dejó de
+// existir: sus cinco segmentos ya no calzan con ningún patrón registrado (el
+// tercer segmento tendría que ser "horarios", "bloqueos" o "huecos"), así que
+// el ServeMux la resuelve como cualquier ruta inexistente: 404 problem+json.
+func TestPerfilPorSlugReemplazaALaRutaVieja(t *testing.T) {
+	srv := nuevoServidorDePrueba(t)
+	creado := decodificarProfesional(t, postear(t, srv, "/api/v1/profesionales", cuerpoValido))
+
+	nueva := obtener(t, srv, "/api/v1/perfiles/"+creado.Slug)
+	if nueva.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/v1/perfiles/{slug}: status = %d, se esperaba 200", nueva.StatusCode)
+	}
+	if decodificarProfesional(t, nueva).ID != creado.ID {
+		t.Error("la ruta nueva devolvió otro profesional")
+	}
+
+	vieja := obtener(t, srv, "/api/v1/profesionales/por-slug/"+creado.Slug)
+	if vieja.StatusCode != http.StatusNotFound {
+		t.Errorf("la ruta vieja tenía que dejar de existir (404), dio %d", vieja.StatusCode)
 	}
 }
 

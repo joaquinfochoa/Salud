@@ -16,6 +16,7 @@ servers:
 
 tags:
   - name: profesionales
+  - name: perfiles
   - name: salud
 
 paths:
@@ -189,16 +190,19 @@ paths:
         '400': { $ref: '#/components/responses/PeticionInvalida' }
         '404': { $ref: '#/components/responses/NoEncontrado' }
 
-  /api/v1/profesionales/por-slug/{slug}:
+  /api/v1/perfiles/{slug}:
     parameters:
       - name: slug
         in: path
         required: true
         schema: { type: string }
     get:
-      tags: [profesionales]
-      summary: Trae un profesional por su slug público
-      description: Es lo que consume la página `/p/{slug}` del frontend.
+      tags: [perfiles]
+      summary: Trae el perfil público de un profesional por su slug
+      description: |
+        Es lo que consume la página `/p/{slug}` del frontend. Vive en su
+        propio recurso, distinto de `profesionales`, porque es de lectura
+        pública y no expone lo administrativo del CRUD.
       responses:
         '200':
           description: OK
@@ -293,6 +297,7 @@ paths:
           description: Creado
           headers:
             Location:
+              description: URL del recurso creado
               schema: { type: string }
           content:
             application/json:

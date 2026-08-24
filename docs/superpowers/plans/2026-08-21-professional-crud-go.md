@@ -2974,7 +2974,12 @@ paths:
         '400': { $ref: '#/components/responses/PeticionInvalida' }
         '404': { $ref: '#/components/responses/NoEncontrado' }
 
-  /api/v1/profesionales/por-slug/{slug}:
+  # Nota histórica: esta ruta se registró originalmente bajo /profesionales,
+  # con un segmento fijo delante del slug. Una revisión posterior (al sumar
+  # las rutas de agenda) la movió a /api/v1/perfiles/{slug}, su propio
+  # recurso, porque esa forma vieja chocaba de forma irresoluble con las
+  # nuevas rutas de agenda del mismo largo. Ver apps/api/internal/handler/router.go.
+  /api/v1/perfiles/{slug}:
     parameters:
       - name: slug
         in: path
@@ -4242,7 +4247,9 @@ func TestObtenerPorIDYPorSlug(t *testing.T) {
 		t.Errorf("GET por id: status = %d, se esperaba 200", porID.StatusCode)
 	}
 
-	porSlug := obtener(t, srv, "/api/v1/profesionales/por-slug/"+creado.Slug)
+	// Nota histórica: la ruta se registró originalmente bajo /profesionales;
+	// una revisión posterior la movió a /api/v1/perfiles/{slug}.
+	porSlug := obtener(t, srv, "/api/v1/perfiles/"+creado.Slug)
 	if porSlug.StatusCode != http.StatusOK {
 		t.Errorf("GET por slug: status = %d, se esperaba 200", porSlug.StatusCode)
 	}
@@ -4640,11 +4647,16 @@ func NuevoRouter(ph *ManejadorProfesional) http.Handler {
 	mux.HandleFunc("POST /api/v1/profesionales/{id}/reactivar", ph.Reactivar)
 
 	// Esta ruta y la de reactivar tienen la misma cantidad de segmentos y la
-	// misma forma: `.../profesionales/por-slug/reactivar` encajaría en las dos.
-	// Lo que las separa es el método, no la especificidad — por eso todos los
-	// patrones acá llevan el verbo adelante. Si alguno lo pierde, el ServeMux
-	// entra en pánico al registrar, no al recibir la petición.
-	mux.HandleFunc("GET /api/v1/profesionales/por-slug/{slug}", ph.ObtenerPorSlug)
+	// misma forma. Lo que las separa es el método, no la especificidad — por
+	// eso todos los patrones acá llevan el verbo adelante. Si alguno lo
+	// pierde, el ServeMux entra en pánico al registrar, no al recibir la
+	// petición.
+	//
+	// Nota histórica: acá se registraba bajo /profesionales, con un segmento
+	// fijo delante del slug. Una revisión posterior la movió a
+	// /api/v1/perfiles/{slug} porque chocaba de forma irresoluble con las
+	// rutas de agenda que se agregaron después.
+	mux.HandleFunc("GET /api/v1/perfiles/{slug}", ph.ObtenerPorSlug)
 
 	// El orden es de afuera hacia adentro. IDPeticion va primero para que el
 	// log lo tenga; RegistrarPeticiones envuelve a RecuperarPanic para que un panic
@@ -5745,9 +5757,10 @@ ID=$(curl -s -X POST "$BASE" -H 'Content-Type: application/json' -d '{
   "zona":"CABA","obrasSociales":["OSDE"]
 }' | python -c "import sys,json; print(json.load(sys.stdin)['id'])")
 
-# lectura por id y por slug
+# lectura por id y por slug (nota histórica: la ruta por slug se movió a
+# /api/v1/perfiles/{slug} en una revisión posterior)
 curl -s "$BASE/$ID" | head -c 200
-curl -s "$BASE/por-slug/ana-perez" | head -c 200
+curl -s "http://localhost:8080/api/v1/perfiles/ana-perez" | head -c 200
 
 # edición
 curl -s -X PUT "$BASE/$ID" -H 'Content-Type: application/json' -d '{

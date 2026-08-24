@@ -22,25 +22,25 @@ func NuevoRouter(ph *ManejadorProfesional, ah *ManejadorAgenda) http.Handler {
 	mux.HandleFunc("DELETE /api/v1/profesionales/{id}", ph.DarDeBaja)
 	mux.HandleFunc("POST /api/v1/profesionales/{id}/reactivar", ph.Reactivar)
 
-	// Esta ruta y la de reactivar tienen la misma cantidad de segmentos y la
-	// misma forma: `.../profesionales/por-slug/reactivar` encajaría en las dos.
-	// Lo que las separa es el método, no la especificidad — por eso todos los
-	// patrones acá llevan el verbo adelante. Si alguno lo pierde, el ServeMux
-	// entra en pánico al registrar, no al recibir la petición.
-	//
-	// Esa separación por método no alcanza para por-slug frente a los GET
-	// nuevos: por-slug/{slug}, {id}/horarios, {id}/bloqueos y {id}/huecos son
-	// los cuatro GET de cinco segmentos, y en cada par el literal nuevo queda
-	// en una posición distinta a la de por-slug (uno lo tiene en el cuarto
-	// segmento, el otro en el quinto). El ServeMux exige que un patrón domine
-	// al otro en todas las posiciones donde difieren, y acá ninguno domina —
-	// para "/profesionales/por-slug/horarios" harían falta los dos a la vez.
-	// Van los cuatro bajo un único patrón, resuelto a mano.
-	mux.HandleFunc("GET /api/v1/profesionales/{a}/{b}", despacharSegundoSegmento(ph, ah))
+	// El perfil público vive en su propio recurso, no en /profesionales. Antes
+	// vivía ahí, con un segmento fijo delante del slug, y esos cinco
+	// segmentos chocaban de forma irresoluble con los otros tres GET de cinco
+	// segmentos ({id}/horarios, {id}/bloqueos, {id}/huecos): en cada par el
+	// literal nuevo quedaba en una posición distinta a la de esa ruta vieja
+	// (uno en el cuarto segmento, el otro en el quinto), y el ServeMux exige
+	// que un patrón domine al otro en todas las posiciones donde difieren —
+	// ninguno dominaba, así que ambos patrones matcheaban la misma URL.
+	// Con /perfiles/{slug} el recurso tiene cuatro segmentos contra los cinco
+	// de profesionales: prefijo distinto, sin ambigüedad posible, y la tabla
+	// vuelve a ser solo `mux.HandleFunc` sin despacho a mano.
+	mux.HandleFunc("GET /api/v1/perfiles/{slug}", ph.ObtenerPorSlug)
 
+	mux.HandleFunc("GET /api/v1/profesionales/{id}/horarios", ah.ListarHorarios)
 	mux.HandleFunc("PUT /api/v1/profesionales/{id}/horarios", ah.ReemplazarHorarios)
+	mux.HandleFunc("GET /api/v1/profesionales/{id}/bloqueos", ah.ListarBloqueos)
 	mux.HandleFunc("POST /api/v1/profesionales/{id}/bloqueos", ah.CrearBloqueo)
 	mux.HandleFunc("DELETE /api/v1/profesionales/{id}/bloqueos/{bloqueoId}", ah.EliminarBloqueo)
+	mux.HandleFunc("GET /api/v1/profesionales/{id}/huecos", ah.HuecosLibres)
 
 	// El orden es de afuera hacia adentro. IDPeticion va primero para que el
 	// log lo tenga; RegistrarPeticiones envuelve a RecuperarPanic para que un panic
@@ -50,37 +50,6 @@ func NuevoRouter(ph *ManejadorProfesional, ah *ManejadorAgenda) http.Handler {
 
 func healthz(w http.ResponseWriter, _ *http.Request) {
 	escribirJSON(w, http.StatusOK, map[string]string{"estado": "ok"})
-}
-
-// despacharSegundoSegmento resuelve a mano la ambigüedad de especificidad
-// entre por-slug/{slug} y los tres GET nuevos: mira el valor real de cada
-// segmento y llama al handler que corresponde, reponiendo el nombre de
-// parámetro que ese handler espera (id o slug).
-//
-// Esto sigue siendo ruteo, no una decisión de negocio: ningún handler queda
-// al tanto de que existe esta ambigüedad.
-func despacharSegundoSegmento(ph *ManejadorProfesional, ah *ManejadorAgenda) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		primero, segundo := r.PathValue("a"), r.PathValue("b")
-
-		if primero == "por-slug" {
-			r.SetPathValue("slug", segundo)
-			ph.ObtenerPorSlug(w, r)
-			return
-		}
-
-		r.SetPathValue("id", primero)
-		switch segundo {
-		case "horarios":
-			ah.ListarHorarios(w, r)
-		case "bloqueos":
-			ah.ListarBloqueos(w, r)
-		case "huecos":
-			ah.HuecosLibres(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	}
 }
 
 // envolverErroresDeRuteo convierte a application/problem+json los dos casos
