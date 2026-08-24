@@ -16,7 +16,8 @@ func nuevoServidorDePrueba(t *testing.T) *httptest.Server {
 	t.Helper()
 	repo := memory.NuevoProfesional()
 	svc := service.NuevoProfesional(repo)
-	srv := httptest.NewServer(NuevoRouter(NuevoProfesional(svc)))
+	svcAgenda := service.NuevaAgenda(repo, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo())
+	srv := httptest.NewServer(NuevoRouter(NuevoProfesional(svc), NuevaAgenda(svcAgenda)))
 	t.Cleanup(srv.Close)
 	return srv
 }

@@ -30,19 +30,23 @@ type peticionProfesional struct {
 	Modalidades            []string `json:"modalidades"`
 	Zona                   string   `json:"zona"`
 	ObrasSociales          []string `json:"obrasSociales"`
+	AnticipacionMinimaMin  *int     `json:"anticipacionMinimaMin"`
+	HorizonteDias          *int     `json:"horizonteDias"`
 }
 
 func (r peticionProfesional) aEntrada() domain.EntradaProfesional {
 	return domain.EntradaProfesional{
-		Nombre:         r.Nombre,
-		Apellido:       r.Apellido,
-		Matricula:      r.Matricula,
-		Especialidad:   r.Especialidad,
-		Bio:            r.Bio,
-		PrecioConsulta: r.PrecioConsultaCentavos,
-		Modalidades:    r.Modalidades,
-		Zona:           r.Zona,
-		ObrasSociales:  r.ObrasSociales,
+		Nombre:                r.Nombre,
+		Apellido:              r.Apellido,
+		Matricula:             r.Matricula,
+		Especialidad:          r.Especialidad,
+		Bio:                   r.Bio,
+		PrecioConsulta:        r.PrecioConsultaCentavos,
+		Modalidades:           r.Modalidades,
+		Zona:                  r.Zona,
+		ObrasSociales:         r.ObrasSociales,
+		AnticipacionMinimaMin: r.AnticipacionMinimaMin,
+		HorizonteDias:         r.HorizonteDias,
 	}
 }
 
@@ -63,6 +67,8 @@ type respuestaProfesional struct {
 	CreadoEn               time.Time  `json:"creadoEn"`
 	ActualizadoEn          time.Time  `json:"actualizadoEn"`
 	DadoDeBajaEn           *time.Time `json:"dadoDeBajaEn"`
+	AnticipacionMinimaMin  int        `json:"anticipacionMinimaMin"`
+	HorizonteDias          int        `json:"horizonteDias"`
 }
 
 func aRespuesta(p domain.Profesional) respuestaProfesional {
@@ -93,6 +99,8 @@ func aRespuesta(p domain.Profesional) respuestaProfesional {
 		CreadoEn:               p.CreadoEn,
 		ActualizadoEn:          p.ActualizadoEn,
 		DadoDeBajaEn:           p.DadoDeBajaEn,
+		AnticipacionMinimaMin:  p.AnticipacionMinimaMin,
+		HorizonteDias:          p.HorizonteDias,
 	}
 }
 

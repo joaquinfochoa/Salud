@@ -13,7 +13,8 @@ import (
 func nuevoRouterDePrueba() http.Handler {
 	repo := memory.NuevoProfesional()
 	svc := service.NuevoProfesional(repo)
-	return NuevoRouter(NuevoProfesional(svc))
+	svcAgenda := service.NuevaAgenda(repo, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo())
+	return NuevoRouter(NuevoProfesional(svc), NuevaAgenda(svcAgenda))
 }
 
 // TestRutaInexistenteDevuelveProblemJSON cubre el 404 que arma ServeMux

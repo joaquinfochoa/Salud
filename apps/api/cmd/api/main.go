@@ -41,12 +41,18 @@ func ejecutar() error {
 	// Migrar a PostgreSQL es cambiar esta línea por
 	// postgres.NuevoProfesional(db). Nada más.
 	repo := memory.NuevoProfesional()
+	repoHorarios := memory.NuevoHorarioSemanal()
+	repoBloqueos := memory.NuevoBloqueo()
 
 	svc := service.NuevoProfesional(repo)
+	svcAgenda := service.NuevaAgenda(repo, repoHorarios, repoBloqueos)
 
 	// El seed va después del servicio y escribe a través de él: así queda
 	// sujeto a las mismas reglas que cualquier alta, y esta función sigue
 	// siendo el único lugar que sabe qué repositorio está en juego.
+	//
+	// Los repositorios de agenda no se siembran: un profesional sembrado
+	// arranca sin horarios, y cargarlos es parte de probar la API.
 	if cfg.EsDesarrollo() {
 		if err := sembrar(context.Background(), svc); err != nil {
 			return fmt.Errorf("cargando el seed: %w", err)
@@ -54,7 +60,10 @@ func ejecutar() error {
 		slog.Info("seed de desarrollo cargado")
 	}
 
-	router := handler.NuevoRouter(handler.NuevoProfesional(svc))
+	router := handler.NuevoRouter(
+		handler.NuevoProfesional(svc),
+		handler.NuevaAgenda(svcAgenda),
+	)
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Puerto,

@@ -37,10 +37,11 @@ linters:
       - path: _test\.go
         linters: [errcheck, gosec]
       # bodyclose no sigue el cierre del body cuando ocurre vía t.Cleanup
-      # dentro de una función helper (internal/handler/profesional_test.go);
+      # dentro de una función helper (postear/obtener/ejecutar, en
+      # profesional_test.go; agenda_test.go reutiliza esos mismos helpers);
       # el body sí se cierra, es una limitación del análisis estático del
       # linter, no un leak real.
-      - path: internal/handler/profesional_test\.go
+      - path: internal/handler/(profesional|agenda)_test\.go
         linters: [bodyclose]
 
 formatters:
