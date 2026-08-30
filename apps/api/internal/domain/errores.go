@@ -55,6 +55,21 @@ var (
 	// el endpoint se arma el padrón de usuarios sin adivinar una sola
 	// contraseña.
 	ErrCredencialesInvalidas = errors.New("credenciales invalidas")
+
+	// ErrHuecoTomado lo devuelve el repositorio al escribir: dos pacientes
+	// pidieron el mismo hueco. El servicio también lo chequea antes, pero la
+	// garantía está en la escritura bajo lock, igual que la matrícula.
+	ErrHuecoTomado = errors.New("el hueco ya fue reservado")
+
+	// ErrPacienteSolapado es el mismo choque visto desde el otro lado: el
+	// paciente ya tiene otro turno activo a esa hora, aunque sea con otro
+	// profesional.
+	ErrPacienteSolapado = errors.New("el paciente ya tiene otro turno a esa hora")
+
+	// ErrTurnoAjeno lo devuelve el servicio cuando quien opera no es ni el
+	// paciente ni el profesional del turno. Es distinto de ErrNoAutorizado
+	// —que habla de ser dueño de un perfil— porque un turno tiene dos dueños.
+	ErrTurnoAjeno = errors.New("el turno no es tuyo")
 )
 
 // ErrorCampo señala un campo puntual. Las etiquetas JSON coinciden con el
