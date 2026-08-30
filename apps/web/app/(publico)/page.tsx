@@ -68,6 +68,57 @@ export default async function Buscar({ searchParams }: PageProps<"/">) {
           ))}
         </ul>
       )}
+
+      {/* Debajo del buscador y de los resultados, nunca arriba. El hero de esta
+          página es el buscador: `/` es la que más autoridad de SEO tiene, y
+          gastarla en un hero de marketing sin contenido indexable es tirarla.
+          En un marketplace de salud la búsqueda orgánica es el canal de
+          adquisición, y es lo que hacen Doctoralia y Zocdoc. */}
+      <section className="mt-16 border-t border-borde pt-10">
+        <h2 className="text-xl font-bold tracking-tight">Cómo funciona</h2>
+
+        {/* Numerados porque acá el orden SÍ es información: son tres pasos que
+            pasan en ese orden, no tres características. */}
+        <ol className="mt-5 grid gap-5 sm:grid-cols-3">
+          <Paso numero="1" titulo="Buscá">
+            Filtrá por especialidad y zona. Cada perfil muestra la matrícula, el
+            precio y los horarios libres de verdad.
+          </Paso>
+          <Paso numero="2" titulo="Elegí el horario">
+            Los horarios que ves son los que el profesional tiene disponibles
+            ahora. No hay lista de espera ni llamada de confirmación.
+          </Paso>
+          <Paso numero="3" titulo="Reservá">
+            Queda confirmado en el momento. Lo podés ver y cancelar desde{" "}
+            <span className="whitespace-nowrap">Mis turnos</span>.
+          </Paso>
+        </ol>
+
+        <p className="mt-8 text-sm text-tinta-suave">
+          Todos los profesionales publican su número de matrícula. Salud no
+          reemplaza una consulta de urgencia.
+        </p>
+      </section>
     </main>
+  );
+}
+
+function Paso({
+  numero,
+  titulo,
+  children,
+}: {
+  numero: string;
+  titulo: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <li>
+      <span className="font-horas text-2xl font-black tabular-nums text-apagado">
+        {numero}
+      </span>
+      <h3 className="mt-1 font-bold">{titulo}</h3>
+      <p className="mt-1 text-sm text-tinta-suave">{children}</p>
+    </li>
   );
 }

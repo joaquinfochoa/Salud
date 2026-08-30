@@ -22,12 +22,24 @@ export function Encabezado() {
           Salud
         </Link>
 
-        <Link
-          href="/turnos"
-          className="rounded-lg px-3 py-2 text-sm font-semibold transition-colors hover:bg-muted"
-        >
-          Mis turnos
-        </Link>
+        <div className="flex items-center gap-1">
+          {/* El link a la captación va en el header además del pie: alguien que
+              llega buscando turno y resulta ser profesional tiene que
+              encontrarlo sin scrollear hasta abajo. En texto suave para no
+              competir con la búsqueda, que es lo que la página vino a hacer. */}
+          <Link
+            href="/profesionales"
+            className="rounded-lg px-3 py-2 text-sm font-semibold text-tinta-suave transition-colors hover:bg-muted hover:text-tinta"
+          >
+            Soy profesional
+          </Link>
+          <Link
+            href="/turnos"
+            className="rounded-lg px-3 py-2 text-sm font-semibold transition-colors hover:bg-muted"
+          >
+            Mis turnos
+          </Link>
+        </div>
       </nav>
     </header>
   );
