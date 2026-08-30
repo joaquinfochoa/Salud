@@ -189,7 +189,7 @@ almacenamiento, no puede suplantar a nadie.
 
 | Pieza | Decisión |
 |---|---|
-| Contraseña | Value object. Mínimo 12 caracteres, máximo 72 **bytes** (no caracteres: bcrypt trunca en silencio en el byte 72, y una contraseña con acentos llega antes de lo que parece). Sin reglas de composición —mayúscula, número, símbolo—: alargan sin agregar entropía real y empujan a la gente a `Password1!`. |
+| Contraseña | Value object. Mínimo 8 caracteres (el piso de NIST SP 800-63B), máximo 72 **bytes** (no caracteres: bcrypt trunca en silencio en el byte 72, y una contraseña con acentos llega antes de lo que parece). Sin reglas de composición —mayúscula, número, símbolo—: alargan sin agregar entropía real y empujan a la gente a `Password1!`. |
 | Hash de contraseña | `golang.org/x/crypto/bcrypt`, cost default. **Segunda dependencia del proyecto**; actualizar la convención del README. No se escribe a mano. |
 | Email | `net/mail.ParseAddress` (stdlib) + minúsculas + tope de largo. Sin regex propia: validar email "bien" rompe direcciones válidas. |
 | Cookie | `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, expiración explícita. |
