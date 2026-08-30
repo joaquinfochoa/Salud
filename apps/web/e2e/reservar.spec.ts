@@ -92,3 +92,28 @@ test("las páginas públicas llegan completas desde el servidor", async ({ reque
   // Y los horarios, que son el contenido que hace útil la página.
   expect(perfil).toMatch(/>\d{2}:\d{2}</);
 });
+
+/**
+ * La tira de días son links y no estado de React, y esto es lo que lo prueba.
+ *
+ * Con el JavaScript apagado el perfil tiene que seguir dejando cambiar de día:
+ * es la razón por la que la pantalla que más importa para la búsqueda orgánica
+ * se renderiza entera en el servidor.
+ */
+test.describe("sin JavaScript", () => {
+  test.use({ javaScriptEnabled: false });
+
+  test("la agenda del perfil deja cambiar de día", async ({ page }) => {
+    await page.goto("/perfiles/martin-gonzalez");
+
+    const agenda = page.getByRole("list").filter({ has: page.getByRole("link", { name: /^\d{2}:\d{2}$/ }) });
+    const primerDia = await page.getByRole("heading", { level: 3 }).first().textContent();
+
+    // El segundo día con horarios de la tira: el primero ya está abierto.
+    const dias = page.getByRole("link", { name: /(Lun|Mar|Mié|Jue|Vie|Sáb|Dom)\s*\d+/ });
+    await dias.nth(1).click();
+
+    await expect(page.getByRole("heading", { level: 3 }).first()).not.toHaveText(primerDia ?? "");
+    await expect(agenda.getByRole("link").first()).toBeVisible();
+  });
+});

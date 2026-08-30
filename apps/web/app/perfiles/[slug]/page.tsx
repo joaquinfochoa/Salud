@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Hora } from "@/componentes/hora";
+import { Calendario } from "@/componentes/calendario";
+import { armarDias, primerDiaConHuecos } from "@/lib/dias";
 import { ESPECIALIDADES } from "@/componentes/tarjeta-profesional";
 import { ErrorAPI, pedir, type Profesional } from "@/lib/api";
-import { formatearDia, formatearPrecio } from "@/lib/formato";
-import { huecosPorDia } from "@/lib/huecos";
+import { formatearPrecio } from "@/lib/formato";
+import { huecosDe } from "@/lib/huecos";
 
 const MODALIDADES: Record<string, string> = {
   telemedicina: "Videollamada",
@@ -45,10 +46,25 @@ export async function generateMetadata({
 }
 
 // Server Component, y tiene que seguir siéndolo.
-export default async function Perfil({ params }: PageProps<"/perfiles/[slug]">) {
+export default async function Perfil({
+  params,
+  searchParams,
+}: PageProps<"/perfiles/[slug]">) {
   const { slug } = await params;
+  const { dia } = await searchParams;
   const p = await traerPerfil(slug);
-  const porDia = await huecosPorDia(p.id);
+
+  const dias = armarDias(await huecosDe(p.id));
+  const hayHuecos = dias.some((d) => d.huecos.length > 0);
+
+  // El día elegido viaja en la URL y no en estado de React: así la tira de días
+  // funciona sin JavaScript, cada día queda como una dirección que se puede
+  // compartir, y la página sigue siendo un Server Component. Con el prefetch de
+  // Next cambiar de día se siente instantáneo igual.
+  const diaElegido =
+    typeof dia === "string" && dias.some((d) => d.fecha === dia)
+      ? dia
+      : primerDiaConHuecos(dias);
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
@@ -87,38 +103,24 @@ export default async function Perfil({ params }: PageProps<"/perfiles/[slug]">) 
       <section className="mt-8">
         <h2 className="text-xl font-bold tracking-tight">Elegí un horario</h2>
 
-        {porDia.size === 0 ? (
-          <p className="mt-4 rounded-xl border border-borde bg-superficie p-8 text-center text-tinta-suave">
-            {p.estado === "activo"
-              ? "No tiene horarios disponibles en las próximas dos semanas."
-              : "No está atendiendo en este momento."}
-          </p>
-        ) : (
-          <div className="mt-4 grid gap-4">
-            {[...porDia.entries()].map(([dia, huecos]) => (
-              <div key={dia} className="rounded-xl border border-borde bg-superficie p-4">
-                <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-tinta-suave">
-                  {formatearDia(huecos[0].inicio)}
-                </h3>
-                <ul className="flex flex-wrap gap-2">
-                  {huecos.map((hueco) => (
-                    <li key={hueco.inicio}>
-                      {/* Un link y no un botón: funciona sin JavaScript, se
-                          puede abrir en otra pestaña, y el horario elegido
-                          viaja en la URL en vez de en estado. */}
-                      <Link
-                        href={`/perfiles/${slug}/reservar?inicio=${encodeURIComponent(hueco.inicio)}`}
-                        className="block rounded-lg border border-borde px-3 py-2 transition-colors hover:border-accion hover:bg-accent"
-                      >
-                        <Hora inicio={hueco.inicio} />
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        )}
+        <div className="mt-4">
+          {hayHuecos ? (
+            <Calendario
+              dias={dias}
+              diaElegido={diaElegido}
+              hrefDelDia={(fecha) => `/perfiles/${slug}?dia=${fecha}`}
+              hrefDelHueco={(hueco) =>
+                `/perfiles/${slug}/reservar?inicio=${encodeURIComponent(hueco.inicio)}`
+              }
+            />
+          ) : (
+            <p className="rounded-xl border border-borde bg-superficie p-8 text-center text-tinta-suave">
+              {p.estado === "activo"
+                ? "No tiene horarios disponibles en las próximas dos semanas."
+                : "No está atendiendo en este momento."}
+            </p>
+          )}
+        </div>
       </section>
     </main>
   );

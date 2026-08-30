@@ -2,15 +2,11 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import {
-  ErrorAPI,
-  pedir,
-  type Hueco,
-  type ListaHuecos,
-  type Profesional,
-  type Turno,
-} from "@/lib/api";
-import { comoFecha, formatearDia, formatearHora, formatearPrecio } from "@/lib/formato";
+import { Calendario } from "./calendario";
+import { ErrorAPI, pedir, type Hueco, type Profesional, type Turno } from "@/lib/api";
+import { formatearDia, formatearHora, formatearPrecio } from "@/lib/formato";
+import { armarDias, primerDiaConHuecos } from "@/lib/dias";
+import { huecosDe } from "@/lib/huecos";
 import { Hora } from "./hora";
 
 type Paso = "elegir" | "confirmar" | "listo";
@@ -43,18 +39,6 @@ export function Reservar({
   const [enviando, setEnviando] = useState(false);
 
   const rutaActual = `/perfiles/${slug}/reservar${elegido ? `?inicio=${encodeURIComponent(elegido.inicio)}` : ""}`;
-
-  async function recargarHuecos() {
-    const hoy = new Date();
-    const hasta = new Date(hoy);
-    hasta.setDate(hoy.getDate() + 14);
-
-    const respuesta = await pedir<ListaHuecos>(
-      `/api/v1/profesionales/${profesional.id}/huecos` +
-        `?desde=${comoFecha(hoy)}&hasta=${comoFecha(hasta)}`,
-    );
-    setHuecos(respuesta.datos);
-  }
 
   async function confirmar(formulario: FormData) {
     if (!elegido) return;
@@ -120,7 +104,7 @@ export function Reservar({
         // Alguien tomó el hueco mientras completaba el formulario. La cuenta ya
         // existe y la sesión está abierta, así que volver a elegir es un click:
         // no se pierde nada de lo que hizo.
-        await recargarHuecos();
+        setHuecos(await huecosDe(profesional.id));
         setElegido(null);
         setPaso("elegir");
         setAviso({ mensaje: "Ese horario se tomó recién. Elegí otro." });
@@ -230,7 +214,17 @@ function ElegirHorario({
   huecos: Hueco[];
   onElegir: (hueco: Hueco) => void;
 }) {
-  if (huecos.length === 0) {
+  const dias = armarDias(huecos);
+  // Acá el día elegido sí es estado: navegar para cambiarlo desmontaría el
+  // componente y se perdería el formulario a medio llenar. Se deriva y no se
+  // guarda crudo porque después de un 409 los huecos se recargan, y el día que
+  // estaba abierto puede haberse quedado sin ninguno.
+  const [pedido, setDia] = useState("");
+  const dia = dias.some((d) => d.fecha === pedido && d.huecos.length > 0)
+    ? pedido
+    : primerDiaConHuecos(dias);
+
+  if (!dias.some((d) => d.huecos.length > 0)) {
     return (
       <p className="mt-6 rounded-xl border border-borde bg-superficie p-8 text-center text-tinta-suave">
         No quedan horarios disponibles en las próximas dos semanas.
@@ -238,34 +232,9 @@ function ElegirHorario({
     );
   }
 
-  const porDia = new Map<string, Hueco[]>();
-  for (const hueco of huecos) {
-    const dia = hueco.inicio.slice(0, 10);
-    porDia.set(dia, [...(porDia.get(dia) ?? []), hueco]);
-  }
-
   return (
-    <div className="mt-6 grid gap-4">
-      {[...porDia.entries()].map(([dia, delDia]) => (
-        <div key={dia} className="rounded-xl border border-borde bg-superficie p-4">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-tinta-suave">
-            {formatearDia(delDia[0].inicio)}
-          </h2>
-          <ul className="flex flex-wrap gap-2">
-            {delDia.map((hueco) => (
-              <li key={hueco.inicio}>
-                <button
-                  type="button"
-                  onClick={() => onElegir(hueco)}
-                  className="rounded-lg border border-borde px-3 py-2 transition-colors hover:border-accion hover:bg-accent"
-                >
-                  <Hora inicio={hueco.inicio} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
+    <div className="mt-6">
+      <Calendario dias={dias} diaElegido={dia} onDia={setDia} onHueco={onElegir} />
     </div>
   );
 }

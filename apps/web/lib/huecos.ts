@@ -37,11 +37,8 @@ export async function proximoHueco(profesionalID: string): Promise<Hueco | null>
   }
 }
 
-/** Los huecos de un profesional en un rango, agrupados por día. */
-export async function huecosPorDia(
-  profesionalID: string,
-  dias = 14,
-): Promise<Map<string, Hueco[]>> {
+/** Todos los huecos de un profesional en los próximos `dias`, ya ordenados. */
+export async function huecosDe(profesionalID: string, dias = 14): Promise<Hueco[]> {
   const hoy = new Date();
   const hasta = new Date(hoy);
   hasta.setDate(hoy.getDate() + dias);
@@ -50,11 +47,5 @@ export async function huecosPorDia(
     `/api/v1/profesionales/${profesionalID}/huecos` +
       `?desde=${comoFecha(hoy)}&hasta=${comoFecha(hasta)}`,
   );
-
-  const porDia = new Map<string, Hueco[]>();
-  for (const hueco of respuesta.datos) {
-    const dia = hueco.inicio.slice(0, 10);
-    porDia.set(dia, [...(porDia.get(dia) ?? []), hueco]);
-  }
-  return porDia;
+  return respuesta.datos;
 }

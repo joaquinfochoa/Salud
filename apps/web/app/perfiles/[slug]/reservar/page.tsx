@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { Reservar } from "@/componentes/reservar";
 import { ErrorAPI, pedir, type Profesional } from "@/lib/api";
-import { huecosPorDia } from "@/lib/huecos";
+import { huecosDe } from "@/lib/huecos";
 
 // La página es un Server Component que trae los datos y se los pasa al
 // componente de cliente. Así el primer render llega completo desde el servidor
@@ -21,13 +21,13 @@ export default async function PaginaReservar({
     throw e;
   }
 
-  const porDia = await huecosPorDia(profesional.id);
+  const huecos = await huecosDe(profesional.id);
 
   return (
     <Reservar
       slug={slug}
       profesional={profesional}
-      huecosIniciales={[...porDia.values()].flat()}
+      huecosIniciales={huecos}
       inicioPreseleccionado={typeof inicio === "string" ? inicio : null}
     />
   );
