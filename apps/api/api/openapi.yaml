@@ -26,6 +26,7 @@ servers:
 
 tags:
   - name: autenticacion
+  - name: turnos
   - name: profesionales
   - name: perfiles
   - name: salud
@@ -145,6 +146,67 @@ paths:
             Set-Cookie:
               description: La cookie de sesión vencida
               schema: { type: string }
+
+  /api/v1/turnos:
+    get:
+      tags: [turnos]
+      summary: Mis turnos como paciente
+      description: |
+        Devuelve los turnos del usuario de la sesión, cancelados incluidos.
+
+        **No acepta un `pacienteId` como filtro**, a propósito: el paciente es
+        siempre el de la sesión. Aceptarlo convertiría este endpoint en una
+        forma de leer la agenda de cualquiera.
+      security:
+        - sesionCookie: []
+      parameters:
+        - name: desde
+          in: query
+          schema: { type: string, format: date-time }
+          description: Opcional. Sin rango se devuelven los vigentes y futuros.
+        - name: hasta
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Los turnos del paciente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ListaTurnos' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+
+  /api/v1/turnos/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+
+    delete:
+      tags: [turnos]
+      summary: Cancela un turno
+      description: |
+        Lo pueden hacer **las dos partes**: el paciente y el profesional. Por eso
+        la ruta no cuelga de `/profesionales/{id}` — no es una operación del
+        dueño de la agenda.
+
+        No es idempotente: cancelar un turno ya cancelado da 422. A diferencia
+        del logout, repetir la operación probablemente significa que el cliente
+        cree algo distinto de lo que pasó.
+
+        Un turno que ya empezó tampoco se cancela: reescribirlo hacia atrás
+        borraría el registro de una consulta que ocurrió.
+      security:
+        - sesionCookie: []
+      responses:
+        '204':
+          description: Turno cancelado
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/NoAutorizado' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '422': { $ref: '#/components/responses/ValidacionFallida' }
 
   /api/v1/profesionales:
     get:
@@ -519,6 +581,78 @@ paths:
         '404': { $ref: '#/components/responses/NoEncontrado' }
         '422': { $ref: '#/components/responses/ValidacionFallida' }
 
+  /api/v1/profesionales/{id}/turnos:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+
+    get:
+      tags: [turnos]
+      summary: La agenda ocupada del profesional
+      description: |
+        **Privado, a diferencia de `/horarios` y `/bloqueos`.** La asimetría es
+        deliberada: los huecos libres son información de oferta y son públicos,
+        pero la agenda *ocupada* dice quién es paciente de quién, y eso es dato
+        de salud bajo Ley 25.326.
+
+        Solo lo responde el dueño del perfil.
+      security:
+        - sesionCookie: []
+      parameters:
+        - name: desde
+          in: query
+          schema: { type: string, format: date-time }
+          description: Opcional. Sin rango se devuelven los vigentes y futuros.
+        - name: hasta
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: La agenda del profesional
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ListaTurnos' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/NoAutorizado' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+    post:
+      tags: [turnos]
+      summary: Reserva un turno
+      description: |
+        El paciente sale de la sesión, nunca del cuerpo.
+
+        El `inicio` tiene que coincidir exactamente con un hueco libre de
+        `GET .../huecos`. Si dos pacientes piden el mismo al mismo tiempo, el
+        segundo recibe 409.
+      security:
+        - sesionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PeticionTurno' }
+      responses:
+        '201':
+          description: Turno reservado
+          headers:
+            Location:
+              description: URL del turno creado
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Turno' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/TurnoNoDisponible' }
+        '413': { $ref: '#/components/responses/CuerpoDemasiadoGrande' }
+        '415': { $ref: '#/components/responses/TipoDeContenidoInvalido' }
+        '422': { $ref: '#/components/responses/ValidacionFallida' }
+
 components:
   securitySchemes:
     sesionCookie:
@@ -584,6 +718,83 @@ components:
               description: |
                 El perfil profesional del usuario, o `null` si no tiene. No
                 tener perfil es normal: es la mitad de los usuarios.
+
+    EstadoTurno:
+      type: string
+      enum: [reservado, cancelado]
+      description: |
+        Solo dos estados. Un turno pasado no necesita uno propio: eso lo dice
+        el reloj. "atendido" y "ausente" se agregarán el día que algo consuma
+        ese dato —cobro, reputación o política de ausencias—.
+
+    PeticionTurno:
+      type: object
+      required: [inicio]
+      description: |
+        Solo `inicio` y `motivo`. **No** se aceptan `fin` ni `modalidad`: los
+        dos salen del hueco que se está tomando. Aceptarlos del cliente sería
+        dejar que se invente un turno de tres horas en una agenda de cincuenta
+        minutos, o una modalidad que el profesional no ofrece.
+      properties:
+        inicio:
+          type: string
+          format: date-time
+          description: |
+            Tiene que coincidir **exactamente** con el inicio de un hueco de
+            `GET /api/v1/profesionales/{id}/huecos`. Cualquier otro valor es
+            422: es la única validación de calendario del alta, y por eso
+            arrastra sola el horario, los bloqueos, la anticipación mínima, el
+            horizonte y el estado del profesional.
+        motivo:
+          type: string
+          maxLength: 500
+          description: Opcional. Puede ser una cadena vacía.
+
+    Turno:
+      type: object
+      required:
+        [id, profesionalId, pacienteId, inicio, fin, modalidad, estado, motivo,
+         creadoEn, canceladoEn, canceladoPor]
+      properties:
+        id: { type: string, format: uuid }
+        profesionalId: { type: string, format: uuid }
+        pacienteId:
+          type: string
+          format: uuid
+          description: Es el id del `Usuario` que reservó. No hay entidad paciente aparte.
+        inicio: { type: string, format: date-time }
+        fin:
+          type: string
+          format: date-time
+          description: |
+            Copia del hueco al momento de reservar, no una lectura del horario
+            actual. Si el profesional cambia el bloque después, este turno
+            sigue diciendo lo que se pactó.
+        modalidad: { $ref: '#/components/schemas/Modalidad' }
+        estado: { $ref: '#/components/schemas/EstadoTurno' }
+        motivo: { type: string }
+        creadoEn: { type: string, format: date-time }
+        canceladoEn:
+          type: [string, 'null']
+          format: date-time
+        canceladoPor:
+          type: [string, 'null']
+          format: uuid
+          description: |
+            El `Usuario` que canceló. Comparándolo contra `pacienteId` se sabe
+            si fue el paciente o el profesional.
+
+    ListaTurnos:
+      type: object
+      required: [datos]
+      description: |
+        Sin paginación: no es una colección paginada sino una ventana temporal,
+        igual que `ListaBloqueos`. Incluye los cancelados — son parte del
+        historial de las dos partes.
+      properties:
+        datos:
+          type: array
+          items: { $ref: '#/components/schemas/Turno' }
 
     Especialidad:
       type: string
@@ -961,6 +1172,14 @@ components:
 
     EmailEnUso:
       description: Ya existe una cuenta con ese email
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problema' }
+
+    TurnoNoDisponible:
+      description: |
+        El hueco ya fue reservado por otro paciente, o el paciente ya tiene
+        otro turno activo a esa hora con otro profesional.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problema' }
