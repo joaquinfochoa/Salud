@@ -60,7 +60,12 @@ export default function LayoutPanel({ children }: LayoutProps<"/">) {
 
   // Sin perfil todavía: el alta se dibuja sin navegación, porque no hay a dónde
   // navegar hasta que exista el perfil.
-  if (sinPerfil) return <>{children}</>;
+  //
+  // Se exige `esAlta` además de `sinPerfil`: apenas se crea el perfil, la
+  // pantalla navega a /panel y este layout todavía tiene el estado viejo. Sin
+  // esa condición, /panel se dibujaba sin proveedor y usePanel() explotaba
+  // antes de que el efecto llegara a traer el perfil recién creado.
+  if (sinPerfil && esAlta) return <>{children}</>;
 
   if (!panel) {
     return (
