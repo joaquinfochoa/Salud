@@ -12,22 +12,49 @@ export default function MisTurnos() {
   const [turnos, setTurnos] = useState<Turno[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const alFallar = useCallback(
+    (e: unknown) => {
+      if (e instanceof ErrorAPI && e.estado === 401) {
+        // Sin sesión no hay nada que mostrar. El `volver` hace que después de
+        // entrar vuelva acá y no a la home.
+        router.replace("/entrar?volver=/turnos");
+        return;
+      }
+      throw e;
+    },
+    [router],
+  );
+
   const cargar = useCallback(async () => {
     try {
       const lista = await pedir<ListaTurnos>("/api/v1/turnos");
       setTurnos(lista.datos);
     } catch (e) {
-      if (e instanceof ErrorAPI && e.estado === 401) {
-        router.replace("/entrar?volver=/turnos");
-        return;
-      }
-      throw e;
+      alFallar(e);
     }
-  }, [router]);
+  }, [alFallar]);
 
   useEffect(() => {
-    void cargar();
-  }, [cargar]);
+    // El setState va en el callback de la promesa, no en el cuerpo del efecto:
+    // así el render no cascadea, que es lo que pide la regla de React.
+    //
+    // Y `vigente` arregla algo que no es de estilo: sin él, una respuesta que
+    // llega después de que la persona se fue de la pantalla llama a setState
+    // sobre un componente desmontado.
+    let vigente = true;
+
+    pedir<ListaTurnos>("/api/v1/turnos")
+      .then((lista) => {
+        if (vigente) setTurnos(lista.datos);
+      })
+      .catch((e) => {
+        if (vigente) alFallar(e);
+      });
+
+    return () => {
+      vigente = false;
+    };
+  }, [alFallar]);
 
   async function cancelar(turno: Turno) {
     // Cancelar un turno no se deshace, y del otro lado hay una persona que

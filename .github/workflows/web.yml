@@ -1,0 +1,95 @@
+name: web
+
+on:
+  push:
+    branches: [main, refactor-gian]
+    # También apps/api: el E2E corre contra la API real, así que un cambio del
+    # back puede romper el front sin tocar una línea de TypeScript. Es
+    # precisamente lo que este workflow existe para atrapar.
+    paths: ['apps/web/**', 'apps/api/**', 'package.json', 'pnpm-*.yaml', '.github/workflows/web.yml']
+  pull_request:
+    paths: ['apps/web/**', 'apps/api/**', 'package.json', 'pnpm-*.yaml', '.github/workflows/web.yml']
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: El contrato generado está al día
+        # Si alguien cambia openapi.yaml y no regenera los tipos, el front
+        # compila contra una forma que la API ya no devuelve. Regenerar y
+        # comparar es la única forma de que eso falle acá y no en producción.
+        run: |
+          pnpm --filter web contrato
+          git diff --exit-code apps/web/lib/contrato.ts
+
+      - run: pnpm lint
+
+      - run: pnpm test
+
+      - run: pnpm build
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: apps/api/go.sum
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Compilar la API
+        working-directory: apps/api
+        run: go build -o /tmp/api ./cmd/api
+
+      - name: Levantar la API
+        # Espera de verdad a que responda, no duerme un número inventado de
+        # segundos: en un runner lento, un sleep fijo es un test que falla sin
+        # ninguna razón real.
+        run: |
+          APP_ENV=development /tmp/api &
+          for i in $(seq 1 30); do
+            if curl -sf localhost:8080/healthz > /dev/null; then
+              echo "la API responde"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "la API no respondió en 30 segundos"
+          exit 1
+
+      - name: Instalar el navegador
+        run: pnpm --filter web exec playwright install --with-deps chromium
+
+      - name: Correr el E2E
+        run: pnpm e2e
+
+      - name: Guardar el reporte si falló
+        # Solo si falló: un reporte por cada corrida verde es basura que nadie
+        # mira y que ocupa la cuota de artefactos.
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7
