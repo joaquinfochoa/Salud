@@ -59,7 +59,7 @@ func ejecutar() error {
 	// Los repositorios de agenda no se siembran: un profesional sembrado
 	// arranca sin horarios, y cargarlos es parte de probar la API.
 	if cfg.EsDesarrollo() {
-		if err := sembrar(context.Background(), svcAuth, svc); err != nil {
+		if err := sembrar(context.Background(), svcAuth, svc, svcAgenda); err != nil {
 			return fmt.Errorf("cargando el seed: %w", err)
 		}
 		slog.Info("seed de desarrollo cargado")

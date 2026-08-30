@@ -11,9 +11,12 @@ import (
 
 func TestSembrar(t *testing.T) {
 	ctx := context.Background()
-	svc := service.NuevoProfesional(memory.NuevoProfesional())
+	repoProf := memory.NuevoProfesional()
+	svc := service.NuevoProfesional(repoProf)
+	agenda := service.NuevaAgenda(repoProf, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo(), memory.NuevoTurno())
+	auth := service.NuevaAutenticacion(memory.NuevoUsuario(), memory.NuevaSesion())
 
-	if err := sembrar(ctx, service.NuevaAutenticacion(memory.NuevoUsuario(), memory.NuevaSesion()), svc); err != nil {
+	if err := sembrar(ctx, auth, svc, agenda); err != nil {
 		t.Fatalf("sembrar devolvió error: %v", err)
 	}
 
@@ -40,5 +43,35 @@ func TestSembrar(t *testing.T) {
 			t.Errorf("matrícula repetida en el seed: %q", p.Matricula)
 		}
 		matriculas[p.Matricula.String()] = true
+	}
+}
+
+// El seed deja a los cuatro con la semana cargada. Sin esto el front arranca
+// mostrando "todavía no publicó horarios" en cada tarjeta, que es un producto
+// que se ve roto en cada reinicio.
+func TestSembrarCargaHorarios(t *testing.T) {
+	ctx := context.Background()
+	repoProf := memory.NuevoProfesional()
+	svc := service.NuevoProfesional(repoProf)
+	agenda := service.NuevaAgenda(repoProf, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo(), memory.NuevoTurno())
+	auth := service.NuevaAutenticacion(memory.NuevoUsuario(), memory.NuevaSesion())
+
+	if err := sembrar(ctx, auth, svc, agenda); err != nil {
+		t.Fatalf("sembrar devolvió error: %v", err)
+	}
+
+	ps, _, err := svc.Listar(ctx, repository.Filtro{Limite: 100})
+	if err != nil {
+		t.Fatalf("Listar devolvió error: %v", err)
+	}
+
+	for _, p := range ps {
+		semana, err := agenda.ListarHorarios(ctx, p.ID)
+		if err != nil {
+			t.Fatalf("ListarHorarios de %s: %v", p.NombreCompleto(), err)
+		}
+		if len(semana) == 0 {
+			t.Errorf("%s no tiene ningún bloque cargado", p.NombreCompleto())
+		}
 	}
 }

@@ -27,7 +27,7 @@ func precio(centavos int64) *int64 {
 	return &centavos
 }
 
-func sembrar(ctx context.Context, auth *service.Autenticacion, svc *service.Profesional) error {
+func sembrar(ctx context.Context, auth *service.Autenticacion, svc *service.Profesional, agenda *service.Agenda) error {
 	entradas := []domain.EntradaProfesional{
 		{
 			Nombre:         "Martín",
@@ -78,7 +78,7 @@ func sembrar(ctx context.Context, auth *service.Autenticacion, svc *service.Prof
 	// Cada profesional necesita su usuario antes que su perfil: el perfil ya no
 	// puede existir sin dueño. El servicio pone la fecha de alta y resuelve
 	// slug y matrícula, igual que en cualquier POST.
-	for _, entrada := range entradas {
+	for i, entrada := range entradas {
 		u, _, err := auth.Registrar(ctx, domain.EntradaUsuario{
 			Email:      emailSemilla(entrada.Nombre, entrada.Apellido),
 			Contrasena: contrasenaSemilla,
@@ -89,11 +89,57 @@ func sembrar(ctx context.Context, auth *service.Autenticacion, svc *service.Prof
 			return fmt.Errorf("seed: registrando a %s %s: %w", entrada.Nombre, entrada.Apellido, err)
 		}
 
-		if _, err := svc.Crear(ctx, u.ID, entrada); err != nil {
+		p, err := svc.Crear(ctx, u.ID, entrada)
+		if err != nil {
 			return fmt.Errorf("seed: dando de alta a %s %s: %w", entrada.Nombre, entrada.Apellido, err)
+		}
+
+		if _, _, err := agenda.ReemplazarHorarios(ctx, u.ID, p.ID, horarioSemilla(entrada, i)); err != nil {
+			return fmt.Errorf("seed: cargando el horario de %s %s: %w", entrada.Nombre, entrada.Apellido, err)
 		}
 	}
 	return nil
+}
+
+// horarioSemilla le da a cada profesional una semana cargada.
+//
+// Antes el seed los dejaba sin agenda a propósito —"cargarlos es parte de
+// probar la API"— y era correcto mientras la API fuera su propio consumidor.
+// Con un front, un profesional sin horarios es una tarjeta que dice "todavía no
+// publicó horarios": el producto arranca vacío en cada reinicio, y el E2E no
+// tiene ningún hueco que elegir.
+//
+// La modalidad sale de la primera que ofrece el profesional, porque el dominio
+// rechaza un bloque con una modalidad que la persona no atiende.
+func horarioSemilla(entrada domain.EntradaProfesional, i int) []domain.EntradaHorarioSemanal {
+	modalidad := entrada.Modalidades[0]
+
+	// Cada uno atiende días y horas distintas. Cuatro agendas idénticas hacen
+	// que el listado se vea generado, que es justo lo que un seed no tiene que
+	// parecer.
+	semanas := [][]domain.EntradaHorarioSemanal{
+		{
+			{DiaSemana: "lunes", Desde: "09:00", Hasta: "13:00", DuracionMin: 50, Modalidad: modalidad},
+			{DiaSemana: "miercoles", Desde: "14:00", Hasta: "18:00", DuracionMin: 50, Modalidad: modalidad},
+			{DiaSemana: "viernes", Desde: "09:00", Hasta: "12:00", DuracionMin: 50, Modalidad: modalidad},
+		},
+		{
+			{DiaSemana: "martes", Desde: "14:00", Hasta: "20:00", DuracionMin: 50, Modalidad: modalidad},
+			{DiaSemana: "jueves", Desde: "14:00", Hasta: "20:00", DuracionMin: 50, Modalidad: modalidad},
+		},
+		{
+			{DiaSemana: "lunes", Desde: "08:00", Hasta: "12:00", DuracionMin: 40, Modalidad: modalidad},
+			{DiaSemana: "martes", Desde: "08:00", Hasta: "12:00", DuracionMin: 40, Modalidad: modalidad},
+			{DiaSemana: "jueves", Desde: "08:00", Hasta: "12:00", DuracionMin: 40, Modalidad: modalidad},
+			{DiaSemana: "sabado", Desde: "09:00", Hasta: "13:00", DuracionMin: 40, Modalidad: modalidad},
+		},
+		{
+			{DiaSemana: "miercoles", Desde: "10:00", Hasta: "19:00", DuracionMin: 30, Modalidad: modalidad},
+			{DiaSemana: "viernes", Desde: "10:00", Hasta: "19:00", DuracionMin: 30, Modalidad: modalidad},
+		},
+	}
+
+	return semanas[i%len(semanas)]
 }
 
 // contrasenaSemilla es la misma para los cuatro profesionales de prueba. Es
