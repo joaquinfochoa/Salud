@@ -14,30 +14,26 @@ function proximoSabado(): string {
   }).format(d);
 }
 
-async function registrar(page: Page, nombre: string, apellido: string) {
+/**
+ * Se registra POR LA PANTALLA, no con un fetch a la API.
+ *
+ * La primera versión de este helper creaba la cuenta con un fetch directo, y
+ * eso tapó un agujero real: no existía ninguna pantalla de registro. El único
+ * alta vivía dentro del formulario de reservar un turno, así que un profesional
+ * que llegaba desde la landing caía en /entrar sin forma de crear la cuenta. El
+ * test pasaba en verde mientras una persona no podía registrarse.
+ *
+ * Un helper que evita la interfaz no prueba la interfaz.
+ */
+async function registrar(page: Page, nombre: string, apellido: string, volver?: string) {
   const email = `${nombre.toLowerCase()}.${Date.now()}@ejemplo.com`;
-  await page.goto("/");
-  const estado = await page.evaluate(
-    async ({ email, nombre, apellido, API }) => {
-      const r = await fetch(`${API}/api/v1/usuarios`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, contrasena: "desarrollo123", nombre, apellido }),
-      });
-      return r.status;
-    },
-    { email, nombre, apellido, API },
-  );
-  expect(estado).toBe(201);
-  return email;
-}
-
-async function entrar(page: Page, email: string, volver?: string) {
-  await page.goto(volver ? `/entrar?volver=${encodeURIComponent(volver)}` : "/entrar");
+  await page.goto(volver ? `/crear-cuenta?volver=${encodeURIComponent(volver)}` : "/crear-cuenta");
+  await page.getByLabel("Nombre").fill(nombre);
+  await page.getByLabel("Apellido").fill(apellido);
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Contraseña").fill("desarrollo123");
-  await page.getByRole("button", { name: "Entrar" }).click();
+  await page.getByRole("button", { name: "Crear cuenta" }).click();
+  return email;
 }
 
 /**
@@ -55,17 +51,19 @@ async function entrar(page: Page, email: string, volver?: string) {
  * trampa que explota más adelante.
  */
 test("un profesional carga su semana y aparece en su perfil público", async ({ page }) => {
-  const email = await registrar(page, "Renata", "Kine");
-
   // Se entra por donde entra un profesional de verdad: el CTA de la landing de
-  // captación, que lleva a /entrar con el volver puesto en el alta.
+  // captación, sin cuenta previa.
   await page.goto("/profesionales");
   await page.getByRole("link", { name: "Crear mi perfil" }).first().click();
-  await expect(page).toHaveURL("/entrar?volver=%2Fpanel%2Fperfil");
+  await expect(page).toHaveURL("/crear-cuenta?volver=%2Fpanel%2Fperfil");
 
-  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Nombre").fill("Renata");
+  await page.getByLabel("Apellido").fill("Kine");
+  await page.getByLabel("Email").fill(`renata.${Date.now()}@ejemplo.com`);
   await page.getByLabel("Contraseña").fill("desarrollo123");
-  await page.getByRole("button", { name: "Entrar" }).click();
+  await page.getByRole("button", { name: "Crear cuenta" }).click();
+
+  // Registrarse abre la sesión en la misma respuesta: no hay que entrar después.
   await expect(page).toHaveURL("/panel/perfil");
 
   await page.getByLabel("Matrícula").fill(`MP ${Date.now().toString().slice(-6)}`);
@@ -108,10 +106,41 @@ test("un profesional carga su semana y aparece en su perfil público", async ({ 
   await expect(page.getByRole("link", { name: "10:50" })).toBeVisible();
 });
 
-test("una cuenta sin perfil profesional va a sus turnos", async ({ page }) => {
-  const email = await registrar(page, "Paula", "Paciente");
-  await entrar(page, email);
+test("una cuenta nueva sin perfil profesional queda en sus turnos", async ({ page }) => {
+  await registrar(page, "Paula", "Paciente");
   await expect(page).toHaveURL("/turnos");
+});
+
+/**
+ * El camino que estaba roto: llegar a /entrar sin cuenta y poder salir de ahí.
+ *
+ * Antes la única salida decía "se crea sola cuando reservás tu primer turno",
+ * que a un profesional lo mandaba a reservarse un turno con otro profesional.
+ */
+test("desde entrar se puede crear una cuenta, conservando a dónde iba", async ({ page }) => {
+  await page.goto("/entrar?volver=%2Fpanel%2Fperfil");
+  await page.getByRole("link", { name: "Crear una" }).click();
+  await expect(page).toHaveURL("/crear-cuenta?volver=%2Fpanel%2Fperfil");
+
+  // Y la vuelta, para quien sí tiene cuenta.
+  await page.getByRole("link", { name: "Entrar" }).click();
+  await expect(page).toHaveURL("/entrar?volver=%2Fpanel%2Fperfil");
+});
+
+test("registrarse con un email que ya existe ofrece entrar", async ({ page }) => {
+  const email = await registrar(page, "Repetida", "Cuenta");
+  await expect(page).toHaveURL("/turnos");
+
+  await page.goto("/crear-cuenta");
+  await page.getByLabel("Nombre").fill("Repetida");
+  await page.getByLabel("Apellido").fill("Cuenta");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Contraseña").fill("desarrollo123");
+  await page.getByRole("button", { name: "Crear cuenta" }).click();
+
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Ya tenés una cuenta" }),
+  ).toBeVisible();
 });
 
 /**

@@ -32,13 +32,25 @@ export default function Profesionales() {
       </p>
 
       <div className="mt-8 flex flex-wrap items-center gap-4">
+        {/* Al alta de cuenta y no al login: quien toca esto no tiene cuenta
+            todavía. El `volver` hace que después de registrarse caiga en el
+            formulario del perfil profesional en vez de en sus turnos. */}
         <Link
-          href="/entrar?volver=%2Fpanel%2Fperfil"
+          href="/crear-cuenta?volver=%2Fpanel%2Fperfil"
           className="rounded-lg bg-accion px-6 py-3 font-bold text-white transition-colors hover:bg-accion-viva"
         >
           Crear mi perfil
         </Link>
-        <span className="text-sm text-tinta-suave">Es gratis y lleva unos minutos.</span>
+        <span className="text-sm text-tinta-suave">
+          Es gratis y lleva unos minutos.{" "}
+          <Link
+            href="/entrar?volver=%2Fpanel%2Fperfil"
+            className="font-semibold underline hover:text-accion"
+          >
+            Ya tengo cuenta
+          </Link>
+          .
+        </span>
       </div>
 
       <section className="mt-16 border-t border-borde pt-10">
@@ -76,7 +88,7 @@ export default function Profesionales() {
         </p>
 
         <Link
-          href="/entrar?volver=%2Fpanel%2Fperfil"
+          href="/crear-cuenta?volver=%2Fpanel%2Fperfil"
           className="mt-8 inline-block rounded-lg bg-accion px-6 py-3 font-bold text-white transition-colors hover:bg-accion-viva"
         >
           Crear mi perfil

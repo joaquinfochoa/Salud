@@ -9,6 +9,7 @@ import { destinoDespuesDeEntrar } from "@/lib/destino";
 function FormularioEntrar() {
   const router = useRouter();
   const parametros = useSearchParams();
+  const volver = parametros.get("volver");
 
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -96,12 +97,18 @@ function FormularioEntrar() {
         </button>
       </form>
 
+      {/* Antes acá decía que la cuenta "se crea sola cuando reservás tu primer
+          turno", y era el único camino que existía: alguien que llegaba desde
+          la landing de captación quedaba sin forma de registrarse, y el texto
+          lo mandaba a reservarse un turno con otro profesional. */}
       <p className="mt-5 text-center text-sm text-tinta-suave">
-        ¿No tenés cuenta? Se crea sola cuando{" "}
-        <Link href="/" className="font-semibold text-accion underline">
-          reservás tu primer turno
+        ¿No tenés cuenta?{" "}
+        <Link
+          href={`/crear-cuenta${volver ? `?volver=${encodeURIComponent(volver)}` : ""}`}
+          className="font-semibold text-accion underline"
+        >
+          Crear una
         </Link>
-        .
       </p>
     </main>
   );

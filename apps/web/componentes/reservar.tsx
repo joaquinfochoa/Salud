@@ -350,7 +350,10 @@ function Campo({
   const idError = `${nombre}-error`;
 
   return (
-    <div className="grid gap-1.5">
+    // min-w-0: un <input> tiene ancho intrínseco propio, y en CSS Grid un item
+    // no se encoge por debajo del contenido. Sin esto, dos campos en
+    // sm:grid-cols-2 se desbordan de la tarjeta que los contiene.
+    <div className="grid min-w-0 gap-1.5">
       <label htmlFor={nombre} className="text-sm font-semibold">
         {etiqueta}
       </label>
@@ -363,7 +366,7 @@ function Campo({
         // campo sin decir que está mal ni por qué.
         aria-invalid={mensaje ? true : undefined}
         aria-describedby={mensaje ? idError : ayuda ? idAyuda : undefined}
-        className={`h-11 rounded-lg border px-3 ${
+        className={`h-11 w-full rounded-lg border px-3 ${
           mensaje ? "border-destructive" : "border-borde"
         }`}
       />
