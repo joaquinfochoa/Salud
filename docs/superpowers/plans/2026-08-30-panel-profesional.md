@@ -14,7 +14,7 @@ API y sesión. El login es uno solo y redirige según `perfilProfesionalId`.
 **Stack:** el de la etapa anterior. **Cero dependencias nuevas.**
 
 **Spec:** [2026-08-30-panel-profesional-design.md](../specs/2026-08-30-panel-profesional-design.md)
-**Base:** rama `refactor-gian`, commit `3382026`
+**Base:** rama `refactor-gian`, commit `3231b2a`
 
 ---
 
@@ -45,6 +45,9 @@ API y sesión. El login es uno solo y redirige según `perfilProfesionalId`.
 | **`/usuarios/yo` devuelve `id`, `email`, `nombre`, `apellido`, `creadoEn` y `perfilProfesionalId`.** No trae especialidad. | El saludo de `/panel` necesita **dos** llamadas: `/usuarios/yo` y después `GET /profesionales/{id}`. Se hacen una vez en el layout del panel, no en cada pantalla. |
 | **Cinco `page.tsx` se mueven**, ninguno cambia de URL. | Task 1 es mecánica y verificable. |
 | **No hay endpoint que simule un cambio de horario.** | Ver la decisión de abajo. |
+| **`armarDias` y `<Calendario>` ya existen**, del refactor de la agenda del paciente. Agrupan por `inicio.slice(0, 10)`, que es lo mismo que necesita `/panel/agenda` con turnos. | No se escribe `tira-de-dias.tsx`. Se generaliza `armarDias` a cualquier cosa con `inicio` (Task 4, Paso 1). |
+| **`PUT /horarios` devuelve `ListaHorarios`**, que trae `turnosCancelados` además de los horarios. `POST /bloqueos` devuelve lo mismo en su forma. | El número real está disponible después de guardar sin una llamada extra. |
+| **`HorarioSemanal.desde`/`hasta` son horas de reloj (`"09:00"`), no instantes.** `diaSemana` es `"lunes" … "domingo"`, en español y sin acento. | El editor de semana trabaja con strings `HH:MM`. No entra ninguna conversión de zona. |
 
 ### La decisión que el spec dejaba abierta
 
@@ -99,12 +102,13 @@ componentes/
   encabezado.tsx                   ← el de hoy, pasa a ser el del grupo público
   navegacion-panel.tsx             tabs abajo en móvil, barra lateral arriba
   nudge.tsx                        qué le falta al perfil para recibir turnos
-  tira-de-dias.tsx                 la semana con punto en los días con turnos
+  calendario.tsx                   ← ya existe: la tira de días y lo del día
   fila-turno-profesional.tsx       un turno visto desde el lado del profesional
   editor-semana.tsx                los siete días con sus bloques
   chips.tsx                        obras sociales y modalidades
 
 lib/
+  dias.ts                          ← ya existe: armarDias, se generaliza
   panel.ts                         contexto del panel: usePanel()
   semana.ts                        qué turnos quedan fuera de un horario nuevo
   ocupacion.ts                     el KPI
@@ -453,11 +457,11 @@ Los que ya pasaron, en gris.
 Cada turno muestra hora, nombre del paciente, motivo y modalidad. **El motivo se
 muestra acá y en `/panel/agenda`, y en ningún otro lado.**
 
-> El nombre del paciente sale de `Turno.pacienteId`, y la API **no devuelve el
-> nombre**. Para esta etapa se muestra el motivo y el horario, y donde iría el
-> nombre va "Paciente". Traerlo necesita expandir la respuesta de
-> `GET /profesionales/{id}/turnos` con el nombre del paciente, que es back y no
-> entra acá. **Queda como el primer hallazgo de esta etapa.**
+> El nombre viene en el propio turno: `GET /profesionales/{id}/turnos` devuelve
+> `ListaTurnosDeProfesional`, y cada elemento es un `TurnoConPaciente` con
+> `paciente: { id, nombre, apellido }`. **No trae el email, a propósito.** Esto
+> se resolvió en la etapa 6a, que existió justamente porque este plan lo
+> detectó como hallazgo mientras se escribía.
 
 - [ ] **Paso 6: correr y verificar**
 
@@ -475,3 +479,753 @@ git commit -m "feat(web): pantalla de hoy con ocupacion y el nudge de perfil"
 ```
 
 ---
+
+## Task 4: `/panel/agenda`
+
+La tira de días ya existe. Esta tarea la generaliza para que sirva con turnos y
+construye la pantalla encima.
+
+**Archivos:**
+- Modificar: `lib/dias.ts`, `componentes/calendario.tsx`, `lib/dias.test.ts`
+- Crear: `app/(panel)/panel/agenda/page.tsx`, `componentes/dialogo-bloqueo.tsx`
+- Usa: `componentes/fila-turno-profesional.tsx` (viene de la Task 3)
+
+**Interfaces:**
+- Consume: `usePanel()` (Task 2), `<FilaTurnoProfesional>` (Task 3)
+- Produce:
+  - `armarDias<T extends { inicio: string }>(items: T[], cantidad?: number, hoy?: Date): Dia<T>[]`
+  - `<Calendario<T> dias diaElegido onDia>{(items) => …}</Calendario>`, ahora genérico
+
+- [ ] **Paso 1: escribir el test que falla**
+
+En `lib/dias.test.ts`, agregar al final:
+
+```ts
+// La agenda del profesional agrupa turnos, no huecos. Es la misma operación
+// —partir por día— sobre otra entidad, y duplicarla es cómo se arreglan bugs
+// de zona horaria en un lado y no en el otro.
+it("agrupa cualquier cosa que tenga inicio", () => {
+  const turnos = [
+    { inicio: "2026-08-31T09:00:00-03:00", motivo: "control" },
+    { inicio: "2026-09-01T09:00:00-03:00", motivo: "primera vez" },
+  ];
+
+  const dias = armarDias(turnos, 2, LUNES);
+
+  expect(dias[0].items[0].motivo).toBe("control");
+  expect(dias[1].items[0].motivo).toBe("primera vez");
+});
+```
+
+- [ ] **Paso 2: correr y verificar que falla**
+
+```bash
+pnpm vitest run lib/dias.test.ts
+```
+
+Esperado: FAIL de TypeScript — `armarDias` toma `Hueco[]` y el objeto no lo es.
+
+- [ ] **Paso 3: generalizar**
+
+En `lib/dias.ts`, la firma y el tipo. El campo se renombra de `huecos` a
+`items`, y `Dia` se vuelve genérico:
+
+```ts
+export type Dia<T = Hueco> = {
+  fecha: string;
+  etiqueta: string;
+  numero: string;
+  largo: string;
+  /** Lo que cae ese día: huecos en el perfil público, turnos en el panel. */
+  items: T[];
+};
+
+export function armarDias<T extends { inicio: string }>(
+  items: T[],
+  cantidad = 14,
+  hoy = new Date(),
+): Dia<T>[] {
+```
+
+El cuerpo no cambia salvo el nombre del campo. `primerDiaConHuecos` pasa a
+`primerDiaConItems<T>(dias: Dia<T>[]): string`.
+
+Renombrar los tres usos: `componentes/calendario.tsx`,
+`app/(publico)/perfiles/[slug]/page.tsx` y `componentes/reservar.tsx`.
+
+`<Calendario>` también se vuelve genérico, y lo de abajo de la tira pasa a ser
+un render prop: un hueco se dibuja como un chip de hora, un turno como una fila
+con paciente y motivo.
+
+```tsx
+export function Calendario<T extends { inicio: string }>({
+  dias,
+  diaElegido,
+  hrefDelDia,
+  onDia,
+  children,
+}: {
+  dias: Dia<T>[];
+  diaElegido: string;
+  hrefDelDia?: (fecha: string) => string;
+  onDia?: (fecha: string) => void;
+  /** Qué se dibuja debajo de la tira con lo que cae ese día. */
+  children: (items: T[]) => React.ReactNode;
+}) {
+```
+
+Los chips de hora y el mensaje de día vacío se mudan al `children` de cada call
+site. `hrefDelHueco` y `onHueco` desaparecen: el call site ya decide qué dibuja.
+
+- [ ] **Paso 4: correr los tests**
+
+```bash
+pnpm vitest run && pnpm exec playwright test
+```
+
+Esperado: los 28 unit tests y los 4 E2E en verde. **Los E2E son la verificación
+de que generalizar no rompió la pantalla del paciente**, que es la que ya
+funciona. En particular el de "sin JavaScript": si el render prop se convirtió
+en algo que necesita cliente, ese test lo agarra.
+
+- [ ] **Paso 5: commit del refactor, solo**
+
+Va separado de la pantalla nueva: si algo se rompió del lado del paciente, tiene
+que poder revertirse sin perder el panel.
+
+```bash
+git add -A
+git commit -m "refactor(web): armarDias y Calendario sirven para turnos tambien"
+```
+
+- [ ] **Paso 6: la pantalla**
+
+`app/(panel)/panel/agenda/page.tsx`, cliente. Trae
+`GET /api/v1/profesionales/{id}/turnos?desde=…&hasta=…` con catorce días y lo
+pasa por `armarDias`.
+
+```tsx
+<Calendario dias={dias} diaElegido={dia} onDia={setDia}>
+  {(turnos) =>
+    turnos.length === 0 ? (
+      <p className="py-2 text-sm text-tinta-suave">No tenés turnos este día.</p>
+    ) : (
+      <ul className="grid gap-2">
+        {turnos.map((t) => (
+          <FilaTurnoProfesional key={t.id} turno={t} />
+        ))}
+      </ul>
+    )
+  }
+</Calendario>
+```
+
+**Los cancelados van tachados y dicen quién canceló.** Es el dato que la etapa 4
+guardó y que nada leía todavía:
+
+```tsx
+// canceladoPor es un id de Usuario. Si coincide con pacienteId canceló el
+// paciente; si no, fue el propio profesional desde otro dispositivo. Es la
+// diferencia entre "se me cayó un paciente" y "yo lo cancelé", y sin decirlo el
+// profesional no sabe cuál de las dos pasó.
+const loCancelo = turno.canceladoPor === turno.pacienteId ? "el paciente" : "vos";
+```
+
+- [ ] **Paso 7: el botón de bloquear**
+
+Un botón de acción sobre el día que se está mirando. Abre un diálogo con desde,
+hasta y motivo, y hace `POST /api/v1/profesionales/{id}/bloqueos`.
+
+La respuesta trae `turnosCancelados`. **Se informa siempre, incluso en cero**,
+porque "0 turnos cancelados" es la confirmación de que no rompiste nada:
+
+> Bloqueo creado. Se cancelaron **2 turnos** que caían adentro.
+
+`<dialog>` nativo, no una librería: es la restricción de cero dependencias
+nuevas, y `showModal()` ya trae foco atrapado, cierre con Escape y fondo inerte.
+
+El borrado de un bloqueo va en la misma pantalla, con
+`DELETE /api/v1/profesionales/{id}/bloqueos/{bloqueoId}`.
+
+- [ ] **Paso 8: verificar**
+
+```bash
+pnpm build
+```
+
+Y a mano, con la API corriendo: entrar como Martín, ver la agenda, cambiar de
+día, crear un bloqueo sobre un día con turnos y confirmar que el número que
+informa coincide con los turnos que desaparecen de la lista.
+
+- [ ] **Paso 9: commit**
+
+```bash
+git add -A
+git commit -m "feat(web): agenda del profesional con bloqueos"
+```
+
+---
+
+## Task 5: `/panel/horarios`
+
+La pantalla donde el profesional se sienta a trabajar, y la única de la etapa
+que puede destruirle algo a un paciente.
+
+**Archivos:**
+- Crear: `lib/semana.ts`, `lib/semana.test.ts`,
+  `app/(panel)/panel/horarios/page.tsx`, `componentes/editor-semana.tsx`
+
+**Interfaces:**
+- Consume: `usePanel()`
+- Produce:
+  - `turnosHuerfanos(turnos: TurnoConPaciente[], horarios: HorarioSemanal[]): TurnoConPaciente[]`
+  - `<EditorSemana horarios onCambiar />`
+
+- [ ] **Paso 1: escribir el test que falla**
+
+`lib/semana.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import type { HorarioSemanal } from "./api";
+import { turnosHuerfanos } from "./semana";
+
+const bloque = (
+  diaSemana: HorarioSemanal["diaSemana"],
+  desde: string,
+  hasta: string,
+): HorarioSemanal => ({ diaSemana, desde, hasta, duracionMin: 50, modalidad: "presencial" });
+
+// 2026-08-31 es lunes; 2026-09-01, martes.
+const turno = (inicio: string, fin: string) =>
+  ({ id: inicio, inicio, fin, estado: "reservado" }) as never;
+
+describe("turnosHuerfanos", () => {
+  it("un turno que entra en el horario nuevo no es huérfano", () => {
+    const t = turno("2026-08-31T09:00:00-03:00", "2026-08-31T09:50:00-03:00");
+    expect(turnosHuerfanos([t], [bloque("lunes", "09:00", "13:00")])).toEqual([]);
+  });
+
+  it("un turno que quedó fuera del bloque acortado sí lo es", () => {
+    // Atendía hasta las 13; el bloque nuevo termina a las 10.
+    const t = turno("2026-08-31T12:00:00-03:00", "2026-08-31T12:50:00-03:00");
+    expect(turnosHuerfanos([t], [bloque("lunes", "09:00", "10:00")])).toHaveLength(1);
+  });
+
+  it("un turno de un día que se borró entero es huérfano", () => {
+    const t = turno("2026-09-01T09:00:00-03:00", "2026-09-01T09:50:00-03:00");
+    expect(turnosHuerfanos([t], [bloque("lunes", "09:00", "13:00")])).toHaveLength(1);
+  });
+
+  // El turno termina 09:50 y el bloque a las 09:30: entra el inicio y no el
+  // final. La API lo cancela, así que la pantalla también tiene que verlo.
+  it("un turno que empieza adentro pero termina afuera es huérfano", () => {
+    const t = turno("2026-08-31T09:00:00-03:00", "2026-08-31T09:50:00-03:00");
+    expect(turnosHuerfanos([t], [bloque("lunes", "09:00", "09:30")])).toHaveLength(1);
+  });
+
+  it("un turno ya cancelado no se cuenta dos veces", () => {
+    const t = {
+      ...turno("2026-08-31T12:00:00-03:00", "2026-08-31T12:50:00-03:00"),
+      estado: "cancelado",
+    } as never;
+    expect(turnosHuerfanos([t], [bloque("lunes", "09:00", "10:00")])).toEqual([]);
+  });
+});
+```
+
+- [ ] **Paso 2: correr y verificar que falla**
+
+```bash
+pnpm vitest run lib/semana.test.ts
+```
+
+Esperado: FAIL — `turnosHuerfanos` no existe.
+
+- [ ] **Paso 3: implementar**
+
+`lib/semana.ts`:
+
+```ts
+import type { HorarioSemanal, TurnoConPaciente } from "./api";
+
+const ZONA = "America/Argentina/Buenos_Aires";
+
+const DIAS: HorarioSemanal["diaSemana"][] = [
+  "domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado",
+];
+
+/**
+ * Los turnos que el horario nuevo dejaría afuera, y que `PUT /horarios`
+ * cancelaría al guardar.
+ *
+ * ponytail: esto duplica en el front la regla que el back ya tiene, porque la
+ * API no ofrece modo simulación — `PUT /horarios` informa cuántos canceló
+ * DESPUÉS de cancelarlos. El arreglo real es un `PUT /horarios?simular=true`
+ * que devuelva los afectados sin escribir; se hace cuando alguien reporte que
+ * el número previsto y el real no coinciden.
+ *
+ * Las dos mitigaciones importan más que el cálculo: la pantalla LISTA los
+ * turnos en vez de contarlos, así que aunque esto se equivoque la persona ve
+ * turnos concretos y juzga; y después de guardar se informa el número real que
+ * devolvió la API.
+ */
+export function turnosHuerfanos(
+  turnos: TurnoConPaciente[],
+  horarios: HorarioSemanal[],
+): TurnoConPaciente[] {
+  return turnos.filter((turno) => {
+    // Un turno ya cancelado no se puede cancelar de nuevo.
+    if (turno.estado !== "reservado") return false;
+
+    const dia = DIAS[new Date(turno.inicio).getDay()];
+
+    // El turno tiene que entrar ENTERO en algún bloque de ese día: el back
+    // cancela el que se pasa del final aunque haya empezado adentro.
+    return !horarios.some(
+      (h) =>
+        h.diaSemana === dia &&
+        reloj(turno.inicio) >= h.desde &&
+        reloj(turno.fin) <= h.hasta,
+    );
+  });
+}
+
+/** `"09:50"`, para comparar contra las horas de reloj del horario. */
+function reloj(iso: string): string {
+  return new Intl.DateTimeFormat("es-AR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: ZONA,
+  }).format(new Date(iso));
+}
+```
+
+> **Ojo con `getDay()`:** devuelve el día en la zona del proceso, no en la de
+> Argentina. Esta pantalla corre en el browser del profesional, que está en
+> Argentina, así que coincide. **Si algún día corre en un servidor en UTC, un
+> turno de las 21:00 se cuenta como del día siguiente.** Se deja anotado al lado
+> de la línea; el arreglo es derivar el día de `turno.inicio.slice(0, 10)`, que
+> ya viene con el offset aplicado.
+
+- [ ] **Paso 4: correr y verificar que pasa**
+
+```bash
+pnpm vitest run lib/semana.test.ts
+```
+
+- [ ] **Paso 5: mutación**
+
+Sacar `&& reloj(turno.fin) <= h.hasta` de la condición y correr de nuevo. Tiene
+que fallar el caso "empieza adentro pero termina afuera". Restaurar y volver a
+verde.
+
+Es el caso que más fácil se escribe mal, y el que más caro sale: cancelar un
+turno sin haberlo avisado.
+
+- [ ] **Paso 6: el editor**
+
+`componentes/editor-semana.tsx`: siete días, cada uno con sus bloques. Cada
+bloque tiene desde, hasta, duración y modalidad, y un botón de borrar.
+`<input type="time">` y `<select>` nativos — la restricción de cero
+dependencias, y el picker del sistema operativo es mejor que cualquier
+reimplementación.
+
+```
+Móvil                          Escritorio
+┌──────────────────┐           ┌────┬────┬────┬────┬────┬────┬────┐
+│ Lunes         +  │           │Lun │Mar │Mié │Jue │Vie │Sáb │Dom │
+│ 09:00–13:00 50m  │           ├────┼────┼────┼────┼────┼────┼────┤
+│ 15:00–19:00 50m  │           │9-13│    │9-13│    │9-13│    │    │
+├──────────────────┤           │15-19    │15-19    │    │    │    │
+│ Martes        +  │           │ +  │ +  │ +  │ +  │ +  │ +  │ +  │
+```
+
+Una sola lista de días, dos presentaciones con CSS. Duplicar la lista es cómo se
+agrega un día en un lado y no en el otro.
+
+Cada botón de agregar necesita nombre accesible propio: `aria-label="Agregar
+bloque a Sábado"`. Siete botones que dicen todos "+" son siete botones que un
+lector de pantalla no puede distinguir — y además es el locator del E2E.
+
+- [ ] **Paso 7: la confirmación antes de guardar**
+
+Al tocar Guardar, **antes** del `PUT`:
+
+1. `GET /api/v1/profesionales/{id}/turnos` desde hoy.
+2. `turnosHuerfanos(turnos, horariosNuevos)`.
+3. Si hay alguno, `<dialog>` que los **lista** —día, hora y paciente— con el
+   número en el encabezado:
+
+> Con este cambio se cancelan **3 turnos** ya reservados. Los pacientes lo van a
+> ver en la app.
+> - lunes 7, 12:00 — Lucía Fernández
+> - lunes 14, 12:00 — Diego Paz
+> - lunes 21, 12:00 — Lucía Fernández
+>
+> [Cancelar] [Guardar igual]
+
+El botón destructivo **no** lleva `--color-accion`: el acento es de la acción
+principal, y acá la acción principal es no romper nada.
+
+- [ ] **Paso 8: informar el número real**
+
+Después del `PUT`, `ListaHorarios.turnosCancelados` trae lo que pasó de verdad.
+Se muestra siempre, en un `role="alert"`:
+
+> Horarios guardados. Se cancelaron **3 turnos**.
+
+Si no coincide con lo previsto, se ve. Es la segunda mitigación del cálculo
+duplicado.
+
+- [ ] **Paso 9: verificar de punta a punta**
+
+Con la API corriendo, y esto es el criterio de aceptación 6:
+
+1. Entrar como Martín y cargar un bloque en un día vacío.
+2. Abrir `/perfiles/martin-gonzalez` **en otra pestaña** y confirmar que los
+   huecos nuevos aparecen.
+3. Volver, acortar el bloque de un día con turnos, y confirmar que el diálogo
+   los lista antes de guardar.
+
+- [ ] **Paso 10: commit**
+
+```bash
+git add -A
+git commit -m "feat(web): editor de la semana que avisa que turnos cancelaria"
+```
+
+---
+
+## Task 6: `/panel/perfil`, en sus dos modos
+
+**Archivos:**
+- Crear: `app/(panel)/panel/perfil/page.tsx`, `componentes/chips.tsx`
+- Modificar: `lib/formato.ts`, `lib/formato.test.ts`
+
+**Interfaces:**
+- Consume: `usePanel()`
+- Produce:
+  - `enCentavos(pesos: string): number | null`
+  - `<Chips opciones seleccionadas onCambiar />`
+
+- [ ] **Paso 1: el test del precio**
+
+Es el campo donde más fácil se cuela un error de dos órdenes de magnitud, así
+que la conversión se prueba antes de escribirla. En `lib/formato.test.ts`:
+
+```ts
+describe("enCentavos", () => {
+  it("pesos enteros", () => expect(enCentavos("12000")).toBe(1200000));
+  it("con separador de miles", () => expect(enCentavos("12.000")).toBe(1200000));
+  it("con centavos", () => expect(enCentavos("12000,50")).toBe(1200050));
+  it("con el símbolo", () => expect(enCentavos("$12.000")).toBe(1200000));
+  it("vacío es null, no cero", () => expect(enCentavos("")).toBe(null));
+  it("texto es null", () => expect(enCentavos("gratis")).toBe(null));
+  it("negativo es null", () => expect(enCentavos("-100")).toBe(null));
+
+  // El campo muestra el valor formateado mientras se escribe, así que lo que
+  // sale de formatearPrecio vuelve a entrar por enCentavos en cada tecla. Si el
+  // viaje de ida y vuelta pierde precisión, el precio se degrada solo.
+  it("da la vuelta completa", () => {
+    expect(enCentavos(formatearPrecio(1200000))).toBe(1200000);
+    expect(enCentavos(formatearPrecio(1200050))).toBe(1200050);
+  });
+});
+```
+
+- [ ] **Paso 2: correr y verificar que falla**
+
+```bash
+pnpm vitest run lib/formato.test.ts
+```
+
+- [ ] **Paso 3: implementar**
+
+```ts
+/**
+ * Pesos escritos a mano a centavos. La inversa de `formatearPrecio`.
+ *
+ * Devuelve `null` y no `0` para lo que no es número: un precio vacío es "no
+ * completó el campo", y guardar $0 como si lo hubiera elegido es peor que
+ * pedirle que lo complete.
+ */
+export function enCentavos(pesos: string): number | null {
+  // Se sacan el símbolo, los espacios y los puntos de miles; la coma decimal
+  // pasa a punto. Es el formato es-AR, que es el que ve el profesional.
+  const limpio = pesos.replace(/[$\s.]/g, "").replace(",", ".");
+  if (limpio === "") return null;
+
+  const numero = Number(limpio);
+  if (!Number.isFinite(numero) || numero < 0) return null;
+  return Math.round(numero * 100);
+}
+```
+
+- [ ] **Paso 4: correr y verificar que pasa**
+
+```bash
+pnpm vitest run lib/formato.test.ts
+```
+
+- [ ] **Paso 5: los chips**
+
+`componentes/chips.tsx`, para obras sociales y modalidades. Botones que se
+prenden y apagan.
+
+```tsx
+// aria-pressed y no solo una clase: sin él un lector de pantalla lee "OSDE,
+// botón" tanto si está elegida como si no. Y el estado elegido lleva además un
+// check, porque el color nunca es la única señal.
+```
+
+Las obras sociales son texto libre en el contrato (`obrasSociales?: string[]`),
+así que las opciones salen de un array local con las del mercado argentino y hay
+un campo para agregar una que no esté. **No se inventa un catálogo con ids** que
+la API no tiene.
+
+- [ ] **Paso 6: la pantalla, modo edición**
+
+Bio, precio, zona, modalidades, obras sociales y anticipación mínima.
+`PUT /api/v1/profesionales/{id}`. Con "Ver mi perfil público" →
+`/perfiles/{slug}`.
+
+Matrícula y especialidad se muestran **de solo lectura**, con una línea que
+explica por qué: cambiarlas resetea la verificación.
+
+- [ ] **Paso 7: la pantalla, modo alta**
+
+Si `usuario.perfilProfesionalId` es `null`, el mismo formulario con matrícula y
+especialidad **editables**, y el botón dice "Crear mi perfil" en vez de "Guardar
+cambios". Hace `POST /api/v1/profesionales` y después va a `/panel`.
+
+```tsx
+// Dos modos de un formulario, no dos pantallas: los campos son los mismos y el
+// alta solo agrega dos. Duplicarlo es cómo se agrega un campo en uno y no en el
+// otro.
+const alta = usuario.perfilProfesionalId === null;
+```
+
+Los 422 se muestran debajo de su campo con `aria-invalid` y `aria-describedby`,
+igual que en `reservar.tsx`. El 409 de matrícula en uso es su propio mensaje:
+*"Ya hay un perfil con esa matrícula."*
+
+- [ ] **Paso 8: verificar**
+
+```bash
+pnpm vitest run && pnpm build
+```
+
+Y a mano, que es el criterio de aceptación 9: cambiar la bio y el precio como
+Martín, abrir `/perfiles/martin-gonzalez` y ver los dos cambios. Después, con
+una cuenta de paciente, entrar a `/panel/perfil` y crear un perfil.
+
+- [ ] **Paso 9: commit**
+
+```bash
+git add -A
+git commit -m "feat(web): editar y crear el perfil profesional"
+```
+
+---
+
+## Task 7: las dos landings
+
+**Archivos:**
+- Modificar: `app/(publico)/page.tsx`, `componentes/encabezado.tsx`
+- Crear: `app/(publico)/profesionales/page.tsx`, `componentes/pie.tsx`
+
+- [ ] **Paso 1: `/` — el hero es el buscador**
+
+Se agrega **debajo** de lo que ya está, sin tocar el buscador ni el listado: la
+propuesta de valor y cómo funciona, en tres pasos.
+
+```tsx
+// El hero es el buscador y no un texto de marketing. `/` es la página con más
+// autoridad de SEO del sitio, y gastarla en un hero sin contenido indexable es
+// tirarla: en un marketplace de salud la búsqueda orgánica es el canal de
+// adquisición. Es lo que hacen Doctoralia y Zocdoc.
+```
+
+- [ ] **Paso 2: `/profesionales` — la landing de captación**
+
+Server Component. Su propio mensaje, y el CTA va a
+`/entrar?volver=/panel/perfil`: alguien que ya tiene cuenta entra y cae en el
+alta; alguien que no, se registra desde ahí.
+
+**Sin números inventados.** Nada de "más de 500 profesionales" ni "10.000
+pacientes": no hay de dónde sacarlos, y en salud un número falso es lo que rompe
+la confianza que la página vino a construir.
+
+- [ ] **Paso 3: el pie**
+
+`componentes/pie.tsx`, solo en el grupo público: link a `/profesionales` y el
+aviso de que la plataforma no reemplaza una consulta de urgencia.
+
+- [ ] **Paso 4: verificar sin JavaScript**
+
+Es el criterio de aceptación 10:
+
+```bash
+curl -s http://localhost:3000/ | grep -c "Cómo funciona"
+curl -s http://localhost:3000/profesionales | grep -c "Crear mi perfil"
+```
+
+Esperado: 1 en los dos. Si da 0, la sección se está renderizando en el cliente.
+
+- [ ] **Paso 5: commit**
+
+```bash
+git add -A
+git commit -m "feat(web): landing publica y landing de captacion"
+```
+
+---
+
+## Task 8: el E2E del circuito profesional y el cierre
+
+La etapa no está terminada hasta que el circuito completo esté cubierto por un
+test que corra sin nadie mirando.
+
+**Archivos:**
+- Crear: `e2e/panel.spec.ts`
+
+- [ ] **Paso 1: el test del circuito**
+
+`e2e/panel.spec.ts`, contra la API real igual que el otro:
+
+```ts
+// El circuito que justifica la etapa entera: un profesional carga su semana y
+// esos huecos aparecen en su perfil público. Si esto pasa, las dos mitades del
+// marketplace están conectadas.
+test("un profesional carga su semana y aparece en su perfil público", async ({ page }) => {
+  await page.goto("/entrar");
+  await page.getByLabel("Email").fill("martin.gonzalez@ejemplo.com");
+  await page.getByLabel("Contraseña").fill("desarrollo123");
+  await page.getByRole("button", { name: "Entrar" }).click();
+
+  // El login redirige solo al panel: es el criterio de aceptación 2.
+  await expect(page).toHaveURL("/panel");
+
+  await page.getByRole("link", { name: "Horarios" }).click();
+  // Un día que el seed deja vacío, para no pelear con turnos existentes.
+  await page.getByRole("button", { name: "Agregar bloque a Sábado" }).click();
+  await page.getByLabel("Desde").last().fill("10:00");
+  await page.getByLabel("Hasta").last().fill("12:00");
+  await page.getByRole("button", { name: "Guardar" }).click();
+  await expect(page.getByRole("alert")).toContainText("Horarios guardados");
+
+  // Y del otro lado del marketplace.
+  await page.goto(`/perfiles/martin-gonzalez?dia=${proximoSabado()}`);
+  await expect(page.getByRole("link", { name: "10:00" })).toBeVisible();
+});
+```
+
+`proximoSabado()` se calcula en el test: sin el `?dia=` la página abre en el
+primer día con huecos, que no es el sábado.
+
+- [ ] **Paso 2: el test de la redirección de paciente**
+
+```ts
+test("una cuenta sin perfil profesional va a sus turnos", async ({ page }) => {
+  // La cuenta se crea en el test, para no depender del seed.
+  // …registrarse desde una reserva o desde /entrar…
+  await expect(page).toHaveURL("/turnos");
+});
+```
+
+- [ ] **Paso 3: correr todo**
+
+```bash
+pnpm exec playwright test
+```
+
+Esperado: los 4 de la etapa anterior **sin tocarlos** y los 2 nuevos.
+
+- [ ] **Paso 4: el recorrido con teclado**
+
+Criterio de aceptación 11, y se hace a mano porque es lo único que lo verifica
+de verdad: abrir `/panel` y recorrer las cuatro pantallas solo con Tab, Shift+Tab
+y Enter. Cada elemento enfocado tiene que verse.
+
+Lo que se busca: un `<div onClick>` que Tab no alcanza, un chip sin
+`aria-pressed`, un `<dialog>` que no atrapa el foco.
+
+- [ ] **Paso 5: contraste**
+
+**Medido, no estimado** — es exactamente el error que ya se cometió una vez en
+esta app, cuando `--color-libre` salió con 2.26:1 después de haber escrito
+"contraste medido, no estimado" en el mismo documento.
+
+Cada color nuevo de esta etapa contra su fondo, con un contador de contraste.
+Piso 4.5:1.
+
+- [ ] **Paso 6: ponytail-audit**
+
+```
+/ponytail-audit apps/web
+```
+
+Buscando lo que la etapa anterior encontró: componentes sin importadores,
+helpers con un solo llamador, duplicación entre las cuatro pantallas del panel.
+
+- [ ] **Paso 7: verificación final**
+
+```bash
+pnpm lint && pnpm test && pnpm build && pnpm exec playwright test
+```
+
+- [ ] **Paso 8: commit**
+
+```bash
+git add -A
+git commit -m "test(web): e2e del circuito profesional"
+```
+
+---
+
+## Auto-revisión del plan
+
+**Cobertura de la spec:**
+
+| Sección de la spec | Tarea |
+|---|---|
+| 2. Tres grupos de rutas | Task 1 |
+| 3. Login único | Task 2 |
+| 4. Layout móvil / escritorio | Task 2 (navegación), Task 5 (grilla de la semana) |
+| 5. `/panel` | Task 3 |
+| 5. `/panel/agenda` | Task 4 |
+| 5. `/panel/horarios` | Task 5 |
+| 5. `/panel/perfil`, dos modos | Task 6 |
+| 6. El nudge | Task 3 |
+| 7. Las landings | Task 7 |
+| 8. Fuera de alcance | Nada de eso aparece en ninguna tarea |
+
+**Los doce criterios de aceptación:**
+
+| # | Dónde se verifica |
+|---|---|
+| 1 | Task 8, Paso 7 |
+| 2 | Task 2 (Paso 8) y Task 8 (Pasos 1 y 2) |
+| 3 | Task 3, Paso 6 |
+| 4 | Task 3, Pasos 1–3 (test) y Paso 6 (a mano) |
+| 5 | Task 3, Paso 4 |
+| 6 | Task 5, Paso 9 |
+| 7 | Task 5, Pasos 1–5 y 7 |
+| 8 | Task 4, Pasos 7 y 8 |
+| 9 | Task 6, Paso 8 |
+| 10 | Task 7, Paso 4 |
+| 11 | Task 8, Paso 4 |
+| 12 | Tasks 3 y 4 lo muestran; ninguna otra pantalla lo recibe |
+
+**Consistencia de tipos:** `armarDias` cambia de firma en Task 4 y sus tres
+llamadores se renombran en el mismo paso; `Dia.huecos` pasa a `Dia.items` ahí
+mismo, y `primerDiaConHuecos` a `primerDiaConItems`. `usePanel()` se define en
+Task 2 y lo consumen las tareas 3, 4, 5 y 6 con la misma forma.
+`TurnoConPaciente` es lo que devuelve `GET /profesionales/{id}/turnos`, y es lo
+que consumen `turnosHuerfanos` y `<FilaTurnoProfesional>`.
+
+**Alcance:** ocho tareas, cada una con su commit y su verificación. Las tareas 4
+y 5 son las grandes; la 4 se parte en dos commits a propósito, para que el
+refactor del lado del paciente pueda revertirse solo.
