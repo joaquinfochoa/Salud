@@ -21,12 +21,16 @@ type Hueco struct {
 // No recibe repositorios ni el reloj del sistema: el servicio carga los datos y
 // arma esto. Esa separación es la que permite probar los bordes del calendario
 // sin levantar nada.
-//
-// Cuando exista Turno, se le suma un campo con los turnos ya tomados y se
-// restan igual que los bloqueos. La firma pública no cambia.
 type CalculoHuecos struct {
 	Horarios []HorarioSemanal
 	Bloqueos []Bloqueo
+
+	// Turnos son los turnos ya tomados. Solo los activos ocupan: cancelar
+	// libera el hueco, que es el punto de cancelar.
+	//
+	// Es un campo y no un filtro previo del servicio para que la regla de qué
+	// ocupa un hueco viva entera en un solo lugar, al lado de los bloqueos.
+	Turnos []Turno
 
 	// Desde y Hasta acotan el cálculo como intervalo semiabierto [Desde,
 	// Hasta). El servicio traduce las fechas de la consulta —que sí incluyen
@@ -79,7 +83,7 @@ func (c CalculoHuecos) huecosDelBloque(dia time.Time, bloque HorarioSemanal, min
 			continue // se sale del rango pedido
 		case inicio.Before(minimo):
 			continue // no llega a la anticipación mínima
-		case c.bloqueado(inicio, fin):
+		case c.ocupado(inicio, fin):
 			continue
 		}
 
@@ -87,6 +91,21 @@ func (c CalculoHuecos) huecosDelBloque(dia time.Time, bloque HorarioSemanal, min
 	}
 
 	return huecos
+}
+
+// ocupado dice si algo tapa el intervalo: un bloqueo del profesional o un turno
+// ya tomado. Los dos se restan igual; la única diferencia es que un turno
+// cancelado no cuenta.
+func (c CalculoHuecos) ocupado(inicio, fin time.Time) bool {
+	if c.bloqueado(inicio, fin) {
+		return true
+	}
+	for _, turno := range c.Turnos {
+		if turno.EstaActivo() && turno.SeSolapaCon(inicio, fin) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c CalculoHuecos) bloqueado(inicio, fin time.Time) bool {

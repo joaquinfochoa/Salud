@@ -362,3 +362,70 @@ func TestGenerarSinHorarios(t *testing.T) {
 		t.Errorf("se esperaban 0 huecos, se obtuvieron %d", len(huecos))
 	}
 }
+
+// turnoEn arma un turno tomado que arranca en la hora dada del lunes.
+func turnoEn(t *testing.T, hora string, estado EstadoTurno) Turno {
+	t.Helper()
+	inicio := momento(t, lunes+" "+hora)
+	return Turno{Inicio: inicio, Fin: inicio.Add(50 * time.Minute), Estado: estado}
+}
+
+func TestHuecosRestanTurnosTomados(t *testing.T) {
+	desde, hasta := rango(t, lunes, lunes)
+
+	c := CalculoHuecos{
+		Horarios: []HorarioSemanal{bloqueLunes()},
+		Turnos:   []Turno{turnoEn(t, "09:50", TurnoReservado)},
+		Desde:    desde,
+		Hasta:    hasta,
+		Ahora:    momento(t, "2026-08-01 00:00"),
+	}
+
+	// los mismos cuatro de TestGenerarUnBloque menos el reservado
+	compararInicios(t, c.Generar(), []string{
+		lunes + " 09:00",
+		lunes + " 10:40",
+		lunes + " 11:30",
+	})
+}
+
+// Cancelar libera el hueco: es el punto de cancelar.
+func TestHuecosNoRestanTurnosCancelados(t *testing.T) {
+	desde, hasta := rango(t, lunes, lunes)
+
+	c := CalculoHuecos{
+		Horarios: []HorarioSemanal{bloqueLunes()},
+		Turnos:   []Turno{turnoEn(t, "09:50", TurnoCancelado)},
+		Desde:    desde,
+		Hasta:    hasta,
+		Ahora:    momento(t, "2026-08-01 00:00"),
+	}
+
+	compararInicios(t, c.Generar(), []string{
+		lunes + " 09:00",
+		lunes + " 09:50",
+		lunes + " 10:40",
+		lunes + " 11:30",
+	})
+}
+
+// El mismo borde que los bloqueos: un turno que termina 09:50 no tapa el hueco
+// que empieza 09:50. Un <= en cualquiera de las dos comparaciones de
+// SeSolapaCon haría desaparecer un hueco por turno.
+func TestElBordeDelTurnoNoComeElHuecoSiguiente(t *testing.T) {
+	desde, hasta := rango(t, lunes, lunes)
+
+	c := CalculoHuecos{
+		Horarios: []HorarioSemanal{bloqueLunes()},
+		Turnos:   []Turno{turnoEn(t, "09:00", TurnoReservado)},
+		Desde:    desde,
+		Hasta:    hasta,
+		Ahora:    momento(t, "2026-08-01 00:00"),
+	}
+
+	compararInicios(t, c.Generar(), []string{
+		lunes + " 09:50",
+		lunes + " 10:40",
+		lunes + " 11:30",
+	})
+}
