@@ -22,13 +22,18 @@ func NuevoProfesional(svc *service.Profesional) *ManejadorProfesional {
 }
 
 func (h *ManejadorProfesional) Crear(w http.ResponseWriter, r *http.Request) {
+	usuarioID, ok := usuarioAutenticado(w, r)
+	if !ok {
+		return
+	}
+
 	var req peticionProfesional
 	if err := decodificarJSON(w, r, &req); err != nil {
 		escribirErrorDeDecodificacion(w, r, err)
 		return
 	}
 
-	p, err := h.svc.Crear(r.Context(), req.aEntrada())
+	p, err := h.svc.Crear(r.Context(), usuarioID, req.aEntrada())
 	if err != nil {
 		escribirError(w, r, err)
 		return
@@ -80,6 +85,11 @@ func (h *ManejadorProfesional) Listar(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ManejadorProfesional) Actualizar(w http.ResponseWriter, r *http.Request) {
+	usuarioID, ok := usuarioAutenticado(w, r)
+	if !ok {
+		return
+	}
+
 	id, ok := parsearID(w, r)
 	if !ok {
 		return
@@ -91,7 +101,7 @@ func (h *ManejadorProfesional) Actualizar(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	p, err := h.svc.Actualizar(r.Context(), id, req.aEntrada())
+	p, err := h.svc.Actualizar(r.Context(), usuarioID, id, req.aEntrada())
 	if err != nil {
 		escribirError(w, r, err)
 		return
@@ -103,12 +113,17 @@ func (h *ManejadorProfesional) Actualizar(w http.ResponseWriter, r *http.Request
 // es lo que hace: baja lógica. El verbo HTTP conserva el nombre que espera
 // cualquiera que lea un CRUD.
 func (h *ManejadorProfesional) DarDeBaja(w http.ResponseWriter, r *http.Request) {
+	usuarioID, ok := usuarioAutenticado(w, r)
+	if !ok {
+		return
+	}
+
 	id, ok := parsearID(w, r)
 	if !ok {
 		return
 	}
 
-	if err := h.svc.DarDeBaja(r.Context(), id); err != nil {
+	if err := h.svc.DarDeBaja(r.Context(), usuarioID, id); err != nil {
 		escribirError(w, r, err)
 		return
 	}
@@ -116,12 +131,17 @@ func (h *ManejadorProfesional) DarDeBaja(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *ManejadorProfesional) Reactivar(w http.ResponseWriter, r *http.Request) {
+	usuarioID, ok := usuarioAutenticado(w, r)
+	if !ok {
+		return
+	}
+
 	id, ok := parsearID(w, r)
 	if !ok {
 		return
 	}
 
-	p, err := h.svc.Reactivar(r.Context(), id)
+	p, err := h.svc.Reactivar(r.Context(), usuarioID, id)
 	if err != nil {
 		escribirError(w, r, err)
 		return

@@ -3,23 +3,50 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/joaquinfochoa/Salud/apps/api/internal/repository/memory"
 	"github.com/joaquinfochoa/Salud/apps/api/internal/service"
 )
 
-// nuevoServidorDePrueba cablea el stack real de punta a punta.
+// nuevoServidorDePrueba cablea el stack real de punta a punta y deja al
+// cliente ya logueado: estos tests prueban el CRUD, no el login.
 func nuevoServidorDePrueba(t *testing.T) *httptest.Server {
 	t.Helper()
-	repo := memory.NuevoProfesional()
-	svc := service.NuevoProfesional(repo)
-	svcAgenda := service.NuevaAgenda(repo, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo())
-	srv := httptest.NewServer(NuevoRouter(NuevoProfesional(svc), NuevaAgenda(svcAgenda)))
+	srv := httptest.NewServer(nuevoStackDePrueba())
+	t.Cleanup(srv.Close)
+	conSesion(t, srv, "duenio@ejemplo.com")
+	return srv
+}
+
+// servidorAnonimo es el mismo stack sin sesión, para los tests que verifican
+// que lo público sigue siendo público.
+func servidorAnonimo(t *testing.T) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(nuevoStackDePrueba())
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+// conSesion registra un usuario y le deja la cookie al cliente del servidor.
+// El jar es lo que hace que la cookie viaje sola en todos los requests
+// siguientes, igual que en un browser.
+func conSesion(t *testing.T, srv *httptest.Server, email string) {
+	t.Helper()
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("no se pudo crear el cookie jar: %v", err)
+	}
+	srv.Client().Jar = jar
+
+	cuerpo := `{"email":"` + email + `","contrasena":"desarrollo123","nombre":"Ana","apellido":"Test"}`
+	resp := postear(t, srv, "/api/v1/usuarios", cuerpo)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("el registro de %s devolvió %d, se esperaba 201", email, resp.StatusCode)
+	}
 }
 
 const cuerpoValido = `{
@@ -259,7 +286,13 @@ func TestListarPaginaYFiltra(t *testing.T) {
 
 	segundo := strings.Replace(cuerpoValido, `"MN 98.234"`, `"MN 11111"`, 1)
 	segundo = strings.Replace(segundo, `"psicologia"`, `"odontologia"`, 1)
-	postear(t, srv, "/api/v1/profesionales", segundo)
+
+	// El segundo perfil necesita su propio dueño: cada cuenta tiene como
+	// máximo un perfil, así que crearlo con la misma sesión daría 409.
+	conSesion(t, srv, "segundo@ejemplo.com")
+	if resp := postear(t, srv, "/api/v1/profesionales", segundo); resp.StatusCode != http.StatusCreated {
+		t.Fatalf("el segundo alta devolvió %d, se esperaba 201", resp.StatusCode)
+	}
 
 	t.Run("sin filtros", func(t *testing.T) {
 		resp := obtener(t, srv, "/api/v1/profesionales")

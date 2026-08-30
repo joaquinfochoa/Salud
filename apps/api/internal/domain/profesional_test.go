@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"github.com/google/uuid"
+
 	"errors"
 	"strings"
 	"testing"
@@ -27,7 +29,7 @@ func entradaValida() EntradaProfesional {
 }
 
 func TestNuevoProfesionalValido(t *testing.T) {
-	p, err := NuevoProfesional(entradaValida(), ahoraDePrueba)
+	p, err := NuevoProfesional(entradaValida(), uuid.New(), ahoraDePrueba)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
@@ -85,7 +87,7 @@ func TestNuevoProfesionalCamposInvalidos(t *testing.T) {
 			entrada := entradaValida()
 			caso.mutar(&entrada)
 
-			_, err := NuevoProfesional(entrada, ahoraDePrueba)
+			_, err := NuevoProfesional(entrada, uuid.New(), ahoraDePrueba)
 			if err == nil {
 				t.Fatal("se esperaba un error de validación")
 			}
@@ -114,7 +116,7 @@ func TestNuevoProfesionalAcumulaErrores(t *testing.T) {
 	entrada.Matricula = "roto"
 	entrada.Zona = ""
 
-	_, err := NuevoProfesional(entrada, ahoraDePrueba)
+	_, err := NuevoProfesional(entrada, uuid.New(), ahoraDePrueba)
 
 	var verr ErrorValidacion
 	if !errors.As(err, &verr) {
@@ -132,7 +134,7 @@ func TestNuevoProfesionalNormalizaEntrada(t *testing.T) {
 	entrada.Especialidad = "  PSICOLOGIA  "
 	entrada.Modalidades = []string{" Telemedicina "}
 
-	p, err := NuevoProfesional(entrada, ahoraDePrueba)
+	p, err := NuevoProfesional(entrada, uuid.New(), ahoraDePrueba)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
@@ -148,7 +150,7 @@ func TestNuevoProfesionalNormalizaEntrada(t *testing.T) {
 }
 
 func TestAplicarCambiosResetaVerificacion(t *testing.T) {
-	base, err := NuevoProfesional(entradaValida(), ahoraDePrueba)
+	base, err := NuevoProfesional(entradaValida(), uuid.New(), ahoraDePrueba)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
@@ -197,7 +199,7 @@ func TestAplicarCambiosResetaVerificacion(t *testing.T) {
 }
 
 func TestAplicarCambiosPreservaCamposNoEditables(t *testing.T) {
-	base, err := NuevoProfesional(entradaValida(), ahoraDePrueba)
+	base, err := NuevoProfesional(entradaValida(), uuid.New(), ahoraDePrueba)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
@@ -229,7 +231,7 @@ func TestAplicarCambiosPreservaCamposNoEditables(t *testing.T) {
 }
 
 func TestDarDeBajaReactivar(t *testing.T) {
-	p, err := NuevoProfesional(entradaValida(), ahoraDePrueba)
+	p, err := NuevoProfesional(entradaValida(), uuid.New(), ahoraDePrueba)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
@@ -266,7 +268,7 @@ func TestDarDeBajaReactivar(t *testing.T) {
 }
 
 func TestClonarEsCopiaProfunda(t *testing.T) {
-	p, err := NuevoProfesional(entradaValida(), ahoraDePrueba)
+	p, err := NuevoProfesional(entradaValida(), uuid.New(), ahoraDePrueba)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
@@ -291,7 +293,7 @@ func TestClonarEsCopiaProfunda(t *testing.T) {
 }
 
 func TestNombreCompleto(t *testing.T) {
-	p, err := NuevoProfesional(entradaValida(), ahoraDePrueba)
+	p, err := NuevoProfesional(entradaValida(), uuid.New(), ahoraDePrueba)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
@@ -303,7 +305,7 @@ func TestNombreCompleto(t *testing.T) {
 func TestNuevoProfesionalConfiguracionDeAgendaPorDefecto(t *testing.T) {
 	// no mandar los campos es lo normal: el profesional no debería tener que
 	// decidir esto al registrarse
-	p, err := NuevoProfesional(entradaValida(), ahoraDePrueba)
+	p, err := NuevoProfesional(entradaValida(), uuid.New(), ahoraDePrueba)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
@@ -323,7 +325,7 @@ func TestNuevoProfesionalConfiguracionDeAgendaExplicita(t *testing.T) {
 	entrada.AnticipacionMinimaMin = &anticipacion
 	entrada.HorizonteDias = &horizonte
 
-	p, err := NuevoProfesional(entrada, ahoraDePrueba)
+	p, err := NuevoProfesional(entrada, uuid.New(), ahoraDePrueba)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
@@ -353,7 +355,7 @@ func TestNuevoProfesionalConfiguracionDeAgendaInvalida(t *testing.T) {
 			entrada := entradaValida()
 			caso.mutar(&entrada)
 
-			_, err := NuevoProfesional(entrada, ahoraDePrueba)
+			_, err := NuevoProfesional(entrada, uuid.New(), ahoraDePrueba)
 
 			var verr ErrorValidacion
 			if !errors.As(err, &verr) {
@@ -379,7 +381,7 @@ func TestAplicarCambiosVuelveAlDefaultSiNoMandanLaConfiguracion(t *testing.T) {
 	anticipacion := 30
 	entrada.AnticipacionMinimaMin = &anticipacion
 
-	base, err := NuevoProfesional(entrada, ahoraDePrueba)
+	base, err := NuevoProfesional(entrada, uuid.New(), ahoraDePrueba)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}

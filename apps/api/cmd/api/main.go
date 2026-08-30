@@ -43,9 +43,12 @@ func ejecutar() error {
 	repo := memory.NuevoProfesional()
 	repoHorarios := memory.NuevoHorarioSemanal()
 	repoBloqueos := memory.NuevoBloqueo()
+	repoUsuarios := memory.NuevoUsuario()
+	repoSesiones := memory.NuevaSesion()
 
 	svc := service.NuevoProfesional(repo)
 	svcAgenda := service.NuevaAgenda(repo, repoHorarios, repoBloqueos)
+	svcAuth := service.NuevaAutenticacion(repoUsuarios, repoSesiones)
 
 	// El seed va después del servicio y escribe a través de él: así queda
 	// sujeto a las mismas reglas que cualquier alta, y esta función sigue
@@ -54,7 +57,7 @@ func ejecutar() error {
 	// Los repositorios de agenda no se siembran: un profesional sembrado
 	// arranca sin horarios, y cargarlos es parte de probar la API.
 	if cfg.EsDesarrollo() {
-		if err := sembrar(context.Background(), svc); err != nil {
+		if err := sembrar(context.Background(), svcAuth, svc); err != nil {
 			return fmt.Errorf("cargando el seed: %w", err)
 		}
 		slog.Info("seed de desarrollo cargado")
@@ -63,6 +66,9 @@ func ejecutar() error {
 	router := handler.NuevoRouter(
 		handler.NuevoProfesional(svc),
 		handler.NuevaAgenda(svcAgenda),
+		// La cookie va con Secure salvo en desarrollo: sin TLS el browser la
+		// descarta y el login "no anda" sin ningún error visible.
+		handler.NuevaAutenticacion(svcAuth, svc, !cfg.EsDesarrollo()),
 	)
 
 	srv := &http.Server{

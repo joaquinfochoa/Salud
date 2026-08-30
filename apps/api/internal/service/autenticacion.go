@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/joaquinfochoa/Salud/apps/api/internal/domain"
 	"github.com/joaquinfochoa/Salud/apps/api/internal/repository"
 )
@@ -125,6 +127,14 @@ func (a *Autenticacion) ResolverSesion(ctx context.Context, token string) (domai
 	}
 
 	return a.usuarios.ObtenerPorID(ctx, s.UsuarioID)
+}
+
+// UsuarioPorID existe para que el handler de "quién soy" no tenga que hablarle
+// al repositorio por atrás. El middleware ya resolvió la sesión, pero deja en
+// el contexto solo el ID: meter el domain.Usuario entero haría circular el
+// hash de la contraseña por cada request sin que nadie lo necesite.
+func (a *Autenticacion) UsuarioPorID(ctx context.Context, id uuid.UUID) (domain.Usuario, error) {
+	return a.usuarios.ObtenerPorID(ctx, id)
 }
 
 func (a *Autenticacion) abrirSesion(ctx context.Context, u domain.Usuario) (string, error) {

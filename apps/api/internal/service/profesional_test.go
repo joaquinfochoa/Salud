@@ -41,7 +41,7 @@ func TestCrear(t *testing.T) {
 	ctx := context.Background()
 	svc := nuevoServicioDePrueba()
 
-	p, err := svc.Crear(ctx, entradaValida())
+	p, err := svc.Crear(ctx, uuid.New(), entradaValida())
 	if err != nil {
 		t.Fatalf("Crear devolvió error: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestCrearValidacion(t *testing.T) {
 	entrada := entradaValida()
 	entrada.Nombre = ""
 
-	_, err := nuevoServicioDePrueba().Crear(context.Background(), entrada)
+	_, err := nuevoServicioDePrueba().Crear(context.Background(), uuid.New(), entrada)
 
 	var verr domain.ErrorValidacion
 	if !errors.As(err, &verr) {
@@ -78,7 +78,7 @@ func TestCrearMatriculaDuplicada(t *testing.T) {
 	ctx := context.Background()
 	svc := nuevoServicioDePrueba()
 
-	if _, err := svc.Crear(ctx, entradaValida()); err != nil {
+	if _, err := svc.Crear(ctx, uuid.New(), entradaValida()); err != nil {
 		t.Fatalf("el primer alta falló: %v", err)
 	}
 
@@ -88,7 +88,7 @@ func TestCrearMatriculaDuplicada(t *testing.T) {
 	otro.Apellido = "Profesional"
 	otro.Matricula = "m.n. 98234"
 
-	_, err := svc.Crear(ctx, otro)
+	_, err := svc.Crear(ctx, uuid.New(), otro)
 	if !errors.Is(err, domain.ErrMatriculaEnUso) {
 		t.Errorf("se esperaba ErrMatriculaEnUso, se obtuvo %v", err)
 	}
@@ -100,21 +100,21 @@ func TestCrearSlugUnico(t *testing.T) {
 
 	// tres homónimos: dos "Martín González" son perfectamente posibles y no
 	// pueden ser un error para el cliente
-	primero, err := svc.Crear(ctx, entradaValida())
+	primero, err := svc.Crear(ctx, uuid.New(), entradaValida())
 	if err != nil {
 		t.Fatalf("alta 1 falló: %v", err)
 	}
 
 	entrada2 := entradaValida()
 	entrada2.Matricula = "MN 11111"
-	segundo, err := svc.Crear(ctx, entrada2)
+	segundo, err := svc.Crear(ctx, uuid.New(), entrada2)
 	if err != nil {
 		t.Fatalf("alta 2 falló: %v", err)
 	}
 
 	entrada3 := entradaValida()
 	entrada3.Matricula = "MN 22222"
-	tercero, err := svc.Crear(ctx, entrada3)
+	tercero, err := svc.Crear(ctx, uuid.New(), entrada3)
 	if err != nil {
 		t.Fatalf("alta 3 falló: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestCrearConcurrenteConMatriculaCompartida(t *testing.T) {
 		entrada := entradaValida() // todos con la misma matrícula
 		// nombres distintos: así el único conflicto posible es la matrícula
 		entrada.Nombre = fmt.Sprintf("Nombre%d", i)
-		_, errores[i] = svc.Crear(ctx, entrada)
+		_, errores[i] = svc.Crear(ctx, uuid.New(), entrada)
 	})
 
 	exitos := 0
@@ -215,7 +215,7 @@ func TestCrearConcurrenteConMismoNombre(t *testing.T) {
 		entrada := entradaValida() // todos "Martín González"
 		// matrículas distintas: así el único conflicto posible es el slug
 		entrada.Matricula = fmt.Sprintf("MN %d", 40000+i)
-		p, err := svc.Crear(ctx, entrada)
+		p, err := svc.Crear(ctx, uuid.New(), entrada)
 		slugs[i], errores[i] = p.Slug, err
 	})
 
@@ -250,7 +250,7 @@ func TestObtenerPorSlug(t *testing.T) {
 	ctx := context.Background()
 	svc := nuevoServicioDePrueba()
 
-	p, err := svc.Crear(ctx, entradaValida())
+	p, err := svc.Crear(ctx, uuid.New(), entradaValida())
 	if err != nil {
 		t.Fatalf("Crear devolvió error: %v", err)
 	}
@@ -282,7 +282,7 @@ func TestListarDefaults(t *testing.T) {
 	for i := range 3 {
 		entrada := entradaValida()
 		entrada.Matricula = "MN 3000" + string(rune('0'+i))
-		if _, err := svc.Crear(ctx, entrada); err != nil {
+		if _, err := svc.Crear(ctx, uuid.New(), entrada); err != nil {
 			t.Fatalf("Crear devolvió error: %v", err)
 		}
 	}
@@ -376,7 +376,7 @@ func TestActualizar(t *testing.T) {
 	ctx := context.Background()
 	svc := nuevoServicioDePrueba()
 
-	p, err := svc.Crear(ctx, entradaValida())
+	p, err := svc.Crear(ctx, uuid.New(), entradaValida())
 	if err != nil {
 		t.Fatalf("Crear devolvió error: %v", err)
 	}
@@ -385,7 +385,7 @@ func TestActualizar(t *testing.T) {
 	entrada.Bio = "Bio actualizada."
 	entrada.Zona = "GBA Norte"
 
-	actualizado, err := svc.Actualizar(ctx, p.ID, entrada)
+	actualizado, err := svc.Actualizar(ctx, p.UsuarioID, p.ID, entrada)
 	if err != nil {
 		t.Fatalf("Actualizar devolvió error: %v", err)
 	}
@@ -404,7 +404,7 @@ func TestActualizar(t *testing.T) {
 }
 
 func TestActualizarNoExiste(t *testing.T) {
-	_, err := nuevoServicioDePrueba().Actualizar(context.Background(), uuid.New(), entradaValida())
+	_, err := nuevoServicioDePrueba().Actualizar(context.Background(), uuid.New(), uuid.New(), entradaValida())
 	if !errors.Is(err, domain.ErrNoEncontrado) {
 		t.Errorf("se esperaba ErrNoEncontrado, se obtuvo %v", err)
 	}
@@ -414,7 +414,7 @@ func TestActualizarMatriculaDeOtro(t *testing.T) {
 	ctx := context.Background()
 	svc := nuevoServicioDePrueba()
 
-	primero, err := svc.Crear(ctx, entradaValida())
+	primero, err := svc.Crear(ctx, uuid.New(), entradaValida())
 	if err != nil {
 		t.Fatalf("alta 1 falló: %v", err)
 	}
@@ -423,14 +423,14 @@ func TestActualizarMatriculaDeOtro(t *testing.T) {
 	entrada2.Nombre = "Carolina"
 	entrada2.Apellido = "Vega"
 	entrada2.Matricula = "MN 11111"
-	if _, err := svc.Crear(ctx, entrada2); err != nil {
+	if _, err := svc.Crear(ctx, uuid.New(), entrada2); err != nil {
 		t.Fatalf("alta 2 falló: %v", err)
 	}
 
 	// el primero intenta quedarse con la matrícula del segundo
 	robo := entradaValida()
 	robo.Matricula = "MN 11111"
-	if _, err := svc.Actualizar(ctx, primero.ID, robo); !errors.Is(err, domain.ErrMatriculaEnUso) {
+	if _, err := svc.Actualizar(ctx, primero.UsuarioID, primero.ID, robo); !errors.Is(err, domain.ErrMatriculaEnUso) {
 		t.Errorf("se esperaba ErrMatriculaEnUso, se obtuvo %v", err)
 	}
 }
@@ -439,7 +439,7 @@ func TestActualizarConservaLaPropiaMatricula(t *testing.T) {
 	ctx := context.Background()
 	svc := nuevoServicioDePrueba()
 
-	p, err := svc.Crear(ctx, entradaValida())
+	p, err := svc.Crear(ctx, uuid.New(), entradaValida())
 	if err != nil {
 		t.Fatalf("Crear devolvió error: %v", err)
 	}
@@ -447,7 +447,7 @@ func TestActualizarConservaLaPropiaMatricula(t *testing.T) {
 	// editar sin cambiar la matrícula no puede chocar consigo mismo
 	entrada := entradaValida()
 	entrada.Bio = "Otra bio."
-	if _, err := svc.Actualizar(ctx, p.ID, entrada); err != nil {
+	if _, err := svc.Actualizar(ctx, p.UsuarioID, p.ID, entrada); err != nil {
 		t.Errorf("editar conservando la matrícula propia falló: %v", err)
 	}
 }
@@ -457,7 +457,7 @@ func TestActualizarResetaVerificacion(t *testing.T) {
 	repo := memory.NuevoProfesional()
 	svc := NuevoProfesional(repo)
 
-	p, err := svc.Crear(ctx, entradaValida())
+	p, err := svc.Crear(ctx, uuid.New(), entradaValida())
 	if err != nil {
 		t.Fatalf("Crear devolvió error: %v", err)
 	}
@@ -470,7 +470,7 @@ func TestActualizarResetaVerificacion(t *testing.T) {
 
 	entrada := entradaValida()
 	entrada.Matricula = "MN 55555"
-	actualizado, err := svc.Actualizar(ctx, p.ID, entrada)
+	actualizado, err := svc.Actualizar(ctx, p.UsuarioID, p.ID, entrada)
 	if err != nil {
 		t.Fatalf("Actualizar devolvió error: %v", err)
 	}
@@ -483,12 +483,12 @@ func TestDarDeBajaYReactivar(t *testing.T) {
 	ctx := context.Background()
 	svc := nuevoServicioDePrueba()
 
-	p, err := svc.Crear(ctx, entradaValida())
+	p, err := svc.Crear(ctx, uuid.New(), entradaValida())
 	if err != nil {
 		t.Fatalf("Crear devolvió error: %v", err)
 	}
 
-	if err := svc.DarDeBaja(ctx, p.ID); err != nil {
+	if err := svc.DarDeBaja(ctx, p.UsuarioID, p.ID); err != nil {
 		t.Fatalf("DarDeBaja devolvió error: %v", err)
 	}
 
@@ -518,11 +518,11 @@ func TestDarDeBajaYReactivar(t *testing.T) {
 	}
 
 	// dar de baja dos veces es idempotente, no un error
-	if err := svc.DarDeBaja(ctx, p.ID); err != nil {
+	if err := svc.DarDeBaja(ctx, p.UsuarioID, p.ID); err != nil {
 		t.Errorf("la segunda baja debía ser idempotente, devolvió %v", err)
 	}
 
-	reactivado, err := svc.Reactivar(ctx, p.ID)
+	reactivado, err := svc.Reactivar(ctx, p.UsuarioID, p.ID)
 	if err != nil {
 		t.Fatalf("Reactivar devolvió error: %v", err)
 	}
@@ -537,7 +537,7 @@ func TestDarDeBajaYReactivar(t *testing.T) {
 }
 
 func TestDarDeBajaNoExiste(t *testing.T) {
-	if err := nuevoServicioDePrueba().DarDeBaja(context.Background(), uuid.New()); !errors.Is(err, domain.ErrNoEncontrado) {
+	if err := nuevoServicioDePrueba().DarDeBaja(context.Background(), uuid.New(), uuid.New()); !errors.Is(err, domain.ErrNoEncontrado) {
 		t.Errorf("se esperaba ErrNoEncontrado, se obtuvo %v", err)
 	}
 }

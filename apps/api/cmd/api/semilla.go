@@ -27,7 +27,7 @@ func precio(centavos int64) *int64 {
 	return &centavos
 }
 
-func sembrar(ctx context.Context, svc *service.Profesional) error {
+func sembrar(ctx context.Context, auth *service.Autenticacion, svc *service.Profesional) error {
 	entradas := []domain.EntradaProfesional{
 		{
 			Nombre:         "Martín",
@@ -75,12 +75,35 @@ func sembrar(ctx context.Context, svc *service.Profesional) error {
 		},
 	}
 
-	// El servicio pone la fecha de alta y resuelve slug y matrícula, igual que
-	// en cualquier POST.
+	// Cada profesional necesita su usuario antes que su perfil: el perfil ya no
+	// puede existir sin dueño. El servicio pone la fecha de alta y resuelve
+	// slug y matrícula, igual que en cualquier POST.
 	for _, entrada := range entradas {
-		if _, err := svc.Crear(ctx, entrada); err != nil {
+		u, _, err := auth.Registrar(ctx, domain.EntradaUsuario{
+			Email:      emailSemilla(entrada.Nombre, entrada.Apellido),
+			Contrasena: contrasenaSemilla,
+			Nombre:     entrada.Nombre,
+			Apellido:   entrada.Apellido,
+		})
+		if err != nil {
+			return fmt.Errorf("seed: registrando a %s %s: %w", entrada.Nombre, entrada.Apellido, err)
+		}
+
+		if _, err := svc.Crear(ctx, u.ID, entrada); err != nil {
 			return fmt.Errorf("seed: dando de alta a %s %s: %w", entrada.Nombre, entrada.Apellido, err)
 		}
 	}
 	return nil
+}
+
+// contrasenaSemilla es la misma para los cuatro profesionales de prueba. Es
+// segura porque sembrar() solo corre con APP_ENV=development —main lo gatea en
+// cfg.EsDesarrollo()— y en producción el binario arranca vacío.
+const contrasenaSemilla = "desarrollo123"
+
+// emailSemilla arma "martin.gonzalez@ejemplo.com" a partir del nombre.
+// Reutiliza GenerarSlug, que ya saca acentos y normaliza: escribir los cuatro
+// emails a mano sería una segunda lista que se desincroniza de la primera.
+func emailSemilla(nombre, apellido string) string {
+	return domain.GenerarSlug(nombre) + "." + domain.GenerarSlug(apellido) + "@ejemplo.com"
 }

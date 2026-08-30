@@ -34,7 +34,7 @@ func hacerProfesional(t *testing.T, nombre, apellido, matricula string, esp doma
 		Modalidades:    []string{"telemedicina"},
 		Zona:           zona,
 		ObrasSociales:  []string{"OSDE"},
-	}, ahoraDePrueba)
+	}, uuid.New(), ahoraDePrueba)
 	if err != nil {
 		t.Errorf("no se pudo construir el profesional de prueba: %v", err)
 		return domain.Profesional{}

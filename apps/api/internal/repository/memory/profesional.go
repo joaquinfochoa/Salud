@@ -69,6 +69,9 @@ func (r *Profesional) conflicto(p domain.Profesional) error {
 		if otro.Slug == p.Slug {
 			return domain.ErrSlugEnUso
 		}
+		if otro.UsuarioID == p.UsuarioID {
+			return domain.ErrUsuarioEnUso
+		}
 	}
 	return nil
 }
@@ -102,6 +105,18 @@ func (r *Profesional) ObtenerPorMatricula(_ context.Context, m domain.Matricula)
 
 	for _, p := range r.datos {
 		if p.Matricula == m {
+			return p.Clonar(), nil
+		}
+	}
+	return domain.Profesional{}, domain.ErrNoEncontrado
+}
+
+func (r *Profesional) ObtenerPorUsuarioID(_ context.Context, usuarioID uuid.UUID) (domain.Profesional, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, p := range r.datos {
+		if p.UsuarioID == usuarioID {
 			return p.Clonar(), nil
 		}
 	}

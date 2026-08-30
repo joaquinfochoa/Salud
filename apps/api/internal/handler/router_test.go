@@ -11,10 +11,27 @@ import (
 )
 
 func nuevoRouterDePrueba() http.Handler {
+	return nuevoStackDePrueba()
+}
+
+// nuevoStackDePrueba cablea el stack real de punta a punta, sin mocks. Es el
+// único lugar del paquete que sabe cómo se arma el router: los tres helpers de
+// servidor lo usan.
+//
+// cookieSegura en false porque httptest sirve por HTTP: con Secure el cliente
+// nunca devolvería la cookie y todos los tests privados darían 401 por el
+// motivo equivocado.
+func nuevoStackDePrueba() http.Handler {
 	repo := memory.NuevoProfesional()
 	svc := service.NuevoProfesional(repo)
 	svcAgenda := service.NuevaAgenda(repo, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo())
-	return NuevoRouter(NuevoProfesional(svc), NuevaAgenda(svcAgenda))
+	svcAuth := service.NuevaAutenticacion(memory.NuevoUsuario(), memory.NuevaSesion())
+
+	return NuevoRouter(
+		NuevoProfesional(svc),
+		NuevaAgenda(svcAgenda),
+		NuevaAutenticacion(svcAuth, svc, false),
+	)
 }
 
 // TestRutaInexistenteDevuelveProblemJSON cubre el 404 que arma ServeMux

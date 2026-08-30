@@ -13,7 +13,7 @@ func TestSembrar(t *testing.T) {
 	ctx := context.Background()
 	svc := service.NuevoProfesional(memory.NuevoProfesional())
 
-	if err := sembrar(ctx, svc); err != nil {
+	if err := sembrar(ctx, service.NuevaAutenticacion(memory.NuevoUsuario(), memory.NuevaSesion()), svc); err != nil {
 		t.Fatalf("sembrar devolvió error: %v", err)
 	}
 

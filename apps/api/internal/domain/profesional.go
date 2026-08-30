@@ -27,7 +27,17 @@ const (
 // No hay setters públicos; la única puerta de entrada es NuevoProfesional, y la
 // única forma de modificarlo es AplicarCambios, que revalida todo.
 type Profesional struct {
-	ID             uuid.UUID
+	ID uuid.UUID
+
+	// UsuarioID es el dueño. Obligatorio: un Profesional sin dueño es un perfil
+	// que cualquiera puede editar, que es exactamente lo que la autenticación
+	// vino a arreglar.
+	//
+	// No está en EntradaProfesional a propósito. Sale de la sesión, nunca del
+	// body: aceptarlo del cliente sería dejar que cualquiera se declare dueño
+	// del perfil de otro.
+	UsuarioID uuid.UUID
+
 	Slug           string
 	Nombre         string
 	Apellido       string
@@ -81,13 +91,14 @@ type EntradaProfesional struct {
 
 // NuevoProfesional valida la entrada y devuelve un profesional consistente o un
 // ErrorValidacion con todos los campos que fallaron.
-func NuevoProfesional(entrada EntradaProfesional, ahora time.Time) (Profesional, error) {
+func NuevoProfesional(entrada EntradaProfesional, usuarioID uuid.UUID, ahora time.Time) (Profesional, error) {
 	p, verr := construir(entrada)
 	if verr.tieneErrores() {
 		return Profesional{}, verr
 	}
 
 	p.ID = uuid.New()
+	p.UsuarioID = usuarioID
 	p.Slug = GenerarSlug(p.NombreCompleto())
 	if p.Slug == "" {
 		// el nombre pasó la validación pero no dejó ningún carácter usable
@@ -112,6 +123,10 @@ func (p Profesional) AplicarCambios(entrada EntradaProfesional, ahora time.Time)
 	}
 
 	actualizado.ID = p.ID
+	// El dueño no se edita: viene de la sesión al crear y no vuelve a mirarse.
+	// Sin esta línea cada PUT dejaría el perfil huérfano —uuid.Nil— y el dueño
+	// perdería el acceso a su propio perfil al cambiarse la bio.
+	actualizado.UsuarioID = p.UsuarioID
 	actualizado.Slug = p.Slug
 	actualizado.Estado = p.Estado
 	actualizado.CreadoEn = p.CreadoEn

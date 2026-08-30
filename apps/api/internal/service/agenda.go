@@ -61,9 +61,12 @@ type ResultadoHuecos struct {
 	Hasta  time.Time
 }
 
-func (s *Agenda) ReemplazarHorarios(ctx context.Context, profesionalID uuid.UUID, entradas []domain.EntradaHorarioSemanal) ([]domain.HorarioSemanal, error) {
+func (s *Agenda) ReemplazarHorarios(ctx context.Context, usuarioID, profesionalID uuid.UUID, entradas []domain.EntradaHorarioSemanal) ([]domain.HorarioSemanal, error) {
 	profesional, err := s.profesionales.ObtenerPorID(ctx, profesionalID)
 	if err != nil {
+		return nil, err
+	}
+	if err := verificarPropiedad(profesional, usuarioID); err != nil {
 		return nil, err
 	}
 
@@ -89,8 +92,12 @@ func (s *Agenda) ListarHorarios(ctx context.Context, profesionalID uuid.UUID) ([
 	return s.horarios.ListarDeProfesional(ctx, profesionalID)
 }
 
-func (s *Agenda) CrearBloqueo(ctx context.Context, profesionalID uuid.UUID, entrada domain.EntradaBloqueo) (domain.Bloqueo, error) {
-	if _, err := s.profesionales.ObtenerPorID(ctx, profesionalID); err != nil {
+func (s *Agenda) CrearBloqueo(ctx context.Context, usuarioID, profesionalID uuid.UUID, entrada domain.EntradaBloqueo) (domain.Bloqueo, error) {
+	profesional, err := s.profesionales.ObtenerPorID(ctx, profesionalID)
+	if err != nil {
+		return domain.Bloqueo{}, err
+	}
+	if err := verificarPropiedad(profesional, usuarioID); err != nil {
 		return domain.Bloqueo{}, err
 	}
 
@@ -131,8 +138,12 @@ func (s *Agenda) ListarBloqueos(ctx context.Context, profesionalID uuid.UUID, de
 // Sin autenticación cualquiera puede llamar a esto, pero al menos la ruta y el
 // recurso tienen que ser coherentes: borrar el bloqueo de otro desde la ruta de
 // este es un 404, no un éxito silencioso.
-func (s *Agenda) EliminarBloqueo(ctx context.Context, profesionalID, bloqueoID uuid.UUID) error {
-	if _, err := s.profesionales.ObtenerPorID(ctx, profesionalID); err != nil {
+func (s *Agenda) EliminarBloqueo(ctx context.Context, usuarioID, profesionalID, bloqueoID uuid.UUID) error {
+	profesional, err := s.profesionales.ObtenerPorID(ctx, profesionalID)
+	if err != nil {
+		return err
+	}
+	if err := verificarPropiedad(profesional, usuarioID); err != nil {
 		return err
 	}
 

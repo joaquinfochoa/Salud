@@ -29,14 +29,15 @@ type Filtro struct {
 //
 // No hay borrado físico: la baja es lógica y se hace con Actualizar.
 //
-// Contrato de unicidad: la matrícula y el slug son únicos, y quien lo garantiza
+// Contrato de unicidad: la matrícula, el slug y el usuario dueño son únicos, y quien lo garantiza
 // es la escritura, no el que llama. Chequear antes y escribir después son dos
 // operaciones y entre las dos entra otro request; una implementación que confíe
 // en el chequeo del servicio deja pasar duplicados. En PostgreSQL esto son dos
 // constraints UNIQUE, y traducir la violación a estos sentinelas es todo lo que
 // tiene que hacer esa implementación:
 //
-//   - Crear devuelve ErrMatriculaEnUso, ErrSlugEnUso o ErrIDEnUso.
+//   - Crear devuelve ErrMatriculaEnUso, ErrSlugEnUso, ErrUsuarioEnUso o
+//     ErrIDEnUso.
 //   - Actualizar devuelve ErrNoEncontrado, o los mismos conflictos evaluados
 //     contra los demás registros, nunca contra el propio.
 type Profesional interface {
@@ -44,6 +45,7 @@ type Profesional interface {
 	ObtenerPorID(ctx context.Context, id uuid.UUID) (domain.Profesional, error)
 	ObtenerPorSlug(ctx context.Context, slug string) (domain.Profesional, error)
 	ObtenerPorMatricula(ctx context.Context, m domain.Matricula) (domain.Profesional, error)
+	ObtenerPorUsuarioID(ctx context.Context, usuarioID uuid.UUID) (domain.Profesional, error)
 	Listar(ctx context.Context, f Filtro) ([]domain.Profesional, int, error)
 	Actualizar(ctx context.Context, p domain.Profesional) error
 }

@@ -10,17 +10,26 @@ import (
 //
 // Usa el ServeMux de la stdlib: desde Go 1.22 entiende método y parámetros de
 // ruta, así que no hace falta chi, gin ni echo para esto.
-func NuevoRouter(ph *ManejadorProfesional, ah *ManejadorAgenda) http.Handler {
+func NuevoRouter(ph *ManejadorProfesional, ah *ManejadorAgenda, mh *ManejadorAutenticacion) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", healthz)
 
+	// Sesión como recurso, no /login: consistente con el resto del contrato.
+	// Ninguna de estas cuatro colisiona con lo existente: /usuarios y
+	// /sesiones son prefijos nuevos, y usuarios/yo es un literal sin ninguna
+	// plantilla que compita.
+	mux.HandleFunc("POST /api/v1/usuarios", mh.Registrar)
+	mux.HandleFunc("GET /api/v1/usuarios/yo", RequerirSesion(mh.Yo))
+	mux.HandleFunc("POST /api/v1/sesiones", mh.IniciarSesion)
+	mux.HandleFunc("DELETE /api/v1/sesiones/actual", mh.CerrarSesion)
+
 	mux.HandleFunc("GET /api/v1/profesionales", ph.Listar)
-	mux.HandleFunc("POST /api/v1/profesionales", ph.Crear)
+	mux.HandleFunc("POST /api/v1/profesionales", RequerirSesion(ph.Crear))
 	mux.HandleFunc("GET /api/v1/profesionales/{id}", ph.ObtenerPorID)
-	mux.HandleFunc("PUT /api/v1/profesionales/{id}", ph.Actualizar)
-	mux.HandleFunc("DELETE /api/v1/profesionales/{id}", ph.DarDeBaja)
-	mux.HandleFunc("POST /api/v1/profesionales/{id}/reactivar", ph.Reactivar)
+	mux.HandleFunc("PUT /api/v1/profesionales/{id}", RequerirSesion(ph.Actualizar))
+	mux.HandleFunc("DELETE /api/v1/profesionales/{id}", RequerirSesion(ph.DarDeBaja))
+	mux.HandleFunc("POST /api/v1/profesionales/{id}/reactivar", RequerirSesion(ph.Reactivar))
 
 	// El perfil público vive en su propio recurso, no en /profesionales. Antes
 	// vivía ahí, con un segmento fijo delante del slug, y esos cinco
@@ -36,16 +45,18 @@ func NuevoRouter(ph *ManejadorProfesional, ah *ManejadorAgenda) http.Handler {
 	mux.HandleFunc("GET /api/v1/perfiles/{slug}", ph.ObtenerPorSlug)
 
 	mux.HandleFunc("GET /api/v1/profesionales/{id}/horarios", ah.ListarHorarios)
-	mux.HandleFunc("PUT /api/v1/profesionales/{id}/horarios", ah.ReemplazarHorarios)
+	mux.HandleFunc("PUT /api/v1/profesionales/{id}/horarios", RequerirSesion(ah.ReemplazarHorarios))
 	mux.HandleFunc("GET /api/v1/profesionales/{id}/bloqueos", ah.ListarBloqueos)
-	mux.HandleFunc("POST /api/v1/profesionales/{id}/bloqueos", ah.CrearBloqueo)
-	mux.HandleFunc("DELETE /api/v1/profesionales/{id}/bloqueos/{bloqueoId}", ah.EliminarBloqueo)
+	mux.HandleFunc("POST /api/v1/profesionales/{id}/bloqueos", RequerirSesion(ah.CrearBloqueo))
+	mux.HandleFunc("DELETE /api/v1/profesionales/{id}/bloqueos/{bloqueoId}", RequerirSesion(ah.EliminarBloqueo))
 	mux.HandleFunc("GET /api/v1/profesionales/{id}/huecos", ah.HuecosLibres)
 
 	// El orden es de afuera hacia adentro. IDPeticion va primero para que el
-	// log lo tenga; RegistrarPeticiones envuelve a RecuperarPanic para que un panic
-	// quede registrado con su 500.
-	return Encadenar(envolverErroresDeRuteo(mux), IDPeticion, RegistrarPeticiones, RecuperarPanic)
+	// log lo tenga; Autenticar va antes que RegistrarPeticiones para que el log
+	// de cada request pueda incluir al usuario; RegistrarPeticiones envuelve a
+	// RecuperarPanic para que un panic quede registrado con su 500.
+	return Encadenar(envolverErroresDeRuteo(mux),
+		IDPeticion, mh.Autenticar, RegistrarPeticiones, RecuperarPanic)
 }
 
 func healthz(w http.ResponseWriter, _ *http.Request) {

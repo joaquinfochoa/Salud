@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"github.com/joaquinfochoa/Salud/apps/api/internal/domain"
-	"github.com/joaquinfochoa/Salud/apps/api/internal/repository/memory"
-	"github.com/joaquinfochoa/Salud/apps/api/internal/service"
 )
 
 const cuerpoHorarios = `{
@@ -24,13 +22,9 @@ const cuerpoHorarios = `{
 func servidorConAgenda(t *testing.T) *httptest.Server {
 	t.Helper()
 
-	profesionales := memory.NuevoProfesional()
-	svcProf := service.NuevoProfesional(profesionales)
-	svcAgenda := service.NuevaAgenda(profesionales, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo())
-
-	router := NuevoRouter(NuevoProfesional(svcProf), NuevaAgenda(svcAgenda))
-	srv := httptest.NewServer(router)
+	srv := httptest.NewServer(nuevoStackDePrueba())
 	t.Cleanup(srv.Close)
+	conSesion(t, srv, "agenda@ejemplo.com")
 	return srv
 }
 

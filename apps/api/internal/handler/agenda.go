@@ -35,6 +35,11 @@ func (h *ManejadorAgenda) ListarHorarios(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *ManejadorAgenda) ReemplazarHorarios(w http.ResponseWriter, r *http.Request) {
+	usuarioID, ok := usuarioAutenticado(w, r)
+	if !ok {
+		return
+	}
+
 	id, ok := parsearID(w, r)
 	if !ok {
 		return
@@ -46,7 +51,7 @@ func (h *ManejadorAgenda) ReemplazarHorarios(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	semana, err := h.svc.ReemplazarHorarios(r.Context(), id, peticion.aEntradas())
+	semana, err := h.svc.ReemplazarHorarios(r.Context(), usuarioID, id, peticion.aEntradas())
 	if err != nil {
 		escribirError(w, r, err)
 		return
@@ -94,6 +99,11 @@ func (h *ManejadorAgenda) ListarBloqueos(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *ManejadorAgenda) CrearBloqueo(w http.ResponseWriter, r *http.Request) {
+	usuarioID, ok := usuarioAutenticado(w, r)
+	if !ok {
+		return
+	}
+
 	id, ok := parsearID(w, r)
 	if !ok {
 		return
@@ -105,7 +115,7 @@ func (h *ManejadorAgenda) CrearBloqueo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bloqueo, err := h.svc.CrearBloqueo(r.Context(), id, peticion.aEntrada())
+	bloqueo, err := h.svc.CrearBloqueo(r.Context(), usuarioID, id, peticion.aEntrada())
 	if err != nil {
 		escribirError(w, r, err)
 		return
@@ -116,6 +126,11 @@ func (h *ManejadorAgenda) CrearBloqueo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ManejadorAgenda) EliminarBloqueo(w http.ResponseWriter, r *http.Request) {
+	usuarioID, ok := usuarioAutenticado(w, r)
+	if !ok {
+		return
+	}
+
 	id, ok := parsearID(w, r)
 	if !ok {
 		return
@@ -127,7 +142,7 @@ func (h *ManejadorAgenda) EliminarBloqueo(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := h.svc.EliminarBloqueo(r.Context(), id, bloqueoID); err != nil {
+	if err := h.svc.EliminarBloqueo(r.Context(), usuarioID, id, bloqueoID); err != nil {
 		escribirError(w, r, err)
 		return
 	}

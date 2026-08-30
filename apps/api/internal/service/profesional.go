@@ -45,8 +45,29 @@ func NuevoProfesional(repo repository.Profesional) *Profesional {
 	}
 }
 
-func (s *Profesional) Crear(ctx context.Context, entrada domain.EntradaProfesional) (domain.Profesional, error) {
-	p, err := domain.NuevoProfesional(entrada, s.ahora())
+// verificarPropiedad es la única implementación de "este perfil es tuyo".
+//
+// Vive en el servicio y no en el handler a propósito: acá la cubren los tests
+// sin levantar un servidor HTTP, y cualquier consumidor futuro —un comando de
+// consola, una cola— pasa por la misma regla en vez de reimplementarla.
+func verificarPropiedad(p domain.Profesional, usuarioID uuid.UUID) error {
+	if p.UsuarioID != usuarioID {
+		return domain.ErrNoAutorizado
+	}
+	return nil
+}
+
+func (s *Profesional) Crear(ctx context.Context, usuarioID uuid.UUID, entrada domain.EntradaProfesional) (domain.Profesional, error) {
+	// Camino rápido, con la misma salvedad que el de la matrícula: lee y suelta
+	// el lock, así que la garantía la da repo.Crear con ErrUsuarioEnUso.
+	switch _, err := s.repo.ObtenerPorUsuarioID(ctx, usuarioID); {
+	case err == nil:
+		return domain.Profesional{}, domain.ErrYaTienePerfil
+	case !errors.Is(err, domain.ErrNoEncontrado):
+		return domain.Profesional{}, err
+	}
+
+	p, err := domain.NuevoProfesional(entrada, usuarioID, s.ahora())
 	if err != nil {
 		return domain.Profesional{}, err
 	}
@@ -95,6 +116,13 @@ func (s *Profesional) ObtenerPorID(ctx context.Context, id uuid.UUID) (domain.Pr
 
 func (s *Profesional) ObtenerPorSlug(ctx context.Context, slug string) (domain.Profesional, error) {
 	return s.repo.ObtenerPorSlug(ctx, slug)
+}
+
+// ObtenerPorUsuarioID devuelve el perfil de un usuario, o ErrNoEncontrado si
+// no tiene. No tener perfil no es un error del sistema: es la mitad de los
+// usuarios, y el que llama decide qué significa.
+func (s *Profesional) ObtenerPorUsuarioID(ctx context.Context, usuarioID uuid.UUID) (domain.Profesional, error) {
+	return s.repo.ObtenerPorUsuarioID(ctx, usuarioID)
 }
 
 func (s *Profesional) Listar(ctx context.Context, f repository.Filtro) ([]domain.Profesional, int, error) {
@@ -152,9 +180,12 @@ func (s *Profesional) verificarMatriculaLibre(ctx context.Context, m domain.Matr
 // Actualizar reemplaza los campos editables. Funciona también sobre profesionales
 // dados de baja: editar los datos de alguien inactivo no tiene por qué
 // bloquearse, y no cambia su estado.
-func (s *Profesional) Actualizar(ctx context.Context, id uuid.UUID, entrada domain.EntradaProfesional) (domain.Profesional, error) {
+func (s *Profesional) Actualizar(ctx context.Context, usuarioID, id uuid.UUID, entrada domain.EntradaProfesional) (domain.Profesional, error) {
 	actual, err := s.repo.ObtenerPorID(ctx, id)
 	if err != nil {
+		return domain.Profesional{}, err
+	}
+	if err := verificarPropiedad(actual, usuarioID); err != nil {
 		return domain.Profesional{}, err
 	}
 
@@ -181,17 +212,23 @@ func (s *Profesional) Actualizar(ctx context.Context, id uuid.UUID, entrada doma
 // DarDeBaja da de baja. No borra: los turnos, comprobantes y pagos históricos
 // siguen apuntando a este registro, y sin él el comprobante que un paciente
 // presentó para un reintegro queda huérfano.
-func (s *Profesional) DarDeBaja(ctx context.Context, id uuid.UUID) error {
+func (s *Profesional) DarDeBaja(ctx context.Context, usuarioID, id uuid.UUID) error {
 	actual, err := s.repo.ObtenerPorID(ctx, id)
 	if err != nil {
+		return err
+	}
+	if err := verificarPropiedad(actual, usuarioID); err != nil {
 		return err
 	}
 	return s.repo.Actualizar(ctx, actual.DarDeBaja(s.ahora()))
 }
 
-func (s *Profesional) Reactivar(ctx context.Context, id uuid.UUID) (domain.Profesional, error) {
+func (s *Profesional) Reactivar(ctx context.Context, usuarioID, id uuid.UUID) (domain.Profesional, error) {
 	actual, err := s.repo.ObtenerPorID(ctx, id)
 	if err != nil {
+		return domain.Profesional{}, err
+	}
+	if err := verificarPropiedad(actual, usuarioID); err != nil {
 		return domain.Profesional{}, err
 	}
 

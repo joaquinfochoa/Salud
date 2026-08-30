@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/joaquinfochoa/Salud/apps/api/internal/domain"
 )
 
@@ -24,7 +26,7 @@ func TestARespuestaSerializaLosCamposDelContrato(t *testing.T) {
 		Modalidades:    []string{"telemedicina", "presencial"},
 		Zona:           "CABA",
 		ObrasSociales:  []string{"OSDE"},
-	}, ahora)
+	}, uuid.New(), ahora)
 	if err != nil {
 		t.Fatalf("error inesperado: %v", err)
 	}
