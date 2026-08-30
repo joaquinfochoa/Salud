@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Archivo, Public_Sans } from "next/font/google";
-import { Encabezado } from "@/componentes/encabezado";
 import "./globals.css";
 
 // Archivo solo para las horas. Es el objeto principal de la interfaz —lo que la
@@ -36,10 +35,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="es"
       className={`${archivo.variable} ${publicSans.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
-        <Encabezado />
-        {children}
-      </body>
+      {/* Sin navegación acá: cada grupo de rutas trae la suya. El público y
+          el del paciente comparten el mismo encabezado; el panel tiene tabs
+          abajo en móvil y barra lateral en escritorio, y es eso lo que hace
+          que se sientan dos productos distintos dentro de una sola app. */}
+      <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
 }
