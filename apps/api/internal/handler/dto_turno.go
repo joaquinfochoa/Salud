@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/joaquinfochoa/Salud/apps/api/internal/domain"
+	"github.com/joaquinfochoa/Salud/apps/api/internal/service"
 )
 
 // peticionTurno es todo lo que el cliente manda para reservar.
@@ -57,17 +58,75 @@ func aRespuestaTurno(t domain.Turno) respuestaTurno {
 	return r
 }
 
-// respuestaListaTurnos usa la clave "datos", igual que el listado de
-// profesionales. Sin paginación: no es una colección paginada sino una
-// ventana temporal, como ListaBloqueos.
-type respuestaListaTurnos struct {
-	Datos []respuestaTurno `json:"datos"`
+// Las dos partes de un turno. Cada listado devuelve la OTRA: el paciente ve con
+// quién es su turno, el profesional ve quién viene. Son dos formas y no una con
+// los dos campos opcionales porque así el consumidor no tiene que acordarse de
+// qué endpoint lo sacó para saber cuál viene lleno.
+type parteProfesional struct {
+	ID           string `json:"id"`
+	Nombre       string `json:"nombre"`
+	Apellido     string `json:"apellido"`
+	Slug         string `json:"slug"`
+	Especialidad string `json:"especialidad"`
 }
 
-func aRespuestaListaTurnos(turnos []domain.Turno) respuestaListaTurnos {
-	datos := make([]respuestaTurno, 0, len(turnos))
+// Sin email: el profesional necesita saber a quién atiende, no cómo contactarlo
+// por fuera de la plataforma.
+type partePaciente struct {
+	ID       string `json:"id"`
+	Nombre   string `json:"nombre"`
+	Apellido string `json:"apellido"`
+}
+
+type respuestaTurnoConProfesional struct {
+	respuestaTurno
+	Profesional parteProfesional `json:"profesional"`
+}
+
+type respuestaTurnoConPaciente struct {
+	respuestaTurno
+	Paciente partePaciente `json:"paciente"`
+}
+
+// Los dos listados usan la clave "datos", igual que el de profesionales. Sin
+// paginación: no son colecciones paginadas sino ventanas temporales, como
+// ListaBloqueos.
+type respuestaListaTurnosConProfesional struct {
+	Datos []respuestaTurnoConProfesional `json:"datos"`
+}
+
+type respuestaListaTurnosConPaciente struct {
+	Datos []respuestaTurnoConPaciente `json:"datos"`
+}
+
+func aRespuestaListaDePaciente(turnos []service.TurnoConProfesional) respuestaListaTurnosConProfesional {
+	datos := make([]respuestaTurnoConProfesional, 0, len(turnos))
 	for _, t := range turnos {
-		datos = append(datos, aRespuestaTurno(t))
+		datos = append(datos, respuestaTurnoConProfesional{
+			respuestaTurno: aRespuestaTurno(t.Turno),
+			Profesional: parteProfesional{
+				ID:           t.Profesional.ID.String(),
+				Nombre:       t.Profesional.Nombre,
+				Apellido:     t.Profesional.Apellido,
+				Slug:         t.Profesional.Slug,
+				Especialidad: string(t.Profesional.Especialidad),
+			},
+		})
 	}
-	return respuestaListaTurnos{Datos: datos}
+	return respuestaListaTurnosConProfesional{Datos: datos}
+}
+
+func aRespuestaListaDeProfesional(turnos []service.TurnoConPaciente) respuestaListaTurnosConPaciente {
+	datos := make([]respuestaTurnoConPaciente, 0, len(turnos))
+	for _, t := range turnos {
+		datos = append(datos, respuestaTurnoConPaciente{
+			respuestaTurno: aRespuestaTurno(t.Turno),
+			Paciente: partePaciente{
+				ID:       t.Paciente.ID.String(),
+				Nombre:   t.Paciente.Nombre,
+				Apellido: t.Paciente.Apellido,
+			},
+		})
+	}
+	return respuestaListaTurnosConPaciente{Datos: datos}
 }

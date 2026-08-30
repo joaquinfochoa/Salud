@@ -172,10 +172,10 @@ paths:
           description: Opcional, AAAA-MM-DD. El día pedido entra entero.
       responses:
         '200':
-          description: Los turnos del paciente
+          description: Los turnos del paciente, con el profesional de cada uno
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ListaTurnos' }
+              schema: { $ref: '#/components/schemas/ListaTurnosDePaciente' }
         '400': { $ref: '#/components/responses/PeticionInvalida' }
         '401': { $ref: '#/components/responses/NoAutenticado' }
 
@@ -616,10 +616,10 @@ paths:
           description: Opcional, AAAA-MM-DD. El día pedido entra entero.
       responses:
         '200':
-          description: La agenda del profesional
+          description: La agenda del profesional, con el paciente de cada turno
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ListaTurnos' }
+              schema: { $ref: '#/components/schemas/ListaTurnosDeProfesional' }
         '400': { $ref: '#/components/responses/PeticionInvalida' }
         '401': { $ref: '#/components/responses/NoAutenticado' }
         '403': { $ref: '#/components/responses/NoAutorizado' }
@@ -790,17 +790,70 @@ components:
             El `Usuario` que canceló. Comparándolo contra `pacienteId` se sabe
             si fue el paciente o el profesional.
 
-    ListaTurnos:
+    ParteProfesional:
+      type: object
+      required: [id, nombre, apellido, slug, especialidad]
+      properties:
+        id: { type: string, format: uuid }
+        nombre: { type: string }
+        apellido: { type: string }
+        slug: { type: string }
+        especialidad: { $ref: '#/components/schemas/Especialidad' }
+
+    PartePaciente:
+      type: object
+      required: [id, nombre, apellido]
+      description: |
+        Sin email. El profesional necesita saber a quién atiende, no cómo
+        contactarlo por fuera de la plataforma.
+      properties:
+        id: { type: string, format: uuid }
+        nombre: { type: string }
+        apellido: { type: string }
+
+    TurnoConProfesional:
+      allOf:
+        - $ref: '#/components/schemas/Turno'
+        - type: object
+          required: [profesional]
+          properties:
+            profesional: { $ref: '#/components/schemas/ParteProfesional' }
+
+    TurnoConPaciente:
+      allOf:
+        - $ref: '#/components/schemas/Turno'
+        - type: object
+          required: [paciente]
+          properties:
+            paciente: { $ref: '#/components/schemas/PartePaciente' }
+
+    ListaTurnosDePaciente:
       type: object
       required: [datos]
       description: |
+        Cada turno viene con **la otra parte**: el profesional. Son dos formas y
+        no una con los dos campos opcionales, para que el consumidor no tenga
+        que acordarse de qué endpoint lo sacó.
+
         Sin paginación: no es una colección paginada sino una ventana temporal,
         igual que `ListaBloqueos`. Incluye los cancelados — son parte del
         historial de las dos partes.
       properties:
         datos:
           type: array
-          items: { $ref: '#/components/schemas/Turno' }
+          items: { $ref: '#/components/schemas/TurnoConProfesional' }
+
+    ListaTurnosDeProfesional:
+      type: object
+      required: [datos]
+      description: |
+        Cada turno viene con el paciente. No filtra nada: este listado exige ser
+        el dueño del perfil, así que el nombre de quien reservó es un dato al que
+        ya se tiene derecho.
+      properties:
+        datos:
+          type: array
+          items: { $ref: '#/components/schemas/TurnoConPaciente' }
 
     Especialidad:
       type: string

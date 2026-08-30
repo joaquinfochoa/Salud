@@ -50,7 +50,7 @@ func ejecutar() error {
 	svc := service.NuevoProfesional(repo)
 	svcAgenda := service.NuevaAgenda(repo, repoHorarios, repoBloqueos, repoTurnos)
 	svcAuth := service.NuevaAutenticacion(repoUsuarios, repoSesiones)
-	svcTurnos := service.NuevoTurno(repoTurnos, repo, svcAgenda)
+	svcTurnos := service.NuevoTurno(repoTurnos, repo, repoUsuarios, svcAgenda)
 
 	// El seed va después del servicio y escribe a través de él: así queda
 	// sujeto a las mismas reglas que cualquier alta, y esta función sigue

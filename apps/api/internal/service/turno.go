@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 type Turno struct {
 	repo          repository.Turno
 	profesionales repository.Profesional
+	usuarios      repository.Usuario
 	agenda        *Agenda
 
 	// ahora es inyectable para que los casos no dependan del reloj.
@@ -32,10 +34,11 @@ func ConRelojTurno(ahora func() time.Time) func(*Turno) {
 	return func(s *Turno) { s.ahora = ahora }
 }
 
-func NuevoTurno(repo repository.Turno, profesionales repository.Profesional, agenda *Agenda, opciones ...func(*Turno)) *Turno {
+func NuevoTurno(repo repository.Turno, profesionales repository.Profesional, usuarios repository.Usuario, agenda *Agenda, opciones ...func(*Turno)) *Turno {
 	s := &Turno{
 		repo:          repo,
 		profesionales: profesionales,
+		usuarios:      usuarios,
 		agenda:        agenda,
 		ahora:         func() time.Time { return time.Now().UTC() },
 	}
@@ -137,14 +140,59 @@ func (s *Turno) Cancelar(ctx context.Context, usuarioID, turnoID uuid.UUID) erro
 	return s.repo.Actualizar(ctx, cancelado)
 }
 
-// ListarDePaciente devuelve los turnos del paciente, incluidos los cancelados.
+// TurnoConProfesional es un turno visto por su paciente: lleva con quién es.
+//
+// Son dos tipos y no uno con los dos campos opcionales porque el consumidor no
+// tendría cómo saber cuál viene lleno sin acordarse de qué endpoint lo sacó.
+type TurnoConProfesional struct {
+	domain.Turno
+	Profesional domain.Profesional
+}
+
+// TurnoConPaciente es el mismo turno visto por el profesional: lleva quién
+// viene. Sin el email: el profesional necesita saber a quién atiende, no cómo
+// contactarlo por fuera de la plataforma.
+type TurnoConPaciente struct {
+	domain.Turno
+	Paciente domain.Usuario
+}
+
+// ListarDePaciente devuelve los turnos del paciente con el profesional de cada
+// uno, incluidos los cancelados.
 //
 // No recibe un pacienteID que venga del cliente: el handler le pasa el de la
 // sesión. Aceptarlo como filtro convertiría este endpoint en una forma de leer
 // la agenda de cualquiera.
-func (s *Turno) ListarDePaciente(ctx context.Context, pacienteID uuid.UUID, desde, hasta *time.Time) ([]domain.Turno, error) {
+func (s *Turno) ListarDePaciente(ctx context.Context, pacienteID uuid.UUID, desde, hasta *time.Time) ([]TurnoConProfesional, error) {
 	d, h := s.ventana(desde, hasta)
-	return s.repo.ListarDePaciente(ctx, pacienteID, d, h)
+	turnos, err := s.repo.ListarDePaciente(ctx, pacienteID, d, h)
+	if err != nil {
+		return nil, err
+	}
+
+	// Se resuelve cada profesional una sola vez: seis turnos con la misma
+	// persona son una lectura, no seis. Sin esto el N+1 crece con el historial
+	// del paciente en vez de con la cantidad de gente con la que se atendió.
+	porID := make(map[uuid.UUID]domain.Profesional)
+	for _, t := range turnos {
+		if _, visto := porID[t.ProfesionalID]; visto {
+			continue
+		}
+		p, err := s.profesionales.ObtenerPorID(ctx, t.ProfesionalID)
+		if err != nil && !errors.Is(err, domain.ErrNoEncontrado) {
+			return nil, err
+		}
+		// Un profesional que no se puede resolver queda en su valor cero: que
+		// un dato faltante haga desaparecer el listado entero sería peor que
+		// mostrarlo incompleto.
+		porID[t.ProfesionalID] = p
+	}
+
+	salida := make([]TurnoConProfesional, 0, len(turnos))
+	for _, t := range turnos {
+		salida = append(salida, TurnoConProfesional{Turno: t, Profesional: porID[t.ProfesionalID]})
+	}
+	return salida, nil
 }
 
 // ListarDeProfesional devuelve la agenda ocupada, y solo al dueño del perfil.
@@ -153,7 +201,7 @@ func (s *Turno) ListarDePaciente(ctx context.Context, pacienteID uuid.UUID, desd
 // La diferencia no es caprichosa: los huecos libres son información de oferta,
 // pero la agenda ocupada dice quién es paciente de quién, y eso es dato de
 // salud bajo Ley 25.326.
-func (s *Turno) ListarDeProfesional(ctx context.Context, usuarioID, profesionalID uuid.UUID, desde, hasta *time.Time) ([]domain.Turno, error) {
+func (s *Turno) ListarDeProfesional(ctx context.Context, usuarioID, profesionalID uuid.UUID, desde, hasta *time.Time) ([]TurnoConPaciente, error) {
 	profesional, err := s.profesionales.ObtenerPorID(ctx, profesionalID)
 	if err != nil {
 		return nil, err
@@ -163,7 +211,28 @@ func (s *Turno) ListarDeProfesional(ctx context.Context, usuarioID, profesionalI
 	}
 
 	d, h := s.ventana(desde, hasta)
-	return s.repo.ListarDeProfesional(ctx, profesionalID, d, h)
+	turnos, err := s.repo.ListarDeProfesional(ctx, profesionalID, d, h)
+	if err != nil {
+		return nil, err
+	}
+
+	porID := make(map[uuid.UUID]domain.Usuario)
+	for _, t := range turnos {
+		if _, visto := porID[t.PacienteID]; visto {
+			continue
+		}
+		u, err := s.usuarios.ObtenerPorID(ctx, t.PacienteID)
+		if err != nil && !errors.Is(err, domain.ErrNoEncontrado) {
+			return nil, err
+		}
+		porID[t.PacienteID] = u
+	}
+
+	salida := make([]TurnoConPaciente, 0, len(turnos))
+	for _, t := range turnos {
+		salida = append(salida, TurnoConPaciente{Turno: t, Paciente: porID[t.PacienteID]})
+	}
+	return salida, nil
 }
 
 // verificarParte acepta al paciente del turno y al dueño del perfil

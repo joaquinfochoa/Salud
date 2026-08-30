@@ -4,12 +4,18 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Hora } from "@/componentes/hora";
-import { ErrorAPI, pedir, type ListaTurnos, type Turno } from "@/lib/api";
+import { ESPECIALIDADES } from "@/componentes/tarjeta-profesional";
+import {
+  ErrorAPI,
+  pedir,
+  type ListaTurnosDePaciente,
+  type TurnoConProfesional,
+} from "@/lib/api";
 import { formatearDia, formatearHora } from "@/lib/formato";
 
 export default function MisTurnos() {
   const router = useRouter();
-  const [turnos, setTurnos] = useState<Turno[] | null>(null);
+  const [turnos, setTurnos] = useState<TurnoConProfesional[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const alFallar = useCallback(
@@ -27,7 +33,7 @@ export default function MisTurnos() {
 
   const cargar = useCallback(async () => {
     try {
-      const lista = await pedir<ListaTurnos>("/api/v1/turnos");
+      const lista = await pedir<ListaTurnosDePaciente>("/api/v1/turnos");
       setTurnos(lista.datos);
     } catch (e) {
       alFallar(e);
@@ -43,7 +49,7 @@ export default function MisTurnos() {
     // sobre un componente desmontado.
     let vigente = true;
 
-    pedir<ListaTurnos>("/api/v1/turnos")
+    pedir<ListaTurnosDePaciente>("/api/v1/turnos")
       .then((lista) => {
         if (vigente) setTurnos(lista.datos);
       })
@@ -56,7 +62,7 @@ export default function MisTurnos() {
     };
   }, [alFallar]);
 
-  async function cancelar(turno: Turno) {
+  async function cancelar(turno: TurnoConProfesional) {
     // Cancelar un turno no se deshace, y del otro lado hay una persona que
     // reservó ese horario. Preguntar es más barato que un turno perdido.
     if (!confirm(`¿Cancelar el turno del ${formatearDia(turno.inicio)} a las ${formatearHora(turno.inicio)}?`)) {
@@ -115,7 +121,13 @@ export default function MisTurnos() {
   );
 }
 
-function FilaTurno({ turno, onCancelar }: { turno: Turno; onCancelar: () => void }) {
+function FilaTurno({
+  turno,
+  onCancelar,
+}: {
+  turno: TurnoConProfesional;
+  onCancelar: () => void;
+}) {
   const cancelado = turno.estado === "cancelado";
   const yaPaso = new Date(turno.inicio) <= new Date();
 
@@ -127,6 +139,19 @@ function FilaTurno({ turno, onCancelar }: { turno: Turno; onCancelar: () => void
             <Hora inicio={turno.inicio} estado={cancelado ? "ocupado" : "libre"} />
             <span className="text-sm text-tinta-suave">{formatearDia(turno.inicio)}</span>
           </div>
+
+          {/* Con quién es el turno. Hasta esta etapa la API solo mandaba el id,
+              así que esta pantalla mostraba una hora y nada más — que es la
+              mitad de lo que un paciente necesita saber de acá. */}
+          <p className="mt-2 font-semibold">
+            <Link href={`/perfiles/${turno.profesional.slug}`} className="hover:text-accion">
+              {turno.profesional.nombre} {turno.profesional.apellido}
+            </Link>
+          </p>
+          <p className="text-sm text-tinta-suave">
+            {ESPECIALIDADES[turno.profesional.especialidad] ?? turno.profesional.especialidad}
+          </p>
+
           {turno.motivo && <p className="mt-2 text-sm text-tinta-suave">{turno.motivo}</p>}
         </div>
 

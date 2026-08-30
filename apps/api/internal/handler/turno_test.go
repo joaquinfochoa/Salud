@@ -116,7 +116,7 @@ func TestCancelarDejaElTurnoCancelado(t *testing.T) {
 
 	// Sigue en el listado, cancelado: es parte del historial de las dos
 	// partes, y esconderlo sería esconderle al paciente que perdió su turno.
-	var lista respuestaListaTurnos
+	var lista respuestaListaTurnosConProfesional
 	if err := json.NewDecoder(obtener(t, srv, "/api/v1/turnos").Body).Decode(&lista); err != nil {
 		t.Fatalf("no se pudo decodificar: %v", err)
 	}
@@ -223,15 +223,17 @@ func TestMisTurnosSoloDevuelveLosMios(t *testing.T) {
 		t.Fatalf("estado = %d, se esperaba 200", resp.StatusCode)
 	}
 
-	var lista respuestaListaTurnos
+	var lista respuestaListaTurnosConProfesional
 	if err := json.NewDecoder(resp.Body).Decode(&lista); err != nil {
 		t.Fatalf("no se pudo decodificar: %v", err)
 	}
 	if len(lista.Datos) != 1 {
 		t.Fatalf("se devolvieron %d turnos, se esperaba solo el propio", len(lista.Datos))
 	}
-	if lista.Datos[0].Inicio.Format("15:04") == "" {
-		t.Error("el turno devuelto vino vacío")
+	// Con quién es el turno: sin esto la pantalla muestra una hora y nada más,
+	// que es la mitad de lo que el paciente necesita saber.
+	if lista.Datos[0].Profesional.Nombre == "" || lista.Datos[0].Profesional.Slug == "" {
+		t.Errorf("el turno vino sin el profesional: %+v", lista.Datos[0].Profesional)
 	}
 }
 

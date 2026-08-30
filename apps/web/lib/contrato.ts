@@ -267,13 +267,13 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Los turnos del paciente */
+                /** @description Los turnos del paciente, con el profesional de cada uno */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["ListaTurnos"];
+                        "application/json": components["schemas"]["ListaTurnosDePaciente"];
                     };
                 };
                 400: components["responses"]["PeticionInvalida"];
@@ -971,13 +971,13 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description La agenda del profesional */
+                /** @description La agenda del profesional, con el paciente de cada turno */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["ListaTurnos"];
+                        "application/json": components["schemas"]["ListaTurnosDeProfesional"];
                     };
                 };
                 400: components["responses"]["PeticionInvalida"];
@@ -1151,13 +1151,49 @@ export interface components {
              */
             canceladoPor: string | null;
         };
+        ParteProfesional: {
+            /** Format: uuid */
+            id: string;
+            nombre: string;
+            apellido: string;
+            slug: string;
+            especialidad: components["schemas"]["Especialidad"];
+        };
         /**
-         * @description Sin paginación: no es una colección paginada sino una ventana temporal,
+         * @description Sin email. El profesional necesita saber a quién atiende, no cómo
+         *     contactarlo por fuera de la plataforma.
+         */
+        PartePaciente: {
+            /** Format: uuid */
+            id: string;
+            nombre: string;
+            apellido: string;
+        };
+        TurnoConProfesional: components["schemas"]["Turno"] & {
+            profesional: components["schemas"]["ParteProfesional"];
+        };
+        TurnoConPaciente: components["schemas"]["Turno"] & {
+            paciente: components["schemas"]["PartePaciente"];
+        };
+        /**
+         * @description Cada turno viene con **la otra parte**: el profesional. Son dos formas y
+         *     no una con los dos campos opcionales, para que el consumidor no tenga
+         *     que acordarse de qué endpoint lo sacó.
+         *
+         *     Sin paginación: no es una colección paginada sino una ventana temporal,
          *     igual que `ListaBloqueos`. Incluye los cancelados — son parte del
          *     historial de las dos partes.
          */
-        ListaTurnos: {
-            datos: components["schemas"]["Turno"][];
+        ListaTurnosDePaciente: {
+            datos: components["schemas"]["TurnoConProfesional"][];
+        };
+        /**
+         * @description Cada turno viene con el paciente. No filtra nada: este listado exige ser
+         *     el dueño del perfil, así que el nombre de quien reservó es un dato al que
+         *     ya se tiene derecho.
+         */
+        ListaTurnosDeProfesional: {
+            datos: components["schemas"]["TurnoConPaciente"][];
         };
         /** @enum {string} */
         Especialidad: "psicologia" | "kinesiologia" | "odontologia";

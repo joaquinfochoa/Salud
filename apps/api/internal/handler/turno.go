@@ -82,7 +82,7 @@ func (h *ManejadorTurno) MisTurnos(w http.ResponseWriter, r *http.Request) {
 		escribirError(w, r, err)
 		return
 	}
-	escribirJSON(w, http.StatusOK, aRespuestaListaTurnos(turnos))
+	escribirJSON(w, http.StatusOK, aRespuestaListaDePaciente(turnos))
 }
 
 func (h *ManejadorTurno) DeProfesional(w http.ResponseWriter, r *http.Request) {
@@ -105,7 +105,7 @@ func (h *ManejadorTurno) DeProfesional(w http.ResponseWriter, r *http.Request) {
 		escribirError(w, r, err)
 		return
 	}
-	escribirJSON(w, http.StatusOK, aRespuestaListaTurnos(turnos))
+	escribirJSON(w, http.StatusOK, aRespuestaListaDeProfesional(turnos))
 }
 
 // parsearVentana traduce los desde/hasta opcionales de la query, con el mismo

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/joaquinfochoa/Salud/apps/api/internal/domain"
+	"github.com/joaquinfochoa/Salud/apps/api/internal/repository"
 	"github.com/joaquinfochoa/Salud/apps/api/internal/repository/memory"
 )
 
@@ -27,6 +28,8 @@ func aLas(hora, minuto int) time.Time {
 type bancoTurnos struct {
 	profesionales *memory.Profesional
 	turnos        *memory.Turno
+	usuarios      *memory.Usuario
+	auth          *Autenticacion
 	svcProf       *Profesional
 	agenda        *Agenda
 	svc           *Turno
@@ -37,14 +40,17 @@ func nuevoBancoTurnos() *bancoTurnos {
 
 	profesionales := memory.NuevoProfesional()
 	turnos := memory.NuevoTurno()
+	usuarios := memory.NuevoUsuario()
 	agenda := NuevaAgenda(profesionales, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo(), turnos, ConReloj(reloj))
 
 	return &bancoTurnos{
 		profesionales: profesionales,
 		turnos:        turnos,
+		usuarios:      usuarios,
+		auth:          NuevaAutenticacion(usuarios, memory.NuevaSesion(), ConRelojAuth(reloj)),
 		svcProf:       NuevoProfesional(profesionales),
 		agenda:        agenda,
-		svc:           NuevoTurno(turnos, profesionales, agenda, ConRelojTurno(reloj)),
+		svc:           NuevoTurno(turnos, profesionales, usuarios, agenda, ConRelojTurno(reloj)),
 	}
 }
 
@@ -546,4 +552,148 @@ func TestReemplazarPorElMismoHorarioNoCancelaNada(t *testing.T) {
 	if !guardado.EstaActivo() {
 		t.Error("se canceló un turno que sigue cayendo en su hueco")
 	}
+}
+
+// ── Las dos partes del turno ────────────────────────────────────────────────
+
+func TestListarDePacienteTraeAlProfesional(t *testing.T) {
+	ctx := context.Background()
+	b := nuevoBancoTurnos()
+	p, _ := b.conProfesional(t, "MN 200001")
+	pacienteID := uuid.New()
+
+	if _, err := b.svc.Reservar(ctx, pacienteID, p.ID, aLas(9, 0), ""); err != nil {
+		t.Fatalf("Reservar: %v", err)
+	}
+
+	lista, err := b.svc.ListarDePaciente(ctx, pacienteID, nil, nil)
+	if err != nil {
+		t.Fatalf("ListarDePaciente: %v", err)
+	}
+	if len(lista) != 1 {
+		t.Fatalf("se devolvieron %d turnos", len(lista))
+	}
+
+	// Sin esto, "mis turnos" no puede decir con quién es el turno, que es la
+	// mitad de la información que un paciente necesita de esa pantalla.
+	if lista[0].Profesional.ID != p.ID {
+		t.Errorf("Profesional.ID = %v, se esperaba %v", lista[0].Profesional.ID, p.ID)
+	}
+	if lista[0].Profesional.Nombre != p.Nombre || lista[0].Profesional.Slug != p.Slug {
+		t.Error("el profesional vino sin nombre o sin slug")
+	}
+	if !lista[0].Inicio.Equal(aLas(9, 0)) {
+		t.Error("el turno embebido perdió sus datos")
+	}
+}
+
+func TestListarDeProfesionalTraeAlPaciente(t *testing.T) {
+	ctx := context.Background()
+	b := nuevoBancoTurnos()
+	p, duenoID := b.conProfesional(t, "MN 200002")
+
+	paciente, _, err := b.auth.Registrar(ctx, domain.EntradaUsuario{
+		Email:      "ana@ejemplo.com",
+		Contrasena: "unaclave8",
+		Nombre:     "Ana",
+		Apellido:   "Prueba",
+	})
+	if err != nil {
+		t.Fatalf("Registrar: %v", err)
+	}
+	if _, err := b.svc.Reservar(ctx, paciente.ID, p.ID, aLas(9, 0), "control"); err != nil {
+		t.Fatalf("Reservar: %v", err)
+	}
+
+	lista, err := b.svc.ListarDeProfesional(ctx, duenoID, p.ID, nil, nil)
+	if err != nil {
+		t.Fatalf("ListarDeProfesional: %v", err)
+	}
+	if len(lista) != 1 {
+		t.Fatalf("se devolvieron %d turnos", len(lista))
+	}
+	if lista[0].Paciente.Nombre != "Ana" || lista[0].Paciente.Apellido != "Prueba" {
+		t.Errorf("el paciente vino como %q %q", lista[0].Paciente.Nombre, lista[0].Paciente.Apellido)
+	}
+	if lista[0].Motivo != "control" {
+		t.Error("el turno embebido perdió el motivo")
+	}
+}
+
+// Criterio 4: seis turnos con el mismo profesional son una lectura, no seis.
+// Sin la deduplicación, el N+1 crece con el historial del paciente en vez de
+// con la cantidad de personas distintas con las que se atendió.
+func TestListarDePacienteDeduplicaLasLecturas(t *testing.T) {
+	ctx := context.Background()
+	b := nuevoBancoTurnos()
+	p, _ := b.conProfesional(t, "MN 200003")
+	pacienteID := uuid.New()
+
+	for _, h := range [][2]int{{9, 0}, {9, 50}, {10, 40}, {11, 30}} {
+		if _, err := b.svc.Reservar(ctx, pacienteID, p.ID, aLas(h[0], h[1]), ""); err != nil {
+			t.Fatalf("Reservar %02d:%02d: %v", h[0], h[1], err)
+		}
+	}
+
+	contador := &profesionalesContados{Profesional: b.profesionales}
+	svc := NuevoTurno(b.turnos, contador, b.usuarios, b.agenda, ConRelojTurno(func() time.Time { return ahoraFijo }))
+
+	lista, err := svc.ListarDePaciente(ctx, pacienteID, nil, nil)
+	if err != nil {
+		t.Fatalf("ListarDePaciente: %v", err)
+	}
+	if len(lista) != 4 {
+		t.Fatalf("se devolvieron %d turnos, se esperaban 4", len(lista))
+	}
+	if contador.lecturas != 1 {
+		t.Errorf("se hicieron %d lecturas del repositorio, se esperaba 1", contador.lecturas)
+	}
+}
+
+// Criterio 5: una parte que no se puede resolver no rompe el listado. Que un
+// dato faltante haga desaparecer la agenda entera seria peor que mostrarla
+// incompleta.
+func TestListarDePacienteConProfesionalInexistente(t *testing.T) {
+	ctx := context.Background()
+	b := nuevoBancoTurnos()
+	pacienteID := uuid.New()
+
+	// Un turno escrito directo contra el repositorio, apuntando a un
+	// profesional que no existe.
+	hueco := domain.Hueco{
+		Inicio:    aLas(9, 0),
+		Fin:       aLas(9, 50),
+		Modalidad: domain.ModalidadTelemedicina,
+	}
+	turno, err := domain.NuevoTurno(uuid.New(), pacienteID, hueco, "", ahoraFijo)
+	if err != nil {
+		t.Fatalf("NuevoTurno: %v", err)
+	}
+	if err := b.turnos.Crear(ctx, turno); err != nil {
+		t.Fatalf("Crear: %v", err)
+	}
+
+	lista, err := b.svc.ListarDePaciente(ctx, pacienteID, nil, nil)
+	if err != nil {
+		t.Fatalf("un profesional que no existe no debería romper el listado: %v", err)
+	}
+	if len(lista) != 1 {
+		t.Fatalf("se devolvieron %d turnos, se esperaba 1", len(lista))
+	}
+	if lista[0].Profesional.Nombre != "" {
+		t.Error("se esperaba el profesional en su valor cero")
+	}
+}
+
+// profesionalesContados envuelve el repositorio para contar cuántas veces se lo
+// consulta. Es lo único que se envuelve en todo el proyecto, y solo para poder
+// afirmar la deduplicación: contar llamadas no se puede hacer desde afuera.
+type profesionalesContados struct {
+	repository.Profesional
+	lecturas int
+}
+
+func (r *profesionalesContados) ObtenerPorID(ctx context.Context, id uuid.UUID) (domain.Profesional, error) {
+	r.lecturas++
+	return r.Profesional.ObtenerPorID(ctx, id)
 }
