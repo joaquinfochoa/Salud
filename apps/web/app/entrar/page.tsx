@@ -3,13 +3,12 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
-import { ErrorAPI, pedir } from "@/lib/api";
-import { destinoSeguro } from "@/lib/destino";
+import { ErrorAPI, pedir, type UsuarioActual } from "@/lib/api";
+import { destinoDespuesDeEntrar } from "@/lib/destino";
 
 function FormularioEntrar() {
   const router = useRouter();
   const parametros = useSearchParams();
-  const destino = destinoSeguro(parametros.get("volver"));
 
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -26,7 +25,12 @@ function FormularioEntrar() {
           contrasena: String(formulario.get("contrasena") ?? ""),
         }),
       });
-      router.push(destino);
+
+      // Segunda llamada, y hace falta: la sesión no dice si sos profesional.
+      // `perfilProfesionalId` es lo único que lo sabe, y sale de acá.
+      const yo = await pedir<UsuarioActual>("/api/v1/usuarios/yo");
+
+      router.push(destinoDespuesDeEntrar(parametros.get("volver"), yo.perfilProfesionalId));
       router.refresh();
     } catch (e) {
       setEnviando(false);
