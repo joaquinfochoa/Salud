@@ -4,8 +4,18 @@ info:
   title: Salud API
   version: 0.1.0
   description: |
-    API de la plataforma de salud digital. Esta versión cubre únicamente el
-    CRUD de profesionales, sin autenticación y sin persistencia real.
+    API de la plataforma de salud digital. Cubre el CRUD de profesionales, su
+    disponibilidad, y la autenticación por sesión. Sin persistencia real:
+    todo vive en memoria y se pierde al reiniciar.
+
+    La sesión viaja en una cookie `HttpOnly` llamada `sesion`. Las operaciones
+    marcadas con `security` la exigen; el resto es público y se lee sin estar
+    logueado. Un 401 significa "no sé quién sos"; un 403, "sé quién sos y no
+    es tuyo".
+
+    Todo cuerpo tiene que llegar con `Content-Type: application/json`. No es
+    formalidad: junto con `SameSite=Lax` es lo que impide que un formulario de
+    otro sitio forje una escritura con la cookie del usuario.
 
     Los montos viajan como enteros en centavos. Nunca como decimales: un
     número de JSON se convierte en float64 del otro lado.
@@ -15,6 +25,7 @@ servers:
     description: Desarrollo local
 
 tags:
+  - name: autenticacion
   - name: profesionales
   - name: perfiles
   - name: salud
@@ -24,6 +35,7 @@ paths:
     get:
       tags: [salud]
       summary: Verifica que el servidor responde
+      security: []   # pública
       responses:
         '200':
           description: El servidor está vivo
@@ -34,10 +46,111 @@ paths:
                 properties:
                   estado: { type: string, example: ok }
 
+  /api/v1/usuarios:
+    post:
+      tags: [autenticacion]
+      summary: Registra un usuario
+      security: []   # pública
+      description: |
+        Registrarse deja la sesión abierta: la respuesta trae la cookie. Pedir
+        las credenciales otra vez inmediatamente después no informa nada.
+
+        El usuario no es el perfil profesional. Para atender hay que crear
+        además un perfil con `POST /api/v1/profesionales`; para reservar
+        turnos no hace falta.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PeticionRegistro' }
+      responses:
+        '201':
+          description: Creado, con la sesión abierta
+          headers:
+            Set-Cookie:
+              description: Cookie de sesión `HttpOnly`, `SameSite=Lax`, 7 días
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Usuario' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '409': { $ref: '#/components/responses/EmailEnUso' }
+        '413': { $ref: '#/components/responses/CuerpoDemasiadoGrande' }
+        '415': { $ref: '#/components/responses/TipoDeContenidoInvalido' }
+        '422': { $ref: '#/components/responses/ValidacionFallida' }
+
+  /api/v1/usuarios/yo:
+    get:
+      tags: [autenticacion]
+      summary: Devuelve el usuario de la sesión
+      description: |
+        `perfilProfesionalId` es lo único que el cliente necesita para saber
+        si mostrar la vista de profesional o la de paciente. Es derivado: no
+        hay ningún campo de rol, justamente para que no pueda desincronizarse
+        del perfil real.
+      security:
+        - sesionCookie: []
+      responses:
+        '200':
+          description: El usuario autenticado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UsuarioActual' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+
+  /api/v1/sesiones:
+    post:
+      tags: [autenticacion]
+      summary: Inicia sesión
+      security: []   # pública
+      description: |
+        El 401 es idéntico para "ese email no existe" y "esa contraseña está
+        mal", a propósito: distinguirlos convertiría a este endpoint en un
+        oráculo de qué direcciones están registradas.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PeticionLogin' }
+      responses:
+        '201':
+          description: Sesión abierta
+          headers:
+            Set-Cookie:
+              description: Cookie de sesión `HttpOnly`, `SameSite=Lax`, 7 días
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Usuario' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '401': { $ref: '#/components/responses/CredencialesInvalidas' }
+        '413': { $ref: '#/components/responses/CuerpoDemasiadoGrande' }
+        '415': { $ref: '#/components/responses/TipoDeContenidoInvalido' }
+
+  /api/v1/sesiones/actual:
+    delete:
+      tags: [autenticacion]
+      summary: Cierra la sesión
+      security: []   # pública
+      description: |
+        Idempotente: 204 también sin sesión. Un cliente que reintenta no está
+        haciendo nada malo, y decirle "no estabas logueado" no le sirve.
+
+        La sesión se borra del servidor de verdad, no solo se vence la cookie.
+        Es la razón por la que el token es opaco y no un JWT.
+      responses:
+        '204':
+          description: Sesión cerrada
+          headers:
+            Set-Cookie:
+              description: La cookie de sesión vencida
+              schema: { type: string }
+
   /api/v1/profesionales:
     get:
       tags: [profesionales]
       summary: Lista profesionales
+      security: []   # pública
       description: |
         Por defecto devuelve solo los activos. Para ver los dados de baja hay
         que pedir `estado=inactivo` explícitamente.
@@ -80,6 +193,8 @@ paths:
     post:
       tags: [profesionales]
       summary: Da de alta un profesional
+      security:
+        - sesionCookie: []
       description: |
         El profesional nace con `estado: activo` y `verificacion: pendiente`.
         Nadie nace verificado: la verificación es un acto contra REFEPS que
@@ -103,6 +218,9 @@ paths:
         '409': { $ref: '#/components/responses/Conflicto' }
         '413': { $ref: '#/components/responses/CuerpoDemasiadoGrande' }
         '422': { $ref: '#/components/responses/ValidacionFallida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/NoAutorizado' }
+        '415': { $ref: '#/components/responses/TipoDeContenidoInvalido' }
 
   /api/v1/profesionales/{id}:
     parameters:
@@ -114,6 +232,7 @@ paths:
     get:
       tags: [profesionales]
       summary: Trae un profesional por ID
+      security: []   # pública
       description: |
         Un profesional dado de baja devuelve 200 con `estado: inactivo`. El
         recurso existe, simplemente no opera.
@@ -129,6 +248,8 @@ paths:
     put:
       tags: [profesionales]
       summary: Reemplaza los campos editables
+      security:
+        - sesionCookie: []
       description: |
         Reemplazo total, no parcial. `id`, `slug`, `estado`, `verificacion` y
         las marcas de tiempo no son editables.
@@ -156,10 +277,15 @@ paths:
         '409': { $ref: '#/components/responses/Conflicto' }
         '413': { $ref: '#/components/responses/CuerpoDemasiadoGrande' }
         '422': { $ref: '#/components/responses/ValidacionFallida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/NoAutorizado' }
+        '415': { $ref: '#/components/responses/TipoDeContenidoInvalido' }
 
     delete:
       tags: [profesionales]
       summary: Da de baja al profesional
+      security:
+        - sesionCookie: []
       description: |
         Baja lógica, no borrado. Pone `estado` en `inactivo` y sella
         `dadoDeBajaEn`. El registro se queda: los turnos y comprobantes
@@ -170,6 +296,8 @@ paths:
         '204': { description: Dado de baja }
         '400': { $ref: '#/components/responses/PeticionInvalida' }
         '404': { $ref: '#/components/responses/NoEncontrado' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/NoAutorizado' }
 
   /api/v1/profesionales/{id}/reactivar:
     parameters:
@@ -180,6 +308,8 @@ paths:
     post:
       tags: [profesionales]
       summary: Revierte la baja
+      security:
+        - sesionCookie: []
       description: Idempotente. Sobre alguien ya activo devuelve 200 sin cambios.
       responses:
         '200':
@@ -189,6 +319,8 @@ paths:
               schema: { $ref: '#/components/schemas/Profesional' }
         '400': { $ref: '#/components/responses/PeticionInvalida' }
         '404': { $ref: '#/components/responses/NoEncontrado' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/NoAutorizado' }
 
   /api/v1/perfiles/{slug}:
     parameters:
@@ -199,6 +331,7 @@ paths:
     get:
       tags: [perfiles]
       summary: Trae el perfil público de un profesional por su slug
+      security: []   # pública
       description: |
         Es lo que consume la página `/p/{slug}` del frontend. Vive en su
         propio recurso, distinto de `profesionales`, porque es de lectura
@@ -221,6 +354,7 @@ paths:
     get:
       tags: [profesionales]
       summary: El horario semanal del profesional
+      security: []   # pública
       responses:
         '200':
           description: OK
@@ -233,6 +367,8 @@ paths:
     put:
       tags: [profesionales]
       summary: Reemplaza el horario semanal completo
+      security:
+        - sesionCookie: []
       description: |
         Reemplazo total: la semana se edita como una unidad. Una lista vacía
         deja al profesional sin horarios, que es legítimo.
@@ -255,6 +391,9 @@ paths:
         '404': { $ref: '#/components/responses/NoEncontrado' }
         '413': { $ref: '#/components/responses/CuerpoDemasiadoGrande' }
         '422': { $ref: '#/components/responses/ValidacionFallida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/NoAutorizado' }
+        '415': { $ref: '#/components/responses/TipoDeContenidoInvalido' }
 
   /api/v1/profesionales/{id}/bloqueos:
     parameters:
@@ -266,6 +405,7 @@ paths:
     get:
       tags: [profesionales]
       summary: Los bloqueos del profesional
+      security: []   # pública
       parameters:
         - name: desde
           in: query
@@ -288,6 +428,8 @@ paths:
     post:
       tags: [profesionales]
       summary: Bloquea un rango de la agenda
+      security:
+        - sesionCookie: []
       requestBody:
         required: true
         content:
@@ -307,6 +449,9 @@ paths:
         '404': { $ref: '#/components/responses/NoEncontrado' }
         '413': { $ref: '#/components/responses/CuerpoDemasiadoGrande' }
         '422': { $ref: '#/components/responses/ValidacionFallida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/NoAutorizado' }
+        '415': { $ref: '#/components/responses/TipoDeContenidoInvalido' }
 
   /api/v1/profesionales/{id}/bloqueos/{bloqueoId}:
     parameters:
@@ -321,6 +466,8 @@ paths:
     delete:
       tags: [profesionales]
       summary: Elimina un bloqueo
+      security:
+        - sesionCookie: []
       description: |
         El bloqueo tiene que ser de ese profesional. Borrar el de otro desde
         esta ruta es un 404.
@@ -328,6 +475,8 @@ paths:
         '204': { description: Eliminado }
         '400': { $ref: '#/components/responses/PeticionInvalida' }
         '404': { $ref: '#/components/responses/NoEncontrado' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/NoAutorizado' }
 
   /api/v1/profesionales/{id}/huecos:
     parameters:
@@ -346,6 +495,7 @@ paths:
     get:
       tags: [profesionales]
       summary: Los huecos reservables del profesional
+      security: []   # pública
       description: |
         `desde` y `hasta` son fechas y las dos entran: del 25 al 27 incluye los
         tres días.
@@ -370,7 +520,71 @@ paths:
         '422': { $ref: '#/components/responses/ValidacionFallida' }
 
 components:
+  securitySchemes:
+    sesionCookie:
+      type: apiKey
+      in: cookie
+      name: sesion
+      description: |
+        Cookie opaca de sesión, `HttpOnly` y `SameSite=Lax`, con 7 días de
+        vigencia absoluta. La setea el registro o el login y el browser la
+        manda sola. No es un JWT: el servidor guarda el hash del token, así
+        que cerrar sesión la invalida de verdad.
+
   schemas:
+    PeticionRegistro:
+      type: object
+      required: [email, contrasena, nombre, apellido]
+      properties:
+        email: { type: string, format: email, maxLength: 254, example: juan@ejemplo.com }
+        contrasena:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 72
+          description: |
+            Mínimo 8 caracteres, el piso de NIST SP 800-63B. El máximo son 72
+            **bytes**, no caracteres: bcrypt descarta en silencio todo lo que
+            pase de ahí, y con acentos el byte 72 llega antes.
+
+            Sin reglas de composición a propósito: alargan el formulario sin
+            agregar entropía real.
+        nombre: { type: string, maxLength: 100, example: Juan }
+        apellido: { type: string, maxLength: 100, example: Pérez }
+
+    PeticionLogin:
+      type: object
+      required: [email, contrasena]
+      properties:
+        email: { type: string, format: email, example: juan@ejemplo.com }
+        contrasena: { type: string, format: password }
+
+    Usuario:
+      type: object
+      description: |
+        La identidad de login. Nunca incluye el hash de la contraseña ni el
+        token de sesión: el token viaja solo en el `Set-Cookie`.
+      required: [id, email, nombre, apellido, creadoEn]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        nombre: { type: string }
+        apellido: { type: string }
+        creadoEn: { type: string, format: date-time }
+
+    UsuarioActual:
+      allOf:
+        - $ref: '#/components/schemas/Usuario'
+        - type: object
+          required: [perfilProfesionalId]
+          properties:
+            perfilProfesionalId:
+              type: [string, 'null']
+              format: uuid
+              description: |
+                El perfil profesional del usuario, o `null` si no tiene. No
+                tener perfil es normal: es la mitad de los usuarios.
+
     Especialidad:
       type: string
       enum: [psicologia, kinesiologia, odontologia]
@@ -713,7 +927,49 @@ components:
           schema: { $ref: '#/components/schemas/Problema' }
 
     Conflicto:
-      description: La matrícula ya está registrada por otro profesional
+      description: |
+        Choque con un registro existente: la matrícula ya está tomada por otro
+        profesional, o la cuenta ya tiene un perfil profesional.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problema' }
+
+    NoAutenticado:
+      description: |
+        No hay sesión, o la que hay venció. Distinto del 403: acá el servidor
+        no sabe quién sos.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problema' }
+
+    NoAutorizado:
+      description: |
+        Hay sesión, pero el recurso es de otro. Solo el dueño de un perfil
+        puede modificarlo, cargarle horarios o bloquearle la agenda.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problema' }
+
+    CredencialesInvalidas:
+      description: |
+        El email o la contraseña no son correctos. La respuesta es idéntica en
+        los dos casos: distinguirlos revelaría qué direcciones están
+        registradas.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problema' }
+
+    EmailEnUso:
+      description: Ya existe una cuenta con ese email
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problema' }
+
+    TipoDeContenidoInvalido:
+      description: |
+        El cuerpo tiene que llegar con `Content-Type: application/json`. La
+        regla es parte de la defensa contra CSRF: un formulario de otro sitio
+        solo puede mandar `form-urlencoded`, `multipart` o `text/plain`.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problema' }
