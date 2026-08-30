@@ -32,7 +32,7 @@ Dos entidades nuevas y un campo nuevo en `Profesional`.
 |---|---|---|---|---|
 | `ID` | `uuid.UUID` | | `TokenHash` | `[32]byte` |
 | `Email` | `Email` (VO, único) | | `UsuarioID` | `uuid.UUID` |
-| `Hash` | `[]byte` | | `CreadaEn` | `time.Time` |
+| `Hash` | `[]byte`, **nil permitido** | | `CreadaEn` | `time.Time` |
 | `Nombre`, `Apellido` | `string` | | `ExpiraEn` | `time.Time` |
 | `CreadoEn` | `time.Time` | | | |
 
@@ -94,6 +94,48 @@ una topología que este proyecto no tiene: un binario y un `map`.
 
 La cookie va por el consumidor: un SPA del mismo sitio. `HttpOnly` es invisible
 para JS; un token en `localStorage` lo lee cualquier XSS.
+
+### 3.5 SSO con Google: no se construye acá, pero el modelo lo espera
+
+SSO llega en la etapa siguiente. Esta spec solo reserva lo que después sería
+caro de cambiar, y **nada más**.
+
+**Por qué encaja sin fricción:** Google reemplaza el *login*, no la *sesión*. Se
+verifica la identidad una vez y a partir de ahí se emite la cookie de siempre;
+el token de Google no vuelve a aparecer. `Sesion`, `Autenticar`,
+`RequerirSesion`, la autorización entera y las firmas de servicio no se tocan.
+Es una consecuencia directa de 3.4: con JWT habría dos sistemas de tokens
+conviviendo.
+
+**Lo único que se reserva hoy:** `Usuario.Hash` admite `nil`. Un usuario de
+Google no tiene contraseña, y volver el campo opcional después toca el
+constructor, la validación y sus tests.
+
+**Lo que NO se agrega hoy:** los campos de identidad externa (`Proveedor`,
+`SubjectExterno`). Serían dos campos siempre vacíos, y sin base de datos
+agregarlos más adelante es editar un struct. Dejarlos ahora es flexibilidad
+muerta.
+
+**El invariante lo sostienen los constructores, no el tipo.** `Hash` nil es un
+estado válido del modelo pero hoy inalcanzable: `NuevoUsuario` exige contraseña.
+Mañana `NuevoUsuarioConGoogle` exigirá un `sub`. La regla —*todo `Usuario` tiene
+al menos una forma de autenticarse*— vive en los constructores, que son los
+únicos que arman la entidad.
+
+**La regla de vinculación, escrita antes de necesitarla.** Alguien se registra
+con `juan@gmail.com` y contraseña; un mes después entra con Google y el mismo
+email. Es la misma cuenta **solo si el proveedor afirma `email_verified: true`**
+(Google lo hace). Vincular por email sin esa verificación es un secuestro de
+cuenta directo: me registro con tu email en un proveedor flojo y heredo la tuya.
+Y la identidad se ancla al `sub` de Google, **nunca al email**: el email cambia,
+el `sub` no.
+
+**Anticipo de implementación, para que no sorprenda:** Authorization Code +
+PKCE, nunca implicit. Sin librería —son dos llamadas HTTP con `net/http`,
+`net/url` y `encoding/json`— y sin verificar la firma del ID token: OIDC Core lo
+permite explícitamente cuando el token llega directo del token endpoint sobre
+TLS, porque validar el certificado ya prueba con quién hablaste. Sin JWKS, sin
+rotación de claves, sin dependencias nuevas.
 
 ---
 
@@ -180,11 +222,12 @@ anteriores.
 
 | Pendiente | Cuándo se activa |
 |---|---|
-| Verificación de email | Cuando haya que mandar un mail que importe |
-| Recuperar contraseña | Antes de tener usuarios reales |
+| **SSO con Google** | **Etapa siguiente.** Ver 3.5: puramente aditivo, dos endpoints y dos campos. Nada que migrar. |
+| Verificación de email | Cuando haya que mandar un mail que importe. Los usuarios de Google no la necesitan: ya viene verificado. |
+| Recuperar contraseña | Antes de tener usuarios reales. Solo para quien tenga contraseña. |
 | Rate limiting del login | **Antes de exponer la API.** Sin deploy no protege nada, pero no puede quedar olvidado. |
 | Renovación deslizante de sesión | Si 7 días molesta en uso real |
-| OAuth, 2FA, refresh tokens | Sin fecha. Ninguno cambia una firma de servicio. |
+| 2FA, refresh tokens, otros proveedores (Apple, etc.) | Sin fecha. Ninguno cambia una firma de servicio. Un segundo proveedor sí pediría mover la identidad externa a su propia entidad. |
 | Rol `admin` y permisos granulares | Cuando exista un endpoint de admin |
 | Limpieza de sesiones vencidas | Con PostgreSQL |
 
