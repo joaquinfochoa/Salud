@@ -1,9 +1,8 @@
-import type { Hueco } from "./api";
 import { comoFecha } from "./formato";
 
 const ZONA = "America/Argentina/Buenos_Aires";
 
-export type Dia = {
+export type Dia<T> = {
   /** `2026-09-07`, que es también el valor del parámetro `dia` en la URL. */
   fecha: string;
   /** `Lun` */
@@ -12,23 +11,31 @@ export type Dia = {
   numero: string;
   /** `lunes, 31 de agosto` */
   largo: string;
-  huecos: Hueco[];
+  /** Lo que cae ese día: huecos en el perfil público, turnos en el panel. */
+  items: T[];
 };
 
 /**
- * Los próximos `cantidad` días a partir de hoy, con los huecos de cada uno.
+ * Los próximos `cantidad` días a partir de hoy, con lo que cae en cada uno.
  *
- * Devuelve **todos** los días, incluidos los que no tienen horarios. Mostrar
- * solo los días con disponibilidad evitaría toques muertos, pero rompe la
- * metáfora: una tira de días salteados no se lee como un calendario. Un día
- * apagado además dice algo útil —"no atiende los martes"— que un día ausente no
- * dice.
+ * Sirve para cualquier cosa que tenga `inicio` —huecos y turnos— porque partir
+ * por día es la misma operación sobre las dos, y duplicarla es cómo se arreglan
+ * los bugs de zona horaria en un lado y no en el otro.
+ *
+ * Devuelve **todos** los días, incluidos los vacíos. Saltearlos evitaría toques
+ * muertos, pero rompe la metáfora: una tira de días salteados no se lee como un
+ * calendario. Un día apagado además dice algo útil —"no atiende los martes"—
+ * que un día ausente no dice.
  */
-export function armarDias(huecos: Hueco[], cantidad = 14, hoy = new Date()): Dia[] {
-  const porFecha = new Map<string, Hueco[]>();
-  for (const hueco of huecos) {
-    const fecha = hueco.inicio.slice(0, 10);
-    porFecha.set(fecha, [...(porFecha.get(fecha) ?? []), hueco]);
+export function armarDias<T extends { inicio: string }>(
+  items: T[],
+  cantidad = 14,
+  hoy = new Date(),
+): Dia<T>[] {
+  const porFecha = new Map<string, T[]>();
+  for (const item of items) {
+    const fecha = item.inicio.slice(0, 10);
+    porFecha.set(fecha, [...(porFecha.get(fecha) ?? []), item]);
   }
 
   const formato = new Intl.DateTimeFormat("es-AR", {
@@ -43,7 +50,7 @@ export function armarDias(huecos: Hueco[], cantidad = 14, hoy = new Date()): Dia
     timeZone: ZONA,
   });
 
-  const dias: Dia[] = [];
+  const dias: Dia<T>[] = [];
 
   for (let i = 0; i < cantidad; i++) {
     const d = new Date(hoy);
@@ -60,14 +67,14 @@ export function armarDias(huecos: Hueco[], cantidad = 14, hoy = new Date()): Dia
       etiqueta: diaDeSemana.replace(".", "").replace(/^./, (c) => c.toUpperCase()),
       numero: partes.find((p) => p.type === "day")?.value ?? "",
       largo: formatoLargo.format(d),
-      huecos: porFecha.get(fecha) ?? [],
+      items: porFecha.get(fecha) ?? [],
     });
   }
 
   return dias;
 }
 
-/** El primer día con horarios, o el primero de todos si no hay ninguno. */
-export function primerDiaConHuecos(dias: Dia[]): string {
-  return (dias.find((d) => d.huecos.length > 0) ?? dias[0])?.fecha ?? "";
+/** El primer día con algo, o el primero de todos si están todos vacíos. */
+export function primerDiaConItems<T>(dias: Dia<T>[]): string {
+  return (dias.find((d) => d.items.length > 0) ?? dias[0])?.fecha ?? "";
 }

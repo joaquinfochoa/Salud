@@ -1,30 +1,30 @@
 import Link from "next/link";
-import type { Hueco } from "@/lib/api";
 import type { Dia } from "@/lib/dias";
-import { Hora } from "./hora";
 
 /**
- * La tira de días y los horarios del día elegido.
+ * La tira de días, y debajo lo que cae en el día elegido.
  *
- * Acepta links o callbacks porque las dos pantallas que lo usan eligen
- * distinto: el perfil navega —es un Server Component que tiene que renderizar
- * sin JavaScript y quedar indexado— y la reserva selecciona en memoria, porque
- * navegar ahí perdería el formulario a medio llenar.
+ * Acepta links o callbacks porque las dos pantallas que la usan eligen
+ * distinto: el perfil público navega —es un Server Component que tiene que
+ * renderizar sin JavaScript y quedar indexado— y las pantallas con sesión
+ * seleccionan en memoria, porque navegar ahí perdería lo que la persona está
+ * haciendo.
+ *
+ * Qué se dibuja abajo lo decide quien la usa: un hueco es un chip de hora, un
+ * turno es una fila con paciente y motivo.
  */
-export function Calendario({
+export function Calendario<T extends { inicio: string }>({
   dias,
   diaElegido,
   hrefDelDia,
   onDia,
-  hrefDelHueco,
-  onHueco,
+  children,
 }: {
-  dias: Dia[];
+  dias: Dia<T>[];
   diaElegido: string;
   hrefDelDia?: (fecha: string) => string;
   onDia?: (fecha: string) => void;
-  hrefDelHueco?: (hueco: Hueco) => string;
-  onHueco?: (hueco: Hueco) => void;
+  children: (items: T[]) => React.ReactNode;
 }) {
   const elegido = dias.find((d) => d.fecha === diaElegido) ?? dias[0];
   const base =
@@ -46,11 +46,11 @@ export function Calendario({
               <span className="text-lg font-bold tabular-nums leading-none">
                 {dia.numero}
               </span>
-              {/* El punto dice "acá hay turnos" sin depender solo del color. */}
+              {/* El punto dice "acá hay algo" sin depender solo del color. */}
               <span
                 aria-hidden="true"
                 className={`mt-0.5 h-1 w-1 rounded-full ${
-                  dia.huecos.length > 0 ? "bg-current" : "bg-transparent"
+                  dia.items.length > 0 ? "bg-current" : "bg-transparent"
                 }`}
               />
             </>
@@ -58,9 +58,9 @@ export function Calendario({
 
           return (
             <li key={dia.fecha} className="snap-start">
-              {dia.huecos.length === 0 ? (
-                // Un día sin horarios no es un control: no hay nada a dónde ir,
-                // y un botón que no hace nada enseña a desconfiar de los que sí
+              {dia.items.length === 0 ? (
+                // Un día vacío no es un control: no hay nada a dónde ir, y un
+                // botón que no hace nada enseña a desconfiar de los que sí
                 // hacen. Se muestra igual porque "no atiende los martes" es
                 // información.
                 <span aria-disabled="true" className={`${base} border-borde opacity-40`}>
@@ -87,35 +87,14 @@ export function Calendario({
 
       <div className="border-t border-borde p-4">
         {/* El día completo va acá y no arriba del componente: la etiqueta que
-            dice de qué día son los horarios tiene que estar al lado de los
-            horarios. */}
+            dice de qué día es lo de abajo tiene que estar al lado de lo de
+            abajo. */}
         {elegido && (
           <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-tinta-suave">
             {elegido.largo}
           </h3>
         )}
-
-        {elegido && elegido.huecos.length > 0 ? (
-          <ul className="flex flex-wrap gap-2">
-            {elegido.huecos.map((hueco) => (
-              <li key={hueco.inicio}>
-                <Accion
-                  href={hrefDelHueco?.(hueco)}
-                  onClick={onHueco && (() => onHueco(hueco))}
-                  className="block rounded-lg border border-borde px-4 py-2.5 transition-colors hover:border-accion hover:bg-accent"
-                >
-                  <Hora inicio={hueco.inicio} />
-                </Accion>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          // Un vacío es una invitación a hacer otra cosa, no un espacio en
-          // blanco: dice qué pasó y qué hacer.
-          <p className="py-2 text-sm text-tinta-suave">
-            No atiende este día. Elegí otro de la tira.
-          </p>
-        )}
+        {children(elegido?.items ?? [])}
       </div>
     </div>
   );

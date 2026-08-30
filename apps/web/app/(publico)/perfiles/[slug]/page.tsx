@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Calendario } from "@/componentes/calendario";
-import { armarDias, primerDiaConHuecos } from "@/lib/dias";
+import { Hora } from "@/componentes/hora";
+import { armarDias, primerDiaConItems } from "@/lib/dias";
 import { ESPECIALIDADES } from "@/componentes/tarjeta-profesional";
 import { ErrorAPI, pedir, type Profesional } from "@/lib/api";
 import { formatearPrecio } from "@/lib/formato";
@@ -55,7 +56,7 @@ export default async function Perfil({
   const p = await traerPerfil(slug);
 
   const dias = armarDias(await huecosDe(p.id));
-  const hayHuecos = dias.some((d) => d.huecos.length > 0);
+  const hayHuecos = dias.some((d) => d.items.length > 0);
 
   // El día elegido viaja en la URL y no en estado de React: así la tira de días
   // funciona sin JavaScript, cada día queda como una dirección que se puede
@@ -64,7 +65,7 @@ export default async function Perfil({
   const diaElegido =
     typeof dia === "string" && dias.some((d) => d.fecha === dia)
       ? dia
-      : primerDiaConHuecos(dias);
+      : primerDiaConItems(dias);
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
@@ -109,10 +110,25 @@ export default async function Perfil({
               dias={dias}
               diaElegido={diaElegido}
               hrefDelDia={(fecha) => `/perfiles/${slug}?dia=${fecha}`}
-              hrefDelHueco={(hueco) =>
-                `/perfiles/${slug}/reservar?inicio=${encodeURIComponent(hueco.inicio)}`
-              }
-            />
+            >
+              {(huecos) => (
+                <ul className="flex flex-wrap gap-2">
+                  {huecos.map((hueco) => (
+                    <li key={hueco.inicio}>
+                      {/* Un link y no un botón: funciona sin JavaScript, se
+                          puede abrir en otra pestaña, y el horario elegido
+                          viaja en la URL en vez de en estado. */}
+                      <Link
+                        href={`/perfiles/${slug}/reservar?inicio=${encodeURIComponent(hueco.inicio)}`}
+                        className="block rounded-lg border border-borde px-4 py-2.5 transition-colors hover:border-accion hover:bg-accent"
+                      >
+                        <Hora inicio={hueco.inicio} />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Calendario>
           ) : (
             <p className="rounded-xl border border-borde bg-superficie p-8 text-center text-tinta-suave">
               {p.estado === "activo"

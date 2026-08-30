@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Calendario } from "./calendario";
 import { ErrorAPI, pedir, type Hueco, type Profesional, type Turno } from "@/lib/api";
 import { formatearDia, formatearHora, formatearPrecio } from "@/lib/formato";
-import { armarDias, primerDiaConHuecos } from "@/lib/dias";
+import { armarDias, primerDiaConItems } from "@/lib/dias";
 import { huecosDe } from "@/lib/huecos";
 import { Hora } from "./hora";
 
@@ -220,11 +220,11 @@ function ElegirHorario({
   // guarda crudo porque después de un 409 los huecos se recargan, y el día que
   // estaba abierto puede haberse quedado sin ninguno.
   const [pedido, setDia] = useState("");
-  const dia = dias.some((d) => d.fecha === pedido && d.huecos.length > 0)
+  const dia = dias.some((d) => d.fecha === pedido && d.items.length > 0)
     ? pedido
-    : primerDiaConHuecos(dias);
+    : primerDiaConItems(dias);
 
-  if (!dias.some((d) => d.huecos.length > 0)) {
+  if (!dias.some((d) => d.items.length > 0)) {
     return (
       <p className="mt-6 rounded-xl border border-borde bg-superficie p-8 text-center text-tinta-suave">
         No quedan horarios disponibles en las próximas dos semanas.
@@ -234,7 +234,23 @@ function ElegirHorario({
 
   return (
     <div className="mt-6">
-      <Calendario dias={dias} diaElegido={dia} onDia={setDia} onHueco={onElegir} />
+      <Calendario dias={dias} diaElegido={dia} onDia={setDia}>
+        {(huecos) => (
+          <ul className="flex flex-wrap gap-2">
+            {huecos.map((hueco) => (
+              <li key={hueco.inicio}>
+                <button
+                  type="button"
+                  onClick={() => onElegir(hueco)}
+                  className="block rounded-lg border border-borde px-4 py-2.5 transition-colors hover:border-accion hover:bg-accent"
+                >
+                  <Hora inicio={hueco.inicio} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Calendario>
     </div>
   );
 }
