@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -20,6 +21,14 @@ type Config struct {
 	Entorno        string
 	NivelLog       slog.Level
 	TimeoutApagado time.Duration
+
+	// CORSOrigenes son los orígenes que pueden llamar a la API desde un
+	// browser. Vacío significa apagado, que es lo correcto por defecto: una
+	// lista vacía no puede permitir a nadie por accidente.
+	//
+	// En desarrollo se llena solo con el front local; en producción hay que
+	// declararla explícitamente.
+	CORSOrigenes []string
 }
 
 func (c Config) EsDesarrollo() bool {
@@ -53,6 +62,24 @@ func Cargar() (Config, error) {
 	}
 	cfg.NivelLog = nivel
 
+	cfg.CORSOrigenes = separarPorComas(os.Getenv("CORS_ORIGENES"))
+	if len(cfg.CORSOrigenes) == 0 && cfg.EsDesarrollo() {
+		// En desarrollo el front vive en el 3000. Es un default cómodo y sin
+		// riesgo: solo aplica con APP_ENV=development.
+		cfg.CORSOrigenes = []string{"http://localhost:3000"}
+	}
+	for _, o := range cfg.CORSOrigenes {
+		if !strings.HasPrefix(o, "http://") && !strings.HasPrefix(o, "https://") {
+			return Config{}, fmt.Errorf("CORS_ORIGENES inválido: %q (tiene que incluir el esquema, por ejemplo https://salud.app)", o)
+		}
+		if strings.HasSuffix(o, "/") {
+			// El header Origin que manda el browser nunca trae barra final, así
+			// que un valor con barra no matchearía nunca y el front fallaría
+			// sin ningún error visible del lado del servidor.
+			return Config{}, fmt.Errorf("CORS_ORIGENES inválido: %q (sin barra final)", o)
+		}
+	}
+
 	if crudo := os.Getenv("SHUTDOWN_TIMEOUT"); crudo != "" {
 		d, err := time.ParseDuration(crudo)
 		if err != nil || d <= 0 {
@@ -62,6 +89,22 @@ func Cargar() (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// separarPorComas parte una lista del entorno. "a, b" es una forma
+// perfectamente razonable de escribirla, así que se recortan los espacios.
+func separarPorComas(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	partes := strings.Split(s, ",")
+	salida := make([]string, 0, len(partes))
+	for _, p := range partes {
+		if v := strings.TrimSpace(p); v != "" {
+			salida = append(salida, v)
+		}
+	}
+	return salida
 }
 
 func leerEntorno(clave, porDefecto string) string {

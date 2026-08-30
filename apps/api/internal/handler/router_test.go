@@ -34,6 +34,7 @@ func nuevoStackDePrueba() http.Handler {
 		NuevaAgenda(svcAgenda),
 		NuevaAutenticacion(svcAuth, svc, false),
 		NuevoTurno(svcTurnos),
+		nil, // sin CORS: los tests hablan con el servidor sin browser de por medio
 	)
 }
 

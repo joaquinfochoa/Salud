@@ -10,7 +10,7 @@ import (
 //
 // Usa el ServeMux de la stdlib: desde Go 1.22 entiende método y parámetros de
 // ruta, así que no hace falta chi, gin ni echo para esto.
-func NuevoRouter(ph *ManejadorProfesional, ah *ManejadorAgenda, mh *ManejadorAutenticacion, th *ManejadorTurno) http.Handler {
+func NuevoRouter(ph *ManejadorProfesional, ah *ManejadorAgenda, mh *ManejadorAutenticacion, th *ManejadorTurno, origenesCORS []string) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", healthz)
@@ -60,12 +60,16 @@ func NuevoRouter(ph *ManejadorProfesional, ah *ManejadorAgenda, mh *ManejadorAut
 	mux.HandleFunc("GET /api/v1/profesionales/{id}/turnos", RequerirSesion(th.DeProfesional))
 	mux.HandleFunc("POST /api/v1/profesionales/{id}/turnos", RequerirSesion(th.Reservar))
 
-	// El orden es de afuera hacia adentro. IDPeticion va primero para que el
-	// log lo tenga; Autenticar va antes que RegistrarPeticiones para que el log
-	// de cada request pueda incluir al usuario; RegistrarPeticiones envuelve a
-	// RecuperarPanic para que un panic quede registrado con su 500.
+	// El orden es de afuera hacia adentro.
+	//
+	// CORS va primero de todo: un preflight se contesta y se corta ahí, sin
+	// resolver sesiones ni loguear un OPTIONS por cada request del front.
+	// IDPeticion va antes del log para que lo tenga; Autenticar antes de
+	// RegistrarPeticiones para que el log pueda incluir al usuario; y
+	// RegistrarPeticiones envuelve a RecuperarPanic para que un panic quede
+	// registrado con su 500.
 	return Encadenar(envolverErroresDeRuteo(mux),
-		IDPeticion, mh.Autenticar, RegistrarPeticiones, RecuperarPanic)
+		CORS(origenesCORS), IDPeticion, mh.Autenticar, RegistrarPeticiones, RecuperarPanic)
 }
 
 func healthz(w http.ResponseWriter, _ *http.Request) {

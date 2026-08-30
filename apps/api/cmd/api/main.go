@@ -72,6 +72,7 @@ func ejecutar() error {
 		// descarta y el login "no anda" sin ningún error visible.
 		handler.NuevaAutenticacion(svcAuth, svc, !cfg.EsDesarrollo()),
 		handler.NuevoTurno(svcTurnos),
+		cfg.CORSOrigenes,
 	)
 
 	srv := &http.Server{
@@ -90,7 +91,7 @@ func ejecutar() error {
 
 	errServidor := make(chan error, 1)
 	go func() {
-		slog.Info("servidor escuchando", "direccion", srv.Addr, "entorno", cfg.Entorno)
+		slog.Info("servidor escuchando", "direccion", srv.Addr, "entorno", cfg.Entorno, "corsOrigenes", cfg.CORSOrigenes)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errServidor <- err
 		}
