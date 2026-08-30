@@ -42,6 +42,13 @@ var (
 	// profesional del mismo usuario. Un usuario tiene como máximo uno.
 	ErrYaTienePerfil = errors.New("el usuario ya tiene un perfil profesional")
 
+	// ErrUsuarioEnUso es el mismo conflicto que ErrYaTienePerfil pero visto
+	// desde la escritura del repositorio. Son dos centinelas por la misma
+	// razón que la matrícula: el servicio da el error lindo en el caso común,
+	// el repositorio sostiene la invariante bajo el lock. El handler los mapea
+	// a la misma respuesta.
+	ErrUsuarioEnUso = errors.New("usuario ya asociado a otro perfil")
+
 	// ErrCredencialesInvalidas es uno solo para "ese email no existe" y "esa
 	// contraseña está mal", a propósito. Distinguirlos convierte al login en
 	// un oráculo de qué direcciones están registradas: probando emails contra

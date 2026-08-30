@@ -22,6 +22,9 @@ const (
 	tipoInterno               = "https://salud.app/errors/internal"
 	tipoCuerpoDemasiadoGrande = "https://salud.app/errors/payload-too-large"
 	tipoMetodoNoPermitido     = "https://salud.app/errors/method-not-allowed"
+	tipoNoAutenticado         = "https://salud.app/errors/unauthorized"
+	tipoNoAutorizado          = "https://salud.app/errors/forbidden"
+	tipoTipoDeContenido       = "https://salud.app/errors/unsupported-media-type"
 )
 
 // Problema es la representación de un error según RFC 7807.
@@ -90,6 +93,38 @@ func escribirError(w http.ResponseWriter, r *http.Request, err error) {
 			Detalle: "El alta chocó con un profesional existente. Volvé a intentar.",
 		})
 
+	case errors.Is(err, domain.ErrCredencialesInvalidas):
+		escribirProblema(w, Problema{
+			Tipo:    tipoNoAutenticado,
+			Titulo:  "Credenciales inválidas",
+			Estado:  http.StatusUnauthorized,
+			Detalle: "El email o la contraseña no son correctos",
+		})
+
+	case errors.Is(err, domain.ErrNoAutorizado):
+		escribirProblema(w, Problema{
+			Tipo:    tipoNoAutorizado,
+			Titulo:  "No autorizado",
+			Estado:  http.StatusForbidden,
+			Detalle: "Solo el dueño de este perfil puede modificarlo",
+		})
+
+	case errors.Is(err, domain.ErrEmailEnUso):
+		escribirProblema(w, Problema{
+			Tipo:    tipoConflicto,
+			Titulo:  "Email ya registrado",
+			Estado:  http.StatusConflict,
+			Detalle: "Ya existe una cuenta con ese email",
+		})
+
+	case errors.Is(err, domain.ErrYaTienePerfil), errors.Is(err, domain.ErrUsuarioEnUso):
+		escribirProblema(w, Problema{
+			Tipo:    tipoConflicto,
+			Titulo:  "Ya tenés un perfil profesional",
+			Estado:  http.StatusConflict,
+			Detalle: "Cada cuenta puede tener un solo perfil profesional",
+		})
+
 	default:
 		// El error real va al log, nunca al cliente: puede contener nombres
 		// de tablas, rutas del servidor o datos de otro usuario.
@@ -105,6 +140,17 @@ func escribirError(w http.ResponseWriter, r *http.Request, err error) {
 			Detalle: "Ocurrió un error inesperado. Volvé a intentar.",
 		})
 	}
+}
+
+// escribirNoAutenticado es el 401 de "no sé quién sos". No confundir con el
+// 403 de ErrNoAutorizado, que es "sé quién sos y no te alcanza".
+func escribirNoAutenticado(w http.ResponseWriter) {
+	escribirProblema(w, Problema{
+		Tipo:    tipoNoAutenticado,
+		Titulo:  "No autenticado",
+		Estado:  http.StatusUnauthorized,
+		Detalle: "Necesitás iniciar sesión para hacer esto",
+	})
 }
 
 func escribirPeticionInvalida(w http.ResponseWriter, detail string) {

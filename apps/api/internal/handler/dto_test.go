@@ -2,6 +2,8 @@ package handler
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -71,5 +73,51 @@ func TestARespuestaListadoConListaVacia(t *testing.T) {
 	}
 	if strings.Contains(string(crudo), `"datos":null`) {
 		t.Errorf("datos se serializó como null en vez de []: %s", crudo)
+	}
+}
+
+// Sin este chequeo, un formulario HTML de otro sitio puede mandar un POST con
+// la cookie de sesión adjunta. Con él, cualquier cuerpo cross-origin muere en
+// 415 antes de tocar el servicio: un form solo puede mandar form-urlencoded,
+// multipart o text/plain, nunca application/json.
+func TestDecodificarJSONExigeContentType(t *testing.T) {
+	casos := []struct {
+		nombre      string
+		contentType string
+		esperado    int
+	}{
+		{"json", "application/json", 0},
+		{"json con charset", "application/json; charset=utf-8", 0},
+		{"form urlencoded", "application/x-www-form-urlencoded", http.StatusUnsupportedMediaType},
+		{"texto plano", "text/plain", http.StatusUnsupportedMediaType},
+		{"multipart", "multipart/form-data; boundary=x", http.StatusUnsupportedMediaType},
+		{"ausente", "", http.StatusUnsupportedMediaType},
+	}
+
+	for _, c := range casos {
+		t.Run(c.nombre, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{}`))
+			if c.contentType != "" {
+				req.Header.Set("Content-Type", c.contentType)
+			}
+			rec := httptest.NewRecorder()
+
+			var destino struct{}
+			err := decodificarJSON(rec, req, &destino)
+
+			if c.esperado == 0 {
+				if err != nil {
+					t.Fatalf("se esperaba éxito, se obtuvo %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("se esperaba error por Content-Type")
+			}
+			escribirErrorDeDecodificacion(rec, req, err)
+			if rec.Code != c.esperado {
+				t.Errorf("estado = %d, se esperaba %d", rec.Code, c.esperado)
+			}
+		})
 	}
 }

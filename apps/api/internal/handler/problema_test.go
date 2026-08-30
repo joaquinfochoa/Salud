@@ -24,6 +24,10 @@ func TestEscribirErrorMapeaLosErroresDelDominio(t *testing.T) {
 			domain.ErrorValidacion{Campos: []domain.ErrorCampo{{Campo: "zona", Mensaje: "es obligatoria"}}},
 			http.StatusUnprocessableEntity,
 		},
+		{"no autorizado", domain.ErrNoAutorizado, http.StatusForbidden},
+		{"credenciales invalidas", domain.ErrCredencialesInvalidas, http.StatusUnauthorized},
+		{"email en uso", domain.ErrEmailEnUso, http.StatusConflict},
+		{"ya tiene perfil", domain.ErrYaTienePerfil, http.StatusConflict},
 		{"desconocido", errors.New("algo explotó"), http.StatusInternalServerError},
 	}
 

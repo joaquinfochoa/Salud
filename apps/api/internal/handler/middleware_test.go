@@ -1,10 +1,13 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 func TestIDPeticionGeneraUnoSiNoViene(t *testing.T) {
@@ -191,5 +194,49 @@ func TestRegistrarPeticionesPasaElRequestSinTocarlo(t *testing.T) {
 	}
 	if rec.Body.String() != "cuerpo de respuesta" {
 		t.Errorf("body = %q, se esperaba %q", rec.Body.String(), "cuerpo de respuesta")
+	}
+}
+
+func TestRequerirSesionSinUsuario(t *testing.T) {
+	llamado := false
+	h := RequerirSesion(func(_ http.ResponseWriter, _ *http.Request) {
+		llamado = true
+	})
+
+	rec := httptest.NewRecorder()
+	h(rec, httptest.NewRequest(http.MethodPost, "/api/v1/profesionales", nil))
+
+	if llamado {
+		t.Error("el handler corrió sin sesión")
+	}
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("estado = %d, se esperaba 401", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != tipoContenidoProblema {
+		t.Errorf("Content-Type = %q, se esperaba %q", ct, tipoContenidoProblema)
+	}
+}
+
+func TestRequerirSesionConUsuario(t *testing.T) {
+	usuarioID := uuid.New()
+	var visto uuid.UUID
+
+	h := RequerirSesion(func(_ http.ResponseWriter, r *http.Request) {
+		visto, _ = UsuarioIDDe(r.Context())
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/profesionales", nil)
+	req = req.WithContext(context.WithValue(req.Context(), claveUsuarioID, usuarioID))
+
+	h(httptest.NewRecorder(), req)
+
+	if visto != usuarioID {
+		t.Errorf("UsuarioIDDe = %v, se esperaba %v", visto, usuarioID)
+	}
+}
+
+func TestUsuarioIDDeSinValor(t *testing.T) {
+	if _, ok := UsuarioIDDe(context.Background()); ok {
+		t.Error("UsuarioIDDe devolvió ok sobre un contexto vacío")
 	}
 }

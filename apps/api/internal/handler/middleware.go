@@ -20,6 +20,48 @@ type claveContexto string
 
 const claveIDPeticion claveContexto = "requestID"
 
+const claveUsuarioID claveContexto = "usuarioID"
+
+// UsuarioIDDe devuelve el usuario autenticado. El segundo valor dice si había
+// sesión, y distinguirlo del uuid.Nil importa: uuid.Nil comparado contra un
+// UsuarioID real da "no autorizado" y no "no autenticado", que son dos códigos
+// HTTP distintos y dos mensajes distintos para el que llama.
+func UsuarioIDDe(ctx context.Context) (uuid.UUID, bool) {
+	id, ok := ctx.Value(claveUsuarioID).(uuid.UUID)
+	return id, ok
+}
+
+// RequerirSesion corta con 401 si el middleware Autenticar no dejó un usuario.
+//
+// Se aplica por ruta y no globalmente: la mayoría del contrato es pública, y
+// una lista de excepciones se desactualiza en silencio la primera vez que
+// alguien agrega un endpoint. Envolver el handler es visible en la tabla de
+// rutas.
+func RequerirSesion(siguiente http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := UsuarioIDDe(r.Context()); !ok {
+			escribirNoAutenticado(w)
+			return
+		}
+		siguiente(w, r)
+	}
+}
+
+// usuarioAutenticado es lo que usa cada handler privado. Existe para no repetir
+// el mismo bloque ocho veces: ocho copias son ocho lugares donde escribir mal
+// el código de estado.
+//
+// Con la ruta envuelta en RequerirSesion el segundo valor siempre es true. El
+// chequeo queda igual porque si alguien saca el RequerirSesion de la tabla de
+// rutas, esto responde 401 en vez de tratar uuid.Nil como un usuario legítimo.
+func usuarioAutenticado(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
+	id, ok := UsuarioIDDe(r.Context())
+	if !ok {
+		escribirNoAutenticado(w)
+	}
+	return id, ok
+}
+
 // Encadenar envuelve el handler. El primer middleware de la lista es el más
 // externo: el primero en ver el request y el último en ver la respuesta.
 func Encadenar(h http.Handler, mw ...func(http.Handler) http.Handler) http.Handler {

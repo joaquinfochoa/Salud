@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"mime"
 	"net/http"
 	"strconv"
 	"time"
@@ -132,6 +133,10 @@ func aRespuestaListado(ps []domain.Profesional, total, limite, desplazamiento in
 // "precioConsulta" en vez de "precioConsultaCentavos" y que el precio quede en cero
 // sin que nadie se entere.
 func decodificarJSON(w http.ResponseWriter, r *http.Request, destino any) error {
+	if err := verificarContentTypeJSON(r); err != nil {
+		return err
+	}
+
 	r.Body = http.MaxBytesReader(w, r.Body, maxBytesCuerpo)
 
 	dec := json.NewDecoder(r.Body)
@@ -142,6 +147,25 @@ func decodificarJSON(w http.ResponseWriter, r *http.Request, destino any) error 
 	}
 	if dec.More() {
 		return errors.New("el cuerpo debe contener un único objeto JSON")
+	}
+	return nil
+}
+
+// errTipoDeContenido lo distingue escribirErrorDeDecodificacion para responder
+// 415 en vez de 400.
+var errTipoDeContenido = errors.New("el Content-Type debe ser application/json")
+
+// verificarContentTypeJSON es media defensa contra CSRF, y la otra media es
+// SameSite=Lax en la cookie. Un formulario de otro sitio solo puede mandar
+// form-urlencoded, multipart o text/plain: ninguno pasa de acá, así que no
+// puede forjar una escritura aunque el browser adjunte la cookie de sesión.
+//
+// Se parsea en vez de comparar la cadena entera porque
+// "application/json; charset=utf-8" es legítimo y un cliente real lo manda.
+func verificarContentTypeJSON(r *http.Request) error {
+	tipo, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || tipo != "application/json" {
+		return errTipoDeContenido
 	}
 	return nil
 }
@@ -159,6 +183,16 @@ func escribirErrorDeDecodificacion(w http.ResponseWriter, r *http.Request, err e
 		"metodo", r.Method,
 		"ruta", r.URL.Path,
 	)
+
+	if errors.Is(err, errTipoDeContenido) {
+		escribirProblema(w, Problema{
+			Tipo:    tipoTipoDeContenido,
+			Titulo:  "Tipo de contenido no soportado",
+			Estado:  http.StatusUnsupportedMediaType,
+			Detalle: "el cuerpo tiene que ser application/json",
+		})
+		return
+	}
 
 	var errTamaño *http.MaxBytesError
 	if errors.As(err, &errTamaño) {
