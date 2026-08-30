@@ -27,14 +27,3 @@ export function usePanel(): Panel {
   }
   return valor;
 }
-
-/**
- * Lo mismo, pero devolviendo `null` en vez de explotar.
- *
- * Existe para una sola pantalla: `/panel/perfil` es donde se CREA el perfil, así
- * que el layout la deja pasar sin proveedor. Es el único lugar donde no tenerlo
- * es un estado válido y no un error de ubicación.
- */
-export function usePanelOpcional(): Panel | null {
-  return useContext(Contexto);
-}

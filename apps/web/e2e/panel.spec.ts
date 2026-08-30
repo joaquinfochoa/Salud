@@ -1,7 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
 
-const API = "http://localhost:8080";
-
 /** `2026-09-05` del próximo sábado. */
 function proximoSabado(): string {
   const d = new Date();
@@ -50,60 +48,67 @@ async function registrar(page: Page, nombre: string, apellido: string, volver?: 
  * y el test fallaba. Un test que solo pasa contra una base recién creada es una
  * trampa que explota más adelante.
  */
-test("un profesional carga su semana y aparece en su perfil público", async ({ page }) => {
-  // Se entra por donde entra un profesional de verdad: el CTA de la landing de
-  // captación, sin cuenta previa.
+test("un profesional se da de alta paso a paso y queda reservable", async ({ page }) => {
   await page.goto("/profesionales");
   await page.getByRole("link", { name: "Crear mi perfil" }).first().click();
-  await expect(page).toHaveURL("/crear-cuenta?volver=%2Fpanel%2Fperfil");
+  await expect(page).toHaveURL("/empezar");
 
+  // Paso 1: la cuenta.
   await page.getByLabel("Nombre").fill("Renata");
   await page.getByLabel("Apellido").fill("Kine");
   await page.getByLabel("Email").fill(`renata.${Date.now()}@ejemplo.com`);
   await page.getByLabel("Contraseña").fill("desarrollo123");
   await page.getByRole("button", { name: "Crear cuenta" }).click();
 
-  // Registrarse abre la sesión en la misma respuesta: no hay que entrar después.
-  await expect(page).toHaveURL("/panel/perfil");
-
-  await page.getByLabel("Matrícula").fill(`MP ${Date.now().toString().slice(-6)}`);
+  // Paso 2: la matrícula.
+  await expect(page).toHaveURL("/empezar?paso=2");
+  await page.getByLabel("Número de matrícula").fill(`MP ${Date.now().toString().slice(-6)}`);
   await page.getByLabel("Especialidad").selectOption("kinesiologia");
-  await page.getByLabel("Descripción").fill("Kinesióloga. Rehabilitación deportiva.");
-  await page.getByLabel("Precio de la consulta").fill("11000");
-  await page.getByLabel("Zona").fill("CABA");
+  await page.getByRole("button", { name: "Continuar" }).click();
+
+  // Paso 3: cómo atendés.
+  await expect(page).toHaveURL("/empezar?paso=3");
   await page.getByRole("button", { name: "En consultorio" }).click();
+  await page.getByLabel("Zona").fill("CABA");
+  await page.getByRole("button", { name: "Continuar" }).click();
+
+  // Paso 4: el precio. Acá se crea el perfil.
+  await expect(page).toHaveURL("/empezar?paso=4");
+  await page.getByLabel("Precio de la consulta").fill("11000");
   await page.getByRole("button", { name: "Crear mi perfil" }).click();
 
-  await expect(page).toHaveURL("/panel");
-  // Recién creada no tiene horarios, así que nadie puede reservarle.
-  await expect(page.getByText("Todavía no cargaste tus horarios")).toBeVisible();
+  // Paso 5: la bio es opcional y se puede dejar para después.
+  await expect(page).toHaveURL("/empezar?paso=5");
+  await page.getByRole("button", { name: "Completar más tarde" }).click();
 
-  await page.getByRole("link", { name: "Configurar" }).click();
-  await expect(page).toHaveURL("/panel/horarios");
-
+  // Paso 6: la semana, que es lo que lo hace reservable.
+  await expect(page).toHaveURL("/empezar?paso=6");
   await page.getByRole("button", { name: "Agregar bloque a Sábado" }).click();
   await page.getByLabel("Desde").last().fill("10:00");
   await page.getByLabel("Hasta").last().fill("12:00");
-  await page.getByRole("button", { name: "Guardar" }).click();
+  await page.getByRole("button", { name: "Publicar mi agenda" }).click();
 
-  // Filtrado por texto: el anunciador de rutas de Next también es role="alert".
-  await expect(
-    page.getByRole("alert").filter({ hasText: "Horarios guardados" }),
-  ).toBeVisible();
+  // Y el final dice lo que consiguió, no "felicitaciones".
+  await expect(page).toHaveURL("/empezar?paso=7");
+  await expect(page.getByRole("heading", { name: "Ya te pueden reservar turnos" })).toBeVisible();
 
-  // Y del otro lado del marketplace. Con ?dia= porque sin él el perfil abre en
-  // el primer día con huecos.
-  const slug = await page.evaluate(async (API) => {
-    const yo = await (await fetch(`${API}/api/v1/usuarios/yo`, { credentials: "include" })).json();
-    const p = await (
-      await fetch(`${API}/api/v1/profesionales/${yo.perfilProfesionalId}`)
-    ).json();
-    return p.slug as string;
-  }, API);
-
-  await page.goto(`/perfiles/${slug}?dia=${proximoSabado()}`);
+  // Del otro lado del marketplace: los huecos existen de verdad.
+  // Se lee el href en vez de clickear y mirar la URL: page.url() puede leerse
+  // antes de que la navegación termine, y el test falla por carrera y no por el
+  // producto.
+  const suPerfil = await page
+    .getByRole("link", { name: "Ver cómo te ve un paciente" })
+    .getAttribute("href");
+  await page.goto(`${suPerfil}?dia=${proximoSabado()}`);
   await expect(page.getByRole("link", { name: "10:00" })).toBeVisible();
   await expect(page.getByRole("link", { name: "10:50" })).toBeVisible();
+});
+
+/** Los pasos obligatorios no se saltean, ni escribiendo la URL a mano. */
+test("no se puede entrar a un paso salteando los anteriores", async ({ page }) => {
+  await page.goto("/empezar?paso=4");
+  await expect(page).toHaveURL("/empezar?paso=1");
+  await expect(page.getByRole("heading", { name: "Empecemos por tu cuenta" })).toBeVisible();
 });
 
 test("una cuenta nueva sin perfil profesional queda en sus turnos", async ({ page }) => {

@@ -18,12 +18,6 @@ export default function LayoutPanel({ children }: LayoutProps<"/">) {
   const router = useRouter();
   const ruta = usePathname();
   const [panel, setPanel] = useState<Panel | null>(null);
-  const [sinPerfil, setSinPerfil] = useState(false);
-
-  // /panel/perfil tiene que quedar accesible sin perfil: es la pantalla donde
-  // se crea. Sin esta excepción, alguien que llega desde la landing de
-  // captación rebota para siempre entre el layout y el alta.
-  const esAlta = ruta === "/panel/perfil";
 
   useEffect(() => {
     let vigente = true;
@@ -41,9 +35,10 @@ export default function LayoutPanel({ children }: LayoutProps<"/">) {
       }
       if (!vigente) return;
 
+      // Sin perfil no hay panel que mostrar: el alta vive en /empezar, que es
+      // un flujo paso a paso fuera de este grupo de rutas.
       if (!usuario.perfilProfesionalId) {
-        if (esAlta) setSinPerfil(true);
-        else router.replace("/panel/perfil");
+        router.replace("/empezar");
         return;
       }
 
@@ -56,16 +51,7 @@ export default function LayoutPanel({ children }: LayoutProps<"/">) {
     return () => {
       vigente = false;
     };
-  }, [router, ruta, esAlta]);
-
-  // Sin perfil todavía: el alta se dibuja sin navegación, porque no hay a dónde
-  // navegar hasta que exista el perfil.
-  //
-  // Se exige `esAlta` además de `sinPerfil`: apenas se crea el perfil, la
-  // pantalla navega a /panel y este layout todavía tiene el estado viejo. Sin
-  // esa condición, /panel se dibujaba sin proveedor y usePanel() explotaba
-  // antes de que el efecto llegara a traer el perfil recién creado.
-  if (sinPerfil && esAlta) return <>{children}</>;
+  }, [router, ruta]);
 
   if (!panel) {
     return (

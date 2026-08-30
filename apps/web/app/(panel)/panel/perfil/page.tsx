@@ -5,15 +5,11 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Chips } from "@/componentes/chips";
 import { ESPECIALIDADES } from "@/componentes/tarjeta-profesional";
-import {
-  ErrorAPI,
-  pedir,
-  type Especialidad,
-  type Profesional,
-  type UsuarioActual,
-} from "@/lib/api";
+import { Campo } from "@/componentes/campo";
+import { ErrorAPI, pedir, type Profesional } from "@/lib/api";
 import { enCentavos, formatearPrecio } from "@/lib/formato";
-import { usePanelOpcional } from "@/lib/panel";
+import { usePanel } from "@/lib/panel";
+import { aPeticionProfesional } from "@/lib/perfil";
 
 const MODALIDADES = ["presencial", "telemedicina", "domicilio"] as const;
 
@@ -37,35 +33,22 @@ const OBRAS_SOCIALES = [
   "Unión Personal",
 ] as const;
 
-export default function Perfil() {
-  const panel = usePanelOpcional();
-  // La key hace que el formulario se reinicie cuando el perfil pasa de null a
-  // existir: sin ella, React reusa el estado del alta y los campos quedan con
-  // lo que se tipeó en vez de lo que se guardó.
-  return <Formulario key={panel?.perfil.id ?? "alta"} perfil={panel?.perfil ?? null} />;
-}
-
 /**
- * El mismo formulario en dos modos.
+ * Editar el perfil. El alta ya no vive acá: es `/empezar`, paso a paso.
  *
- * Sin perfil, `usePanel()` no tiene nada que dar, así que el layout deja pasar
- * esta ruta sin proveedor y la pantalla arranca vacía. Dos modos y no dos
- * pantallas: los campos son los mismos y el alta solo agrega dos. Duplicarlo es
- * cómo se agrega un campo en uno y no en el otro.
+ * Esta pantalla tenía dos modos y el de creación se llevaba puesto medio
+ * archivo —el contexto opcional, una `key` para reiniciar el estado y una
+ * excepción en el layout del panel— para exhibir dos campos más.
  */
-function Formulario({ perfil }: { perfil: Profesional | null }) {
+export default function Perfil() {
+  const { perfil } = usePanel();
   const router = useRouter();
-  const alta = perfil === null;
 
-  const [bio, setBio] = useState(perfil?.bio ?? "");
-  const [precio, setPrecio] = useState(
-    perfil ? formatearPrecio(perfil.precioConsultaCentavos) : "",
-  );
-  const [zona, setZona] = useState(perfil?.zona ?? "");
-  const [modalidades, setModalidades] = useState<string[]>(perfil?.modalidades ?? []);
-  const [obrasSociales, setObrasSociales] = useState<string[]>(perfil?.obrasSociales ?? []);
-  const [matricula, setMatricula] = useState("");
-  const [especialidad, setEspecialidad] = useState<Especialidad>("psicologia");
+  const [bio, setBio] = useState(perfil.bio);
+  const [precio, setPrecio] = useState(formatearPrecio(perfil.precioConsultaCentavos));
+  const [zona, setZona] = useState(perfil.zona);
+  const [modalidades, setModalidades] = useState<string[]>(perfil.modalidades);
+  const [obrasSociales, setObrasSociales] = useState<string[]>(perfil.obrasSociales);
 
   const [aviso, setAviso] = useState<string | null>(null);
   const [error, setError] = useState<ErrorAPI | null>(null);
@@ -86,44 +69,23 @@ function Formulario({ perfil }: { perfil: Profesional | null }) {
     }
 
     setGuardando(true);
-    const cuerpo = {
-      nombre: perfil?.nombre ?? "",
-      apellido: perfil?.apellido ?? "",
-      matricula: perfil?.matricula ?? matricula,
-      especialidad: perfil?.especialidad ?? especialidad,
-      bio,
-      precioConsultaCentavos: centavos,
-      modalidades,
-      zona,
-      obrasSociales,
-      anticipacionMinimaMin: perfil?.anticipacionMinimaMin ?? 120,
-      horizonteDias: perfil?.horizonteDias ?? 60,
-    };
-
     try {
-      if (alta) {
-        // El nombre del alta sale de la cuenta: el perfil profesional es de la
-        // misma persona, y pedirlo de nuevo invita a que no coincidan.
-        const yo = await pedir<UsuarioActual>("/api/v1/usuarios/yo");
-        await pedir("/api/v1/profesionales", {
-          method: "POST",
-          body: JSON.stringify({ ...cuerpo, nombre: yo.nombre, apellido: yo.apellido }),
-        });
-        router.push("/panel");
-        router.refresh();
-        return;
-      }
-
       await pedir(`/api/v1/profesionales/${perfil.id}`, {
         method: "PUT",
-        body: JSON.stringify(cuerpo),
+        body: JSON.stringify(
+          aPeticionProfesional(perfil, {
+            bio,
+            precioConsultaCentavos: centavos,
+            modalidades: modalidades as Profesional["modalidades"],
+            zona,
+            obrasSociales,
+          }),
+        ),
       });
       setAviso("Perfil guardado. Los cambios ya se ven en tu perfil público.");
       router.refresh();
     } catch (e) {
-      if (e instanceof ErrorAPI && e.estado === 409) {
-        setAviso("Ya hay un perfil con esa matrícula.");
-      } else if (e instanceof ErrorAPI && e.estado === 422) {
+      if (e instanceof ErrorAPI && e.estado === 422) {
         setError(e);
       } else {
         setAviso("No pudimos guardar el perfil. Probá de nuevo.");
@@ -136,24 +98,14 @@ function Formulario({ perfil }: { perfil: Profesional | null }) {
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-6 sm:py-14">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-black tracking-tight">
-          {alta ? "Creá tu perfil" : "Perfil"}
-        </h1>
-        {perfil && (
-          <Link
-            href={`/perfiles/${perfil.slug}`}
-            className="text-sm font-semibold text-tinta-suave underline hover:text-accion"
-          >
-            Ver mi perfil público
-          </Link>
-        )}
+        <h1 className="text-2xl font-black tracking-tight">Perfil</h1>
+        <Link
+          href={`/perfiles/${perfil.slug}`}
+          className="text-sm font-semibold text-tinta-suave underline hover:text-accion"
+        >
+          Ver mi perfil público
+        </Link>
       </div>
-
-      {alta && (
-        <p className="mt-2 text-tinta-suave">
-          Con esto ya podés cargar tus horarios y empezar a recibir turnos.
-        </p>
-      )}
 
       {aviso && (
         <p
@@ -165,48 +117,19 @@ function Formulario({ perfil }: { perfil: Profesional | null }) {
       )}
 
       <div className="mt-6 grid gap-5 rounded-xl border border-borde bg-superficie p-5">
-        {alta ? (
-          <>
-            <Campo
-              nombre="matricula"
-              etiqueta="Matrícula"
-              valor={matricula}
-              onCambiar={setMatricula}
-              ayuda="Como figura en tu credencial: MN 98234, M.P. 12345."
-              error={error}
-            />
-            <div className="grid gap-1.5">
-              <label htmlFor="especialidad" className="text-sm font-semibold">
-                Especialidad
-              </label>
-              <select
-                id="especialidad"
-                value={especialidad}
-                onChange={(e) => setEspecialidad(e.target.value as Especialidad)}
-                className="h-11 rounded-lg border border-borde bg-superficie px-3"
-              >
-                {Object.entries(ESPECIALIDADES).map(([valor, texto]) => (
-                  <option key={valor} value={valor}>
-                    {texto}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </>
-        ) : (
-          // De solo lectura, y se dice por qué: cambiarlas resetea la
-          // verificación, así que no es un campo que se edite al pasar.
-          <div className="grid gap-1.5">
-            <p className="text-sm font-semibold">Matrícula y especialidad</p>
-            <p className="text-sm">
-              {perfil.matricula} · {ESPECIALIDADES[perfil.especialidad] ?? perfil.especialidad}
-            </p>
-            <p className="text-sm text-tinta-suave">
-              No se editan acá: cambiarlas vuelve a poner tu matrícula en verificación.
-              Escribinos si hay un error.
-            </p>
-          </div>
-        )}
+        {/* De solo lectura, y se dice por qué: cambiarlas resetea la
+            verificación, así que no es un campo que se edite al pasar. */}
+        <div className="grid gap-1.5">
+          <p className="text-sm font-semibold">Matrícula y especialidad</p>
+          <p className="text-sm">
+            {perfil.matricula} ·{" "}
+            {ESPECIALIDADES[perfil.especialidad] ?? perfil.especialidad}
+          </p>
+          <p className="text-sm text-tinta-suave">
+            No se editan acá: cambiarlas vuelve a poner tu matrícula en
+            verificación. Escribinos si hay un error.
+          </p>
+        </div>
 
         <div className="grid gap-1.5">
           <label htmlFor="bio" className="text-sm font-semibold">
@@ -274,64 +197,9 @@ function Formulario({ perfil }: { perfil: Profesional | null }) {
           disabled={guardando}
           className="mt-1 rounded-lg bg-accion px-6 py-3 font-bold text-white transition-colors hover:bg-accion-viva disabled:opacity-60"
         >
-          {guardando ? "Guardando…" : alta ? "Crear mi perfil" : "Guardar cambios"}
+          {guardando ? "Guardando…" : "Guardar cambios"}
         </button>
       </div>
     </main>
-  );
-}
-
-function Campo({
-  nombre,
-  etiqueta,
-  valor,
-  onCambiar,
-  onSalir,
-  ayuda,
-  error,
-}: {
-  nombre: string;
-  etiqueta: string;
-  valor: string;
-  onCambiar: (valor: string) => void;
-  onSalir?: () => void;
-  ayuda?: string;
-  error: ErrorAPI | null;
-}) {
-  const mensaje = error?.porCampo(nombre);
-  const idAyuda = `${nombre}-ayuda`;
-  const idError = `${nombre}-error`;
-
-  return (
-    // min-w-0: un <input> tiene ancho intrínseco propio, y en CSS Grid un item
-    // no se encoge por debajo del contenido. Sin esto, dos campos en
-    // sm:grid-cols-2 se desbordan de la tarjeta que los contiene.
-    <div className="grid min-w-0 gap-1.5">
-      <label htmlFor={nombre} className="text-sm font-semibold">
-        {etiqueta}
-      </label>
-      <input
-        id={nombre}
-        value={valor}
-        onChange={(e) => onCambiar(e.target.value)}
-        onBlur={onSalir}
-        aria-invalid={mensaje ? true : undefined}
-        aria-describedby={mensaje ? idError : ayuda ? idAyuda : undefined}
-        className={`h-11 w-full rounded-lg border px-3 ${
-          mensaje ? "border-destructive" : "border-borde"
-        }`}
-      />
-      {mensaje ? (
-        <p id={idError} className="text-sm text-destructive">
-          {mensaje}
-        </p>
-      ) : (
-        ayuda && (
-          <p id={idAyuda} className="text-sm text-tinta-suave">
-            {ayuda}
-          </p>
-        )
-      )}
-    </div>
   );
 }
