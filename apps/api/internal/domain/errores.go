@@ -7,7 +7,10 @@ import (
 
 var (
 	// ErrNoEncontrado lo devuelve el repositorio cuando no existe el registro.
-	ErrNoEncontrado = errors.New("profesional no encontrado")
+	// El mensaje es genérico porque el centinela lo comparten profesionales,
+	// bloqueos, usuarios y sesiones: el handler ya arma el texto que ve el
+	// cliente según la ruta.
+	ErrNoEncontrado = errors.New("recurso no encontrado")
 
 	// ErrMatriculaEnUso lo devuelve el repositorio al escribir: la matrícula es
 	// la única identidad real de una persona en este sistema y no puede
