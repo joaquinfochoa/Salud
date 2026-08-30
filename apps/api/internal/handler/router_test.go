@@ -24,9 +24,10 @@ func nuevoRouterDePrueba() http.Handler {
 func nuevoStackDePrueba() http.Handler {
 	repo := memory.NuevoProfesional()
 	svc := service.NuevoProfesional(repo)
-	svcAgenda := service.NuevaAgenda(repo, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo())
+	repoTurnos := memory.NuevoTurno()
+	svcAgenda := service.NuevaAgenda(repo, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo(), repoTurnos)
 	svcAuth := service.NuevaAutenticacion(memory.NuevoUsuario(), memory.NuevaSesion())
-	svcTurnos := service.NuevoTurno(memory.NuevoTurno(), repo, svcAgenda)
+	svcTurnos := service.NuevoTurno(repoTurnos, repo, svcAgenda)
 
 	return NuevoRouter(
 		NuevoProfesional(svc),

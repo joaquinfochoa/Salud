@@ -281,3 +281,33 @@ func TestReservarConContentTypeInvalidoDa415(t *testing.T) {
 		t.Errorf("estado = %d, se esperaba 415", resp.StatusCode)
 	}
 }
+
+// Criterios de aceptación 2 y 7 medidos en HTTP: el hueco desaparece al
+// reservar y vuelve al cancelar.
+func TestElHuecoDesapareceYVuelveAlCancelar(t *testing.T) {
+	srv, profesionalID, hueco := servidorConTurnos(t)
+	antes := len(huecosDe(t, srv, profesionalID))
+
+	conSesion(t, srv, "paciente@ejemplo.com")
+	resp := reservar(t, srv, profesionalID, hueco)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("no se pudo reservar: %d", resp.StatusCode)
+	}
+	var turno respuestaTurno
+	if err := json.NewDecoder(resp.Body).Decode(&turno); err != nil {
+		t.Fatalf("no se pudo decodificar: %v", err)
+	}
+
+	if despues := len(huecosDe(t, srv, profesionalID)); despues != antes-1 {
+		t.Fatalf("después de reservar hay %d huecos, se esperaban %d", despues, antes-1)
+	}
+
+	if r := ejecutar(t, srv, http.MethodDelete, "/api/v1/turnos/"+turno.ID, ""); r.StatusCode != http.StatusNoContent {
+		t.Fatalf("cancelar devolvió %d, se esperaba 204", r.StatusCode)
+	}
+
+	// Cancelar libera el hueco: es el punto de cancelar.
+	if despues := len(huecosDe(t, srv, profesionalID)); despues != antes {
+		t.Errorf("después de cancelar hay %d huecos, se esperaban %d", despues, antes)
+	}
+}

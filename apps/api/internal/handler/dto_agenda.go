@@ -45,6 +45,11 @@ type respuestaHorario struct {
 
 type respuestaHorarios struct {
 	Horarios []respuestaHorario `json:"horarios"`
+
+	// TurnosCancelados solo lo llena el PUT, que es el que puede dejar turnos
+	// huérfanos. El GET lo manda en cero: la clave está siempre presente para
+	// que el cliente no tenga que distinguir "no vino" de "ninguno".
+	TurnosCancelados int `json:"turnosCancelados"`
 }
 
 func aRespuestaHorarios(semana []domain.HorarioSemanal) respuestaHorarios {
@@ -73,6 +78,14 @@ func (p peticionBloqueo) aEntrada() domain.EntradaBloqueo {
 		Hasta:  p.Hasta.In(domain.ZonaHoraria),
 		Motivo: p.Motivo,
 	}
+}
+
+// respuestaBloqueoCreado agrega al bloqueo cuántos turnos canceló al crearse.
+// Es su propio tipo y no un campo de respuestaBloqueo porque el listado
+// devuelve muchos bloqueos y el contador es de la operación, no del recurso.
+type respuestaBloqueoCreado struct {
+	respuestaBloqueo
+	TurnosCancelados int `json:"turnosCancelados"`
 }
 
 type respuestaBloqueo struct {

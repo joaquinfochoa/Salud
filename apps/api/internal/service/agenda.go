@@ -19,6 +19,7 @@ type Agenda struct {
 	profesionales repository.Profesional
 	horarios      repository.HorarioSemanal
 	bloqueos      repository.Bloqueo
+	turnos        repository.Turno
 
 	ahora func() time.Time
 }
@@ -40,17 +41,60 @@ func ConReloj(ahora func() time.Time) func(*Agenda) {
 	return func(a *Agenda) { a.ahora = ahora }
 }
 
-func NuevaAgenda(profesionales repository.Profesional, horarios repository.HorarioSemanal, bloqueos repository.Bloqueo, opciones ...func(*Agenda)) *Agenda {
+// NuevaAgenda recibe repository.Turno y no *service.Turno a propósito. Sería
+// un ciclo: service.Turno ya depende de este servicio para pedirle los huecos.
+// La regla de cancelar vive en el dominio, que los dos importan, así que acá
+// alcanza con hablarle al repositorio.
+func NuevaAgenda(profesionales repository.Profesional, horarios repository.HorarioSemanal, bloqueos repository.Bloqueo, turnos repository.Turno, opciones ...func(*Agenda)) *Agenda {
 	a := &Agenda{
 		profesionales: profesionales,
 		horarios:      horarios,
 		bloqueos:      bloqueos,
+		turnos:        turnos,
 		ahora:         func() time.Time { return time.Now().In(domain.ZonaHoraria) },
 	}
 	for _, opcion := range opciones {
 		opcion(a)
 	}
 	return a
+}
+
+// cancelarTurnosEn cancela los turnos activos y futuros del profesional que
+// pisan [desde, hasta), y devuelve cuántos canceló.
+//
+// Solo los futuros. Un bloqueo sobre fechas pasadas es legítimo —cargar una
+// licencia vieja— y no tiene por qué reescribir la historia: un turno que ya
+// ocurrió no se cancela, y domain.Cancelar lo rechaza.
+//
+// Cancelar en vez de rechazar el bloqueo es una decisión de producto: pedirle
+// al profesional que cancele doce turnos a mano antes de irse de viaje termina
+// en que no bloquea nada, y el sistema y su calendario dejan de coincidir.
+//
+// La deuda que esto crea está registrada: el paciente se entera entrando a la
+// app. Sin notificaciones sigue siendo mejor que dejar turnos fantasma, pero
+// no es aceptable con usuarios reales.
+func (s *Agenda) cancelarTurnosEn(ctx context.Context, profesionalID, porUsuarioID uuid.UUID, desde, hasta time.Time) (int, error) {
+	turnos, err := s.turnos.ListarDeProfesional(ctx, profesionalID, desde, hasta)
+	if err != nil {
+		return 0, err
+	}
+
+	ahora := s.ahora()
+	cancelados := 0
+	for _, t := range turnos {
+		if !t.EstaActivo() || !t.Inicio.After(ahora) {
+			continue
+		}
+		cancelado, err := t.Cancelar(porUsuarioID, ahora)
+		if err != nil {
+			return 0, err
+		}
+		if err := s.turnos.Actualizar(ctx, cancelado); err != nil {
+			return 0, err
+		}
+		cancelados++
+	}
+	return cancelados, nil
 }
 
 // ResultadoHuecos lleva los huecos y el rango que de verdad se usó, que puede
@@ -61,28 +105,100 @@ type ResultadoHuecos struct {
 	Hasta  time.Time
 }
 
-func (s *Agenda) ReemplazarHorarios(ctx context.Context, usuarioID, profesionalID uuid.UUID, entradas []domain.EntradaHorarioSemanal) ([]domain.HorarioSemanal, error) {
+func (s *Agenda) ReemplazarHorarios(ctx context.Context, usuarioID, profesionalID uuid.UUID, entradas []domain.EntradaHorarioSemanal) ([]domain.HorarioSemanal, int, error) {
 	profesional, err := s.profesionales.ObtenerPorID(ctx, profesionalID)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if err := verificarPropiedad(profesional, usuarioID); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	semana, err := domain.NuevaSemana(profesionalID, entradas)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	if err := verificarModalidades(semana, profesional); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	if err := s.horarios.ReemplazarDeProfesional(ctx, profesionalID, semana); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return semana, nil
+
+	cancelados, err := s.cancelarTurnosHuerfanos(ctx, profesional, usuarioID)
+	if err != nil {
+		return nil, 0, err
+	}
+	return semana, cancelados, nil
+}
+
+// cancelarTurnosHuerfanos cancela los turnos futuros que ya no caen en ningún
+// hueco de la semana nueva, y devuelve cuántos.
+//
+// Se calcula recorriendo el horizonte y preguntando por los huecos, en vez de
+// comparar la semana vieja contra la nueva. Comparar sería más rápido pero hay
+// que acertar seis casos —bloque acortado, corrido, con otra duración, con
+// otra modalidad, partido en dos, eliminado— y equivocarse en uno deja turnos
+// vivos en un horario que ya no existe. Preguntar por los huecos usa la misma
+// cuenta que ya decide todo lo demás.
+//
+// ponytail: recorre el horizonte entero (hasta 180 días) en cada PUT
+// /horarios. Es O(horizonte × bloques) sobre datos en memoria, y esta
+// operación se llama una vez cada muchos meses.
+func (s *Agenda) cancelarTurnosHuerfanos(ctx context.Context, profesional domain.Profesional, porUsuarioID uuid.UUID) (int, error) {
+	ahora := s.ahora()
+	desde := domain.InicioDelDia(ahora)
+	hasta := desde.AddDate(0, 0, profesional.HorizonteDias)
+
+	turnos, err := s.turnos.ListarDeProfesional(ctx, profesional.ID, desde, hasta)
+	if err != nil {
+		return 0, err
+	}
+
+	horarios, err := s.horarios.ListarDeProfesional(ctx, profesional.ID)
+	if err != nil {
+		return 0, err
+	}
+
+	cancelados := 0
+	for _, t := range turnos {
+		if !t.EstaActivo() || !t.Inicio.After(ahora) {
+			continue
+		}
+		if cubiertoPorHorario(horarios, t) {
+			continue
+		}
+
+		cancelado, err := t.Cancelar(porUsuarioID, ahora)
+		if err != nil {
+			return 0, err
+		}
+		if err := s.turnos.Actualizar(ctx, cancelado); err != nil {
+			return 0, err
+		}
+		cancelados++
+	}
+	return cancelados, nil
+}
+
+// cubiertoPorHorario dice si el turno sigue cayendo exactamente sobre un hueco
+// que la semana nueva genera ese día.
+func cubiertoPorHorario(horarios []domain.HorarioSemanal, t domain.Turno) bool {
+	dia := domain.InicioDelDia(t.Inicio)
+	huecos := domain.CalculoHuecos{
+		Horarios: horarios,
+		Desde:    dia,
+		Hasta:    dia.AddDate(0, 0, 1),
+		// Sin anticipación ni reloj: acá no se pregunta si el turno sería
+		// reservable hoy, sino si el horario nuevo todavía lo contempla.
+		Ahora: dia.AddDate(-1, 0, 0),
+	}.Generar()
+
+	return slices.ContainsFunc(huecos, func(h domain.Hueco) bool {
+		return h.Inicio.Equal(t.Inicio) && h.Fin.Equal(t.Fin)
+	})
 }
 
 func (s *Agenda) ListarHorarios(ctx context.Context, profesionalID uuid.UUID) ([]domain.HorarioSemanal, error) {
@@ -92,24 +208,33 @@ func (s *Agenda) ListarHorarios(ctx context.Context, profesionalID uuid.UUID) ([
 	return s.horarios.ListarDeProfesional(ctx, profesionalID)
 }
 
-func (s *Agenda) CrearBloqueo(ctx context.Context, usuarioID, profesionalID uuid.UUID, entrada domain.EntradaBloqueo) (domain.Bloqueo, error) {
+func (s *Agenda) CrearBloqueo(ctx context.Context, usuarioID, profesionalID uuid.UUID, entrada domain.EntradaBloqueo) (domain.Bloqueo, int, error) {
 	profesional, err := s.profesionales.ObtenerPorID(ctx, profesionalID)
 	if err != nil {
-		return domain.Bloqueo{}, err
+		return domain.Bloqueo{}, 0, err
 	}
 	if err := verificarPropiedad(profesional, usuarioID); err != nil {
-		return domain.Bloqueo{}, err
+		return domain.Bloqueo{}, 0, err
 	}
 
 	bloqueo, err := domain.NuevoBloqueo(profesionalID, entrada, s.ahora())
 	if err != nil {
-		return domain.Bloqueo{}, err
+		return domain.Bloqueo{}, 0, err
 	}
 
 	if err := s.bloqueos.Crear(ctx, bloqueo); err != nil {
-		return domain.Bloqueo{}, err
+		return domain.Bloqueo{}, 0, err
 	}
-	return bloqueo, nil
+
+	// El bloqueo se escribe primero: si cancelar fallara a mitad de camino, el
+	// bloqueo ya está y el profesional ve la agenda cerrada, que es el estado
+	// seguro. Al revés quedarían turnos cancelados sin bloqueo que los
+	// justifique.
+	cancelados, err := s.cancelarTurnosEn(ctx, profesionalID, usuarioID, bloqueo.Desde, bloqueo.Hasta)
+	if err != nil {
+		return domain.Bloqueo{}, 0, err
+	}
+	return bloqueo, cancelados, nil
 }
 
 // ListarBloqueos acepta desde y hasta opcionales: cuando el cliente no pide un
@@ -236,9 +361,18 @@ func (s *Agenda) HuecosLibres(ctx context.Context, profesionalID uuid.UUID, desd
 		return ResultadoHuecos{}, err
 	}
 
+	// Se pasan todos, cancelados incluidos: filtrar es trabajo del dominio,
+	// que ya lo hace con EstaActivo(). Hacerlo dos veces es la forma de que un
+	// día las dos versiones de la regla no coincidan.
+	turnos, err := s.turnos.ListarDeProfesional(ctx, profesionalID, desde, finExclusivo)
+	if err != nil {
+		return ResultadoHuecos{}, err
+	}
+
 	resultado.Huecos = domain.CalculoHuecos{
 		Horarios:              horarios,
 		Bloqueos:              bloqueos,
+		Turnos:                turnos,
 		Desde:                 desde,
 		Hasta:                 finExclusivo,
 		AnticipacionMinimaMin: profesional.AnticipacionMinimaMin,

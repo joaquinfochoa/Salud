@@ -48,7 +48,7 @@ func ejecutar() error {
 	repoTurnos := memory.NuevoTurno()
 
 	svc := service.NuevoProfesional(repo)
-	svcAgenda := service.NuevaAgenda(repo, repoHorarios, repoBloqueos)
+	svcAgenda := service.NuevaAgenda(repo, repoHorarios, repoBloqueos, repoTurnos)
 	svcAuth := service.NuevaAutenticacion(repoUsuarios, repoSesiones)
 	svcTurnos := service.NuevoTurno(repoTurnos, repo, svcAgenda)
 

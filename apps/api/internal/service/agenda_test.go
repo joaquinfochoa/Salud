@@ -48,7 +48,7 @@ func nuevoBancoDePrueba() *bancoDePrueba {
 	return &bancoDePrueba{
 		profesionales: profesionales,
 		svcProf:       NuevoProfesional(profesionales),
-		agenda:        NuevaAgenda(profesionales, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo()),
+		agenda:        NuevaAgenda(profesionales, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo(), memory.NuevoTurno()),
 	}
 }
 
@@ -76,7 +76,7 @@ func TestReemplazarHorarios(t *testing.T) {
 	banco := nuevoBancoDePrueba()
 	p := banco.crearProfesional(t)
 
-	semana, err := banco.agenda.ReemplazarHorarios(ctx, p.UsuarioID, p.ID, []domain.EntradaHorarioSemanal{entradaHorarioLunes()})
+	semana, _, err := banco.agenda.ReemplazarHorarios(ctx, p.UsuarioID, p.ID, []domain.EntradaHorarioSemanal{entradaHorarioLunes()})
 	if err != nil {
 		t.Fatalf("ReemplazarHorarios devolvió error: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestReemplazarHorarios(t *testing.T) {
 }
 
 func TestReemplazarHorariosDeProfesionalInexistente(t *testing.T) {
-	_, err := nuevoBancoDePrueba().agenda.ReemplazarHorarios(
+	_, _, err := nuevoBancoDePrueba().agenda.ReemplazarHorarios(
 		context.Background(), uuid.New(), uuid.New(), []domain.EntradaHorarioSemanal{entradaHorarioLunes()})
 	if !errors.Is(err, domain.ErrNoEncontrado) {
 		t.Errorf("se esperaba ErrNoEncontrado, se obtuvo %v", err)
@@ -111,7 +111,7 @@ func TestReemplazarHorariosConModalidadQueElProfesionalNoOfrece(t *testing.T) {
 	entrada := entradaHorarioLunes()
 	entrada.Modalidad = "domicilio"
 
-	_, err := banco.agenda.ReemplazarHorarios(ctx, p.UsuarioID, p.ID, []domain.EntradaHorarioSemanal{entrada})
+	_, _, err := banco.agenda.ReemplazarHorarios(ctx, p.UsuarioID, p.ID, []domain.EntradaHorarioSemanal{entrada})
 
 	var verr domain.ErrorValidacion
 	if !errors.As(err, &verr) {
@@ -127,7 +127,7 @@ func TestCrearYListarBloqueos(t *testing.T) {
 	banco := nuevoBancoDePrueba()
 	p := banco.crearProfesional(t)
 
-	b, err := banco.agenda.CrearBloqueo(ctx, p.UsuarioID, p.ID, domain.EntradaBloqueo{
+	b, _, err := banco.agenda.CrearBloqueo(ctx, p.UsuarioID, p.ID, domain.EntradaBloqueo{
 		Desde:  dia(t, "2099-09-10"),
 		Hasta:  dia(t, "2099-09-20"),
 		Motivo: "Vacaciones",
@@ -157,7 +157,7 @@ func TestEliminarBloqueoDeOtroProfesional(t *testing.T) {
 		t.Fatalf("no se pudo crear el segundo profesional: %v", err)
 	}
 
-	b, err := banco.agenda.CrearBloqueo(ctx, uno.UsuarioID, uno.ID, domain.EntradaBloqueo{
+	b, _, err := banco.agenda.CrearBloqueo(ctx, uno.UsuarioID, uno.ID, domain.EntradaBloqueo{
 		Desde: dia(t, "2099-09-10"),
 		Hasta: dia(t, "2099-09-20"),
 	})
@@ -182,7 +182,7 @@ func TestHuecosLibres(t *testing.T) {
 	banco := nuevoBancoDePrueba()
 	p := banco.crearProfesional(t)
 
-	if _, err := banco.agenda.ReemplazarHorarios(ctx, p.UsuarioID, p.ID, []domain.EntradaHorarioSemanal{entradaHorarioLunes()}); err != nil {
+	if _, _, err := banco.agenda.ReemplazarHorarios(ctx, p.UsuarioID, p.ID, []domain.EntradaHorarioSemanal{entradaHorarioLunes()}); err != nil {
 		t.Fatalf("ReemplazarHorarios devolvió error: %v", err)
 	}
 
@@ -204,7 +204,7 @@ func TestHuecosLibresDeProfesionalInactivo(t *testing.T) {
 	banco := nuevoBancoDePrueba()
 	p := banco.crearProfesional(t)
 
-	if _, err := banco.agenda.ReemplazarHorarios(ctx, p.UsuarioID, p.ID, []domain.EntradaHorarioSemanal{entradaHorarioLunes()}); err != nil {
+	if _, _, err := banco.agenda.ReemplazarHorarios(ctx, p.UsuarioID, p.ID, []domain.EntradaHorarioSemanal{entradaHorarioLunes()}); err != nil {
 		t.Fatalf("ReemplazarHorarios devolvió error: %v", err)
 	}
 	if err := banco.svcProf.DarDeBaja(ctx, p.UsuarioID, p.ID); err != nil {
@@ -305,7 +305,7 @@ func TestHuecosLibresFiltraModalidadesQueElProfesionalYaNoOfrece(t *testing.T) {
 
 	bloquePresencial := entradaHorarioLunes()
 	bloquePresencial.Modalidad = "presencial"
-	if _, err := banco.agenda.ReemplazarHorarios(ctx, p.UsuarioID, p.ID, []domain.EntradaHorarioSemanal{bloquePresencial}); err != nil {
+	if _, _, err := banco.agenda.ReemplazarHorarios(ctx, p.UsuarioID, p.ID, []domain.EntradaHorarioSemanal{bloquePresencial}); err != nil {
 		t.Fatalf("ReemplazarHorarios devolvió error: %v", err)
 	}
 
@@ -334,7 +334,7 @@ func TestHuecosLibresFiltraModalidadesQueElProfesionalYaNoOfrece(t *testing.T) {
 func TestListarBloqueosVentanaPorDefecto(t *testing.T) {
 	ctx := context.Background()
 	profesionales := memory.NuevoProfesional()
-	agenda := NuevaAgenda(profesionales, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo(),
+	agenda := NuevaAgenda(profesionales, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo(), memory.NuevoTurno(),
 		ConReloj(func() time.Time { return instante(t, lunesDePrueba+" 00:00") }))
 
 	p, err := NuevoProfesional(profesionales).Crear(ctx, uuid.New(), entradaValida())
@@ -342,13 +342,13 @@ func TestListarBloqueosVentanaPorDefecto(t *testing.T) {
 		t.Fatalf("no se pudo crear el profesional: %v", err)
 	}
 
-	if _, err := agenda.CrearBloqueo(ctx, p.UsuarioID, p.ID, domain.EntradaBloqueo{
+	if _, _, err := agenda.CrearBloqueo(ctx, p.UsuarioID, p.ID, domain.EntradaBloqueo{
 		Desde: dia(t, "2027-06-01"), // dentro de los dos años por defecto
 		Hasta: dia(t, "2027-06-10"),
 	}); err != nil {
 		t.Fatalf("CrearBloqueo devolvió error: %v", err)
 	}
-	if _, err := agenda.CrearBloqueo(ctx, p.UsuarioID, p.ID, domain.EntradaBloqueo{
+	if _, _, err := agenda.CrearBloqueo(ctx, p.UsuarioID, p.ID, domain.EntradaBloqueo{
 		Desde: dia(t, "2029-06-01"), // más allá de los dos años por defecto
 		Hasta: dia(t, "2029-06-10"),
 	}); err != nil {

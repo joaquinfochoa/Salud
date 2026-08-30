@@ -37,7 +37,7 @@ func nuevoBancoTurnos() *bancoTurnos {
 
 	profesionales := memory.NuevoProfesional()
 	turnos := memory.NuevoTurno()
-	agenda := NuevaAgenda(profesionales, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo(), ConReloj(reloj))
+	agenda := NuevaAgenda(profesionales, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo(), turnos, ConReloj(reloj))
 
 	return &bancoTurnos{
 		profesionales: profesionales,
@@ -62,7 +62,7 @@ func (b *bancoTurnos) conProfesional(t *testing.T, matricula string) (domain.Pro
 	if err != nil {
 		t.Fatalf("creando el profesional: %v", err)
 	}
-	if _, err := b.agenda.ReemplazarHorarios(ctx, usuarioID, p.ID, []domain.EntradaHorarioSemanal{entradaHorarioLunes()}); err != nil {
+	if _, _, err := b.agenda.ReemplazarHorarios(ctx, usuarioID, p.ID, []domain.EntradaHorarioSemanal{entradaHorarioLunes()}); err != nil {
 		t.Fatalf("cargando el horario: %v", err)
 	}
 	return p, usuarioID
@@ -145,7 +145,7 @@ func TestReservarFueraDeLaAnticipacionMinima(t *testing.T) {
 
 	horarioMartes := entradaHorarioLunes()
 	horarioMartes.DiaSemana = "martes"
-	if _, err := b.agenda.ReemplazarHorarios(ctx, usuarioID, p.ID, []domain.EntradaHorarioSemanal{horarioMartes}); err != nil {
+	if _, _, err := b.agenda.ReemplazarHorarios(ctx, usuarioID, p.ID, []domain.EntradaHorarioSemanal{horarioMartes}); err != nil {
 		t.Fatalf("cargando el horario: %v", err)
 	}
 
@@ -369,5 +369,181 @@ func TestListarIncluyeLosCancelados(t *testing.T) {
 	}
 	if len(lista) != 1 {
 		t.Errorf("se devolvieron %d turnos, se esperaba 1 aunque esté cancelado", len(lista))
+	}
+}
+
+// Criterio de aceptación 2 y 7 en la capa de servicio: reservar saca el hueco
+// del cálculo, cancelar lo devuelve.
+func TestHuecosLibresRestaLosTurnos(t *testing.T) {
+	ctx := context.Background()
+	b := nuevoBancoTurnos()
+	p, _ := b.conProfesional(t, "MN 100015")
+	pacienteID := uuid.New()
+
+	huecos := func() int {
+		t.Helper()
+		r, err := b.agenda.HuecosLibres(ctx, p.ID, lunesTurnos, lunesTurnos)
+		if err != nil {
+			t.Fatalf("HuecosLibres: %v", err)
+		}
+		return len(r.Huecos)
+	}
+
+	antes := huecos()
+	if antes != 4 {
+		t.Fatalf("el bloque de 09:00 a 13:00 con 50 minutos da 4 huecos, dio %d", antes)
+	}
+
+	turno, err := b.svc.Reservar(ctx, pacienteID, p.ID, aLas(9, 0), "")
+	if err != nil {
+		t.Fatalf("Reservar: %v", err)
+	}
+	if despues := huecos(); despues != 3 {
+		t.Errorf("después de reservar quedan %d huecos, se esperaban 3", despues)
+	}
+
+	if err := b.svc.Cancelar(ctx, pacienteID, turno.ID); err != nil {
+		t.Fatalf("Cancelar: %v", err)
+	}
+	if despues := huecos(); despues != 4 {
+		t.Errorf("después de cancelar quedan %d huecos, se esperaban 4", despues)
+	}
+}
+
+// Criterio de aceptación 10.
+func TestUnBloqueoCancelaLosTurnosQuePisa(t *testing.T) {
+	ctx := context.Background()
+	b := nuevoBancoTurnos()
+	p, duenoID := b.conProfesional(t, "MN 100016")
+
+	uno, err := b.svc.Reservar(ctx, uuid.New(), p.ID, aLas(9, 0), "")
+	if err != nil {
+		t.Fatalf("Reservar: %v", err)
+	}
+	dos, err := b.svc.Reservar(ctx, uuid.New(), p.ID, aLas(9, 50), "")
+	if err != nil {
+		t.Fatalf("Reservar: %v", err)
+	}
+
+	_, cancelados, err := b.agenda.CrearBloqueo(ctx, duenoID, p.ID, domain.EntradaBloqueo{
+		Desde:  lunesTurnos,
+		Hasta:  lunesTurnos.AddDate(0, 0, 1),
+		Motivo: "Vacaciones",
+	})
+	if err != nil {
+		t.Fatalf("CrearBloqueo: %v", err)
+	}
+	if cancelados != 2 {
+		t.Errorf("cancelados = %d, se esperaban 2", cancelados)
+	}
+
+	for _, id := range []uuid.UUID{uno.ID, dos.ID} {
+		guardado, err := b.turnos.ObtenerPorID(ctx, id)
+		if err != nil {
+			t.Fatalf("ObtenerPorID: %v", err)
+		}
+		if guardado.EstaActivo() {
+			t.Error("quedó un turno activo dentro del bloqueo")
+		}
+		if guardado.CanceladoPor == nil || *guardado.CanceladoPor != duenoID {
+			t.Error("no quedó registrado que canceló el profesional")
+		}
+	}
+}
+
+// Un bloqueo puede cubrir fechas pasadas —cargar "estuve de licencia la semana
+// pasada" es un caso real— pero un turno que ya ocurrió no se cancela:
+// reescribirlo hacia atrás borraría el registro de una consulta que pasó.
+func TestUnBloqueoNoTocaLosTurnosQueYaOcurrieron(t *testing.T) {
+	ctx := context.Background()
+	b := nuevoBancoTurnos()
+	p, duenoID := b.conProfesional(t, "MN 100017")
+
+	turno, err := b.svc.Reservar(ctx, uuid.New(), p.ID, aLas(9, 0), "")
+	if err != nil {
+		t.Fatalf("Reservar: %v", err)
+	}
+
+	// el reloj salta a después del turno
+	ahoraFijo = aLas(12, 0)
+	defer func() { ahoraFijo = time.Date(2026, 9, 1, 9, 0, 0, 0, domain.ZonaHoraria) }()
+
+	_, cancelados, err := b.agenda.CrearBloqueo(ctx, duenoID, p.ID, domain.EntradaBloqueo{
+		Desde:  lunesTurnos,
+		Hasta:  lunesTurnos.AddDate(0, 0, 2),
+		Motivo: "licencia cargada tarde",
+	})
+	if err != nil {
+		t.Fatalf("CrearBloqueo: %v", err)
+	}
+	if cancelados != 0 {
+		t.Errorf("cancelados = %d, se esperaban 0: el turno ya había ocurrido", cancelados)
+	}
+
+	guardado, err := b.turnos.ObtenerPorID(ctx, turno.ID)
+	if err != nil {
+		t.Fatalf("ObtenerPorID: %v", err)
+	}
+	if !guardado.EstaActivo() {
+		t.Error("se canceló un turno que ya había ocurrido")
+	}
+}
+
+func TestSacarUnBloqueHorarioCancelaSusTurnos(t *testing.T) {
+	ctx := context.Background()
+	b := nuevoBancoTurnos()
+	p, duenoID := b.conProfesional(t, "MN 100018")
+
+	turno, err := b.svc.Reservar(ctx, uuid.New(), p.ID, aLas(9, 0), "")
+	if err != nil {
+		t.Fatalf("Reservar: %v", err)
+	}
+
+	// la semana nueva no tiene lunes
+	martes := entradaHorarioLunes()
+	martes.DiaSemana = "martes"
+	_, cancelados, err := b.agenda.ReemplazarHorarios(ctx, duenoID, p.ID, []domain.EntradaHorarioSemanal{martes})
+	if err != nil {
+		t.Fatalf("ReemplazarHorarios: %v", err)
+	}
+	if cancelados != 1 {
+		t.Errorf("cancelados = %d, se esperaba 1", cancelados)
+	}
+
+	guardado, err := b.turnos.ObtenerPorID(ctx, turno.ID)
+	if err != nil {
+		t.Fatalf("ObtenerPorID: %v", err)
+	}
+	if guardado.EstaActivo() {
+		t.Error("el turno del lunes sobrevivió a una semana sin lunes")
+	}
+}
+
+// El caso opuesto, que es el que se rompe si cubiertoPorHorario está mal: la
+// semana se reemplaza por una equivalente y los turnos siguen en pie.
+func TestReemplazarPorElMismoHorarioNoCancelaNada(t *testing.T) {
+	ctx := context.Background()
+	b := nuevoBancoTurnos()
+	p, duenoID := b.conProfesional(t, "MN 100019")
+
+	turno, err := b.svc.Reservar(ctx, uuid.New(), p.ID, aLas(9, 0), "")
+	if err != nil {
+		t.Fatalf("Reservar: %v", err)
+	}
+
+	_, cancelados, err := b.agenda.ReemplazarHorarios(ctx, duenoID, p.ID, []domain.EntradaHorarioSemanal{entradaHorarioLunes()})
+	if err != nil {
+		t.Fatalf("ReemplazarHorarios: %v", err)
+	}
+	if cancelados != 0 {
+		t.Errorf("cancelados = %d, se esperaban 0: el horario es el mismo", cancelados)
+	}
+
+	guardado, err := b.turnos.ObtenerPorID(ctx, turno.ID)
+	if err != nil {
+		t.Fatalf("ObtenerPorID: %v", err)
+	}
+	if !guardado.EstaActivo() {
+		t.Error("se canceló un turno que sigue cayendo en su hueco")
 	}
 }

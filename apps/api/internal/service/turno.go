@@ -68,6 +68,20 @@ func (s *Turno) Reservar(ctx context.Context, pacienteID, profesionalID uuid.UUI
 		return h.Inicio.Equal(inicio)
 	})
 	if i < 0 {
+		// Hay dos motivos distintos para que un inicio no esté entre los
+		// huecos, y al cliente le sirven cosas distintas: "ese horario nunca
+		// existió" es un error de su pedido (422), mientras que "existía y
+		// alguien lo tomó" es un conflicto de estado que se resuelve
+		// refrescando (409). Distinguirlos cuesta una consulta y evita
+		// mandarle a un paciente que perdió el hueco por tres segundos un
+		// mensaje que dice que se equivocó al pedir.
+		tomado, err := s.huecoTomado(ctx, profesionalID, inicio)
+		if err != nil {
+			return domain.Turno{}, err
+		}
+		if tomado {
+			return domain.Turno{}, domain.ErrHuecoTomado
+		}
 		return domain.Turno{}, domain.ErrorValidacion{Campos: []domain.ErrorCampo{
 			{Campo: "inicio", Mensaje: "no corresponde a un turno disponible"},
 		}}
@@ -85,6 +99,24 @@ func (s *Turno) Reservar(ctx context.Context, pacienteID, profesionalID uuid.UUI
 		return domain.Turno{}, err
 	}
 	return turno, nil
+}
+
+// huecoTomado dice si el motivo por el que ese inicio no aparece entre los
+// huecos es que otro paciente ya lo reservó.
+//
+// Solo mira el inicio exacto: es el hueco que el cliente tenía en pantalla. No
+// reimplementa ninguna regla de calendario —eso sigue siendo trabajo de
+// HuecosLibres—, solo separa dos causas de la misma ausencia.
+func (s *Turno) huecoTomado(ctx context.Context, profesionalID uuid.UUID, inicio time.Time) (bool, error) {
+	dia := domain.InicioDelDia(inicio)
+	turnos, err := s.repo.ListarDeProfesional(ctx, profesionalID, dia, dia.AddDate(0, 0, 1))
+	if err != nil {
+		return false, err
+	}
+
+	return slices.ContainsFunc(turnos, func(t domain.Turno) bool {
+		return t.EstaActivo() && t.Inicio.Equal(inicio)
+	}), nil
 }
 
 // Cancelar lo pueden hacer las dos partes. Un turno no tiene un dueño sino dos,

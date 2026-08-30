@@ -509,7 +509,7 @@ paths:
               schema: { type: string }
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Bloqueo' }
+              schema: { $ref: '#/components/schemas/BloqueoCreado' }
         '400': { $ref: '#/components/responses/PeticionInvalida' }
         '404': { $ref: '#/components/responses/NoEncontrado' }
         '413': { $ref: '#/components/responses/CuerpoDemasiadoGrande' }
@@ -1018,11 +1018,35 @@ components:
 
     ListaHorarios:
       type: object
-      required: [horarios]
+      required: [horarios, turnosCancelados]
       properties:
+        turnosCancelados:
+          type: integer
+          minimum: 0
+          description: |
+            Cuántos turnos futuros canceló esta operación por quedar fuera del
+            horario nuevo. Siempre cero en el `GET`. El profesional se entera
+            en el momento en que cambia su semana, no el día del turno.
         horarios:
           type: array
           items: { $ref: '#/components/schemas/HorarioSemanal' }
+
+    BloqueoCreado:
+      allOf:
+        - $ref: '#/components/schemas/Bloqueo'
+        - type: object
+          required: [turnosCancelados]
+          properties:
+            turnosCancelados:
+              type: integer
+              minimum: 0
+              description: |
+                Cuántos turnos futuros canceló este bloqueo. El profesional se
+                entera en el momento de bloquear, no el día del turno.
+
+                Los turnos que ya ocurrieron no se tocan: un bloqueo puede
+                cubrir fechas pasadas, pero reescribir una consulta que
+                efectivamente pasó borraría su registro.
 
     Bloqueo:
       type: object

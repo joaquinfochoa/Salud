@@ -90,7 +90,7 @@ func TestSoloElDuenoPuedeTocarLaAgenda(t *testing.T) {
 	ctx := context.Background()
 	repoProf := memory.NuevoProfesional()
 	svcProf := NuevoProfesional(repoProf)
-	svc := NuevaAgenda(repoProf, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo())
+	svc := NuevaAgenda(repoProf, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo(), memory.NuevoTurno())
 
 	dueno := uuid.New()
 	intruso := uuid.New()
@@ -101,13 +101,13 @@ func TestSoloElDuenoPuedeTocarLaAgenda(t *testing.T) {
 	}
 
 	t.Run("ReemplazarHorarios", func(t *testing.T) {
-		if _, err := svc.ReemplazarHorarios(ctx, intruso, p.ID, nil); !errors.Is(err, domain.ErrNoAutorizado) {
+		if _, _, err := svc.ReemplazarHorarios(ctx, intruso, p.ID, nil); !errors.Is(err, domain.ErrNoAutorizado) {
 			t.Errorf("se esperaba ErrNoAutorizado, se obtuvo %v", err)
 		}
 	})
 
 	t.Run("CrearBloqueo", func(t *testing.T) {
-		if _, err := svc.CrearBloqueo(ctx, intruso, p.ID, domain.EntradaBloqueo{}); !errors.Is(err, domain.ErrNoAutorizado) {
+		if _, _, err := svc.CrearBloqueo(ctx, intruso, p.ID, domain.EntradaBloqueo{}); !errors.Is(err, domain.ErrNoAutorizado) {
 			t.Errorf("se esperaba ErrNoAutorizado, se obtuvo %v", err)
 		}
 	})
@@ -122,7 +122,7 @@ func TestSoloElDuenoPuedeTocarLaAgenda(t *testing.T) {
 	// inválidos tiene que recibir 403, no un 422 que le confirme que el perfil
 	// existe y de paso le enseñe el esquema del cuerpo.
 	t.Run("el 403 gana al 422", func(t *testing.T) {
-		_, err := svc.CrearBloqueo(ctx, intruso, p.ID, domain.EntradaBloqueo{})
+		_, _, err := svc.CrearBloqueo(ctx, intruso, p.ID, domain.EntradaBloqueo{})
 		var verr domain.ErrorValidacion
 		if errors.As(err, &verr) {
 			t.Error("un intruso recibió un error de validación en vez de 403")
@@ -136,7 +136,7 @@ func TestLasLecturasDeAgendaNoPidenDueno(t *testing.T) {
 	ctx := context.Background()
 	repoProf := memory.NuevoProfesional()
 	svcProf := NuevoProfesional(repoProf)
-	svc := NuevaAgenda(repoProf, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo())
+	svc := NuevaAgenda(repoProf, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo(), memory.NuevoTurno())
 
 	p, err := svcProf.Crear(ctx, uuid.New(), entradaValida())
 	if err != nil {

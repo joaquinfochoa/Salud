@@ -51,12 +51,15 @@ func (h *ManejadorAgenda) ReemplazarHorarios(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	semana, err := h.svc.ReemplazarHorarios(r.Context(), usuarioID, id, peticion.aEntradas())
+	semana, cancelados, err := h.svc.ReemplazarHorarios(r.Context(), usuarioID, id, peticion.aEntradas())
 	if err != nil {
 		escribirError(w, r, err)
 		return
 	}
-	escribirJSON(w, http.StatusOK, aRespuestaHorarios(semana))
+
+	respuesta := aRespuestaHorarios(semana)
+	respuesta.TurnosCancelados = cancelados
+	escribirJSON(w, http.StatusOK, respuesta)
 }
 
 func (h *ManejadorAgenda) ListarBloqueos(w http.ResponseWriter, r *http.Request) {
@@ -115,14 +118,17 @@ func (h *ManejadorAgenda) CrearBloqueo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bloqueo, err := h.svc.CrearBloqueo(r.Context(), usuarioID, id, peticion.aEntrada())
+	bloqueo, cancelados, err := h.svc.CrearBloqueo(r.Context(), usuarioID, id, peticion.aEntrada())
 	if err != nil {
 		escribirError(w, r, err)
 		return
 	}
 
 	w.Header().Set("Location", "/api/v1/profesionales/"+id.String()+"/bloqueos/"+bloqueo.ID.String())
-	escribirJSON(w, http.StatusCreated, aRespuestaBloqueo(bloqueo))
+	escribirJSON(w, http.StatusCreated, respuestaBloqueoCreado{
+		respuestaBloqueo: aRespuestaBloqueo(bloqueo),
+		TurnosCancelados: cancelados,
+	})
 }
 
 func (h *ManejadorAgenda) EliminarBloqueo(w http.ResponseWriter, r *http.Request) {
