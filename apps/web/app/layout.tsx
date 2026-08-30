@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Archivo, Public_Sans } from "next/font/google";
+import { Encabezado } from "@/componentes/encabezado";
 import "./globals.css";
 
 // Archivo solo para las horas. Es el objeto principal de la interfaz —lo que la
@@ -35,7 +36,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="es"
       className={`${archivo.variable} ${publicSans.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <Encabezado />
+        {children}
+      </body>
     </html>
   );
 }
