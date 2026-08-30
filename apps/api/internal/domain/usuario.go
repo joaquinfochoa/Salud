@@ -112,10 +112,6 @@ func (u Usuario) Clonar() Usuario {
 	return c
 }
 
-func (u Usuario) NombreCompleto() string {
-	return u.Nombre + " " + u.Apellido
-}
-
 // hashearContrasena valida las reglas y devuelve el hash.
 //
 // Sin reglas de composición —mayúscula, número, símbolo—: alargan el
