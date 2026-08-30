@@ -70,15 +70,3 @@ func TestMatriculaString(t *testing.T) {
 		t.Errorf("String() = %q, se esperaba %q", obtenido, "MN 98234")
 	}
 }
-
-func TestMatriculaEsCero(t *testing.T) {
-	var cero Matricula
-	if !cero.EsCero() {
-		t.Error("la matrícula vacía debía ser EsCero")
-	}
-
-	m, _ := ParsearMatricula("MN 1")
-	if m.EsCero() {
-		t.Error("una matrícula parseada no debía ser EsCero")
-	}
-}

@@ -45,7 +45,3 @@ func ParsearEmail(s string) (Email, error) {
 func (e Email) String() string {
 	return string(e)
 }
-
-func (e Email) EsCero() bool {
-	return e == ""
-}

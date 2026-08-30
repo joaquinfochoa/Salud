@@ -58,13 +58,3 @@ func TestEmailDemasiadoLargo(t *testing.T) {
 		t.Error("se esperaba error por longitud")
 	}
 }
-
-func TestEmailEsCero(t *testing.T) {
-	var e Email
-	if !e.EsCero() {
-		t.Error("el Email cero debería ser cero")
-	}
-	if Email("juan@ejemplo.com").EsCero() {
-		t.Error("un email con valor no debería ser cero")
-	}
-}

@@ -61,7 +61,3 @@ func ParsearMatricula(s string) (Matricula, error) {
 func (m Matricula) String() string {
 	return string(m.Tipo) + " " + m.Numero
 }
-
-func (m Matricula) EsCero() bool {
-	return m.Tipo == "" && m.Numero == ""
-}

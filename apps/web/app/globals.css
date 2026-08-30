@@ -1,6 +1,4 @@
 @import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Paleta Índigo
@@ -37,15 +35,14 @@
   --font-texto: var(--fuente-texto), system-ui, sans-serif;
 }
 
-/* shadcn nombra sus tokens en inglés y sus componentes los referencian por ese
- * nombre: `bg-primary`, `border-border`, `text-muted-foreground`. Apuntarlos a
- * la paleta Índigo —en vez de dejar los neutros que trae por defecto— es lo que
- * hace que un componente copiado se vea como esta app y no como las otras diez
- * mil apps de shadcn.
+/* Los nombres en inglés son los que espera shadcn: `bg-primary`,
+ * `border-border`, `text-muted-foreground`. Hoy ningún componente copiado los
+ * usa —los cinco que instalé quedaron sin importadores y se borraron— pero se
+ * conservan apuntando a la paleta Índigo para que el día que se agregue uno de
+ * verdad nazca con el color de esta app y no con el neutro por defecto.
  *
- * Los tokens de chart y sidebar que genera el init se sacaron: ningún
- * componente de esta app los usa, y un token sin consumidor es una decisión que
- * nadie tomó. */
+ * Es la mitad barata de esa decisión: los tokens son declaraciones, los
+ * componentes eran 408 líneas. */
 @theme inline {
   --font-sans: var(--font-texto);
   --font-heading: var(--font-texto);
