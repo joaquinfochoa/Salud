@@ -1,6 +1,7 @@
 # Salud API
 
-Backend en Go. CRUD de profesionales, sin base de datos.
+Backend en Go. Profesionales, disponibilidad y autenticación por sesión.
+Sin base de datos: todo vive en memoria.
 
 ## Correr
 
@@ -29,12 +30,56 @@ handler ──▶ service ──▶ repository (interfaz)
 | `internal/service` | `@Service` |
 | `internal/repository/memory` | `@Repository` |
 | `internal/domain` | Entidades y value objects |
+| `internal/handler/middleware.go` | Filtros de servlet / middleware |
 | `cmd/api/main.go` | El contenedor de DI, pero explícito |
 
 ## Migrar a PostgreSQL
 
-Implementar `repository.Profesional` en `internal/repository/postgres/` y
-cambiar una línea de `cmd/api/main.go`. Nada más.
+Implementar las interfaces de `internal/repository/` en
+`internal/repository/postgres/` y cambiar las líneas del cableado en
+`cmd/api/main.go`. Nada más. Las sesiones además van a querer un `DELETE` por
+`expira_en`: hoy solo se borran al detectarlas vencidas.
+
+## Autenticación
+
+La sesión es un token opaco de 32 bytes en una cookie `HttpOnly` llamada
+`sesion`, con 7 días de vigencia absoluta. El servidor guarda el **hash** del
+token, nunca el token: quien lea el almacenamiento no puede suplantar a nadie.
+
+No es un JWT a propósito. Con un JWT el logout no existe —el token sigue
+valiendo hasta vencer— y arreglarlo pide una lista de revocados, que es una
+sesión reinventada, o un refresh flow, que es más piezas. Acá cerrar sesión es
+borrar una fila. Ver la sección 3.4 del spec de diseño.
+
+**La autorización se decide en el servicio, no en el handler.** El middleware
+`Autenticar` resuelve la cookie y deja el `UsuarioID` en el `context`; el
+handler se lo pasa al servicio como parámetro explícito y el servicio compara
+contra el dueño. Un solo lugar, cubierto por tests que no levantan HTTP.
+
+`RequerirSesion` se aplica ruta por ruta en `router.go`, no global: la mayor
+parte del contrato es pública, y una lista de excepciones se desactualiza sola
+la primera vez que alguien agrega un endpoint.
+
+Probarlo a mano, con el seed cargado:
+
+```bash
+curl -c galletas.txt -X POST localhost:8080/api/v1/sesiones \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"martin.gonzalez@ejemplo.com","contrasena":"desarrollo123"}'
+
+curl -b galletas.txt localhost:8080/api/v1/usuarios/yo
+```
+
+Los cuatro profesionales del seed tienen email `nombre.apellido@ejemplo.com` y
+la misma contraseña, `desarrollo123`. Solo existen con `APP_ENV=development`:
+en producción el binario arranca vacío.
+
+### Por qué `Content-Type: application/json` es obligatorio
+
+Todo cuerpo que no lo traiga recibe 415. Es la mitad de la defensa contra CSRF:
+un formulario de otro sitio solo puede mandar `form-urlencoded`, `multipart` o
+`text/plain`, así que no puede forjar una escritura aunque el browser adjunte
+la cookie. La otra mitad es `SameSite=Lax`.
 
 ## Contrato
 
@@ -86,7 +131,9 @@ En Linux y macOS no hace falta nada: `gcc` o `clang` ya están.
   en inglés los paquetes (`domain`, `service`, ...), `String()` y `Error()`,
   las variables de entorno y las claves `type`/`title`/`status`/`detail`
   del RFC 7807.
-- Una sola dependencia externa: `github.com/google/uuid`.
+- Dos dependencias externas: `github.com/google/uuid` y `golang.org/x/crypto`
+  (bcrypt). El hasheo de contraseñas es la única parte del proyecto que no se
+  escribe a mano.
 
 ### Linting
 
