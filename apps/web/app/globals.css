@@ -13,16 +13,22 @@
  * Ningún neutro es gris puro. Todos están corridos hacia el índigo, y eso es lo
  * que hace que la pantalla se lea como un sistema y no como componentes
  * sueltos.
+ *
+ * `libre` y `apagado` son más oscuros que los de la propuesta original
+ * (#00c08b y #c8c6d6): medidos daban 2.26:1 y 1.61:1 contra el fondo, o sea por
+ * debajo del piso incluso para texto grande. Ahora dan 5.15:1 y 5.03:1. El
+ * verde perdió algo de brillo y ganó que se pueda leer, que en la hora de un
+ * turno —el elemento más importante de la pantalla— no es negociable.
  * ───────────────────────────────────────────────────────────────────────── */
 @theme {
   --color-fondo: #fafafc;
   --color-superficie: #ffffff;
   --color-tinta: #191540;
   --color-tinta-suave: #5b5580;
-  --color-libre: #00c08b;
+  --color-libre: #007a55;
   --color-accion: #4b3fe4;
   --color-accion-viva: #3a2ed6;
-  --color-apagado: #c8c6d6;
+  --color-apagado: #6e6889;
   --color-borde: #e6e5ef;
 
   /* Archivo existe solo para las horas: son el objeto principal de la interfaz
