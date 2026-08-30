@@ -1,26 +1,135 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ─────────────────────────────────────────────────────────────────────────
+ * Paleta Índigo
+ *
+ * Dos colores para dos trabajos distintos: `libre` es un ESTADO ("este horario
+ * está disponible") y `accion` es una ACCIÓN ("tocá acá"). En una pantalla que
+ * es casi toda horarios, si compartieran color no habría jerarquía posible:
+ * todo competiría por la misma atención.
+ *
+ * Ningún neutro es gris puro. Todos están corridos hacia el índigo, y eso es lo
+ * que hace que la pantalla se lea como un sistema y no como componentes
+ * sueltos.
+ * ───────────────────────────────────────────────────────────────────────── */
+@theme {
+  --color-fondo: #fafafc;
+  --color-superficie: #ffffff;
+  --color-tinta: #191540;
+  --color-tinta-suave: #5b5580;
+  --color-libre: #00c08b;
+  --color-accion: #4b3fe4;
+  --color-accion-viva: #3a2ed6;
+  --color-apagado: #c8c6d6;
+  --color-borde: #e6e5ef;
+
+  /* Archivo existe solo para las horas: son el objeto principal de la interfaz
+   * y el único elemento con tipografía propia. */
+  --font-horas: var(--fuente-horas), system-ui, sans-serif;
+  --font-texto: var(--fuente-texto), system-ui, sans-serif;
 }
 
+/* shadcn nombra sus tokens en inglés y sus componentes los referencian por ese
+ * nombre: `bg-primary`, `border-border`, `text-muted-foreground`. Apuntarlos a
+ * la paleta Índigo —en vez de dejar los neutros que trae por defecto— es lo que
+ * hace que un componente copiado se vea como esta app y no como las otras diez
+ * mil apps de shadcn.
+ *
+ * Los tokens de chart y sidebar que genera el init se sacaron: ningún
+ * componente de esta app los usa, y un token sin consumidor es una decisión que
+ * nadie tomó. */
 @theme inline {
+  --font-sans: var(--font-texto);
+  --font-heading: var(--font-texto);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  --background: #fafafc;
+  --foreground: #191540;
+  --card: #ffffff;
+  --card-foreground: #191540;
+  --popover: #ffffff;
+  --popover-foreground: #191540;
+
+  /* El acento se gana, no se reparte: `primary` es la acción principal de cada
+   * pantalla y no aparece en ningún otro lado. */
+  --primary: #4b3fe4;
+  --primary-foreground: #ffffff;
+
+  --secondary: #ffffff;
+  --secondary-foreground: #191540;
+  --muted: #f2f1f7;
+  --muted-foreground: #5b5580;
+  --accent: #efedfb;
+  --accent-foreground: #4b3fe4;
+
+  /* Un rojo corrido hacia el índigo, no el rojo puro del framework. */
+  --destructive: #cf3350;
+
+  --border: #e6e5ef;
+  --input: #e6e5ef;
+  --ring: #4b3fe4;
+
+  /* Redondeo generoso: es lo que aporta el tono Calma sin costar una decisión
+   * de color. */
+  --radius: 0.75rem;
+}
+
+/* Sin tema oscuro. Está fuera de alcance por decisión, no por omisión (sección
+ * 8 de la spec): agregarlo es un segundo bloque de valores sobre estos mismos
+ * tokens el día que alguien lo pida. */
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* El foco visible no es opcional: es la única forma de saber dónde estás si
+ * navegás con teclado. Radix resuelve los roles; esto resuelve el ver. */
+:focus-visible {
+  outline: 2px solid var(--color-accion);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
