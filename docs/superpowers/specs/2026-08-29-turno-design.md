@@ -117,6 +117,23 @@ Un `inicio` que no cae en un hueco es **422**, y el mensaje nombra el campo.
 La alternativa —validar cada regla otra vez en el alta del turno— duplicaría
 seis reglas en un segundo lugar que se desincroniza del primero.
 
+### Una segunda regla: el paciente no se solapa consigo mismo
+
+Un paciente no puede tener dos turnos **activos** que se pisen en el tiempo,
+aunque sean con profesionales distintos. Devuelve **409**.
+
+Sale casi gratis —para reservar ya hay que leer los turnos del paciente— y
+cubre el error honesto, que es reservar dos cosas a la misma hora sin darse
+cuenta. Los turnos cancelados no cuentan: cancelar libera al paciente igual que
+libera el hueco.
+
+**Lo que esta regla no cubre:** acaparar. Sin pagos no hay ninguna fricción
+contra tomar los doce huecos de un profesional en una tarde. Se evaluó un tope
+de turnos futuros por profesional y se descartó: el número sería inventado y
+rompería un caso real —un tratamiento kinesiológico de diez sesiones son diez
+turnos con la misma persona—. Va a la lista de **antes de exponer la API**,
+junto al rate limiting del login, que es la herramienta que corresponde.
+
 ### La carrera
 
 Dos pacientes pidiendo el mismo hueco al mismo tiempo se resuelve en la
@@ -230,7 +247,25 @@ No es una regresión, es una deuda nueva y se registra como tal.
 
 ---
 
-## 8. Fuera de alcance
+## 8. Decisiones menores, resueltas por default
+
+Se anotan porque son decisiones, no descuidos.
+
+- **`Motivo` es opcional, máximo 500 caracteres.** Un motivo de consulta es una
+  línea, no una historia clínica. `Bio` tiene 2000 porque es un texto de
+  marketing; esto no.
+- **Un usuario que además es profesional puede reservar consigo mismo.** No
+  daña nada y prohibirlo es código para un caso que nadie va a intentar en
+  serio.
+- **`POST /bloqueos` y `PUT /horarios` cambian su respuesta** para informar
+  cuántos turnos cancelaron. Es un cambio de contrato en dos operaciones que
+  ya existen, y hay que reflejarlo en `openapi.yaml`.
+- **Los listados incluyen los cancelados.** Filtrarlos sería esconderle al
+  paciente que le cancelaron un turno, que es justo lo que necesita ver.
+
+---
+
+## 9. Fuera de alcance
 
 | Pendiente | Cuándo se activa |
 |---|---|
@@ -247,7 +282,7 @@ No es una regresión, es una deuda nueva y se registra como tal.
 
 ---
 
-## 9. Criterios de aceptación
+## 10. Criterios de aceptación
 
 1. `make test-race` y `make lint` en verde.
 2. Un paciente logueado reserva un hueco de `GET /huecos`, y ese hueco
@@ -255,13 +290,15 @@ No es una regresión, es una deuda nueva y se registra como tal.
 3. Reservar un `inicio` que no coincide con ningún hueco da **422** nombrando el
    campo.
 4. Dos reservas del mismo hueco: la primera 201, la segunda **409**.
-5. El paciente y el profesional pueden cancelar; un tercero recibe **403**.
-6. Un turno cancelado libera el hueco: vuelve a aparecer en `GET /huecos`.
-7. `GET /api/v1/turnos` devuelve solo los turnos del usuario de la sesión, y sin
+5. Un paciente que ya tiene un turno a las 10:00 con A no puede reservar las
+   10:00 con B: **409**.
+6. El paciente y el profesional pueden cancelar; un tercero recibe **403**.
+7. Un turno cancelado libera el hueco: vuelve a aparecer en `GET /huecos`.
+8. `GET /api/v1/turnos` devuelve solo los turnos del usuario de la sesión, y sin
    sesión da **401**.
-8. `GET /api/v1/profesionales/{id}/turnos` solo lo responde el dueño; otro
+9. `GET /api/v1/profesionales/{id}/turnos` solo lo responde el dueño; otro
    usuario recibe **403**.
-9. Un bloqueo que pisa dos turnos los deja cancelados con `CanceladoPor` = el
+10. Un bloqueo que pisa dos turnos los deja cancelados con `CanceladoPor` = el
    profesional, y la respuesta informa que canceló dos.
-10. Los huecos de un profesional inactivo siguen siendo lista vacía, y no se
+11. Los huecos de un profesional inactivo siguen siendo lista vacía, y no se
     puede reservar contra él.
