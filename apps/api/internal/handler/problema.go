@@ -125,6 +125,30 @@ func escribirError(w http.ResponseWriter, r *http.Request, err error) {
 			Detalle: "Cada cuenta puede tener un solo perfil profesional",
 		})
 
+	case errors.Is(err, domain.ErrHuecoTomado):
+		escribirProblema(w, Problema{
+			Tipo:    tipoConflicto,
+			Titulo:  "El turno ya fue tomado",
+			Estado:  http.StatusConflict,
+			Detalle: "Alguien reservó ese horario mientras elegías. Probá con otro.",
+		})
+
+	case errors.Is(err, domain.ErrPacienteSolapado):
+		escribirProblema(w, Problema{
+			Tipo:    tipoConflicto,
+			Titulo:  "Ya tenés un turno a esa hora",
+			Estado:  http.StatusConflict,
+			Detalle: "Tenés otro turno que se superpone con este horario",
+		})
+
+	case errors.Is(err, domain.ErrTurnoAjeno):
+		escribirProblema(w, Problema{
+			Tipo:    tipoNoAutorizado,
+			Titulo:  "No autorizado",
+			Estado:  http.StatusForbidden,
+			Detalle: "Solo el paciente o el profesional pueden cancelar este turno",
+		})
+
 	default:
 		// El error real va al log, nunca al cliente: puede contener nombres
 		// de tablas, rutas del servidor o datos de otro usuario.

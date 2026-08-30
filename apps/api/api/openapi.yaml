@@ -162,11 +162,14 @@ paths:
       parameters:
         - name: desde
           in: query
-          schema: { type: string, format: date-time }
-          description: Opcional. Sin rango se devuelven los vigentes y futuros.
+          schema: { type: string, format: date }
+          description: |
+            Opcional, AAAA-MM-DD, igual que en `/bloqueos`. Sin rango se
+            devuelven los vigentes y futuros.
         - name: hasta
           in: query
-          schema: { type: string, format: date-time }
+          schema: { type: string, format: date }
+          description: Opcional, AAAA-MM-DD. El día pedido entra entero.
       responses:
         '200':
           description: Los turnos del paciente
@@ -603,11 +606,14 @@ paths:
       parameters:
         - name: desde
           in: query
-          schema: { type: string, format: date-time }
-          description: Opcional. Sin rango se devuelven los vigentes y futuros.
+          schema: { type: string, format: date }
+          description: |
+            Opcional, AAAA-MM-DD, igual que en `/bloqueos`. Sin rango se
+            devuelven los vigentes y futuros.
         - name: hasta
           in: query
-          schema: { type: string, format: date-time }
+          schema: { type: string, format: date }
+          description: Opcional, AAAA-MM-DD. El día pedido entra entero.
       responses:
         '200':
           description: La agenda del profesional

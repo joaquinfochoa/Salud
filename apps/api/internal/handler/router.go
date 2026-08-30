@@ -10,7 +10,7 @@ import (
 //
 // Usa el ServeMux de la stdlib: desde Go 1.22 entiende método y parámetros de
 // ruta, así que no hace falta chi, gin ni echo para esto.
-func NuevoRouter(ph *ManejadorProfesional, ah *ManejadorAgenda, mh *ManejadorAutenticacion) http.Handler {
+func NuevoRouter(ph *ManejadorProfesional, ah *ManejadorAgenda, mh *ManejadorAutenticacion, th *ManejadorTurno) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", healthz)
@@ -50,6 +50,15 @@ func NuevoRouter(ph *ManejadorProfesional, ah *ManejadorAgenda, mh *ManejadorAut
 	mux.HandleFunc("POST /api/v1/profesionales/{id}/bloqueos", RequerirSesion(ah.CrearBloqueo))
 	mux.HandleFunc("DELETE /api/v1/profesionales/{id}/bloqueos/{bloqueoId}", RequerirSesion(ah.EliminarBloqueo))
 	mux.HandleFunc("GET /api/v1/profesionales/{id}/huecos", ah.HuecosLibres)
+
+	// Las cuatro son privadas. GET .../turnos en particular se aparta de
+	// /horarios y /bloqueos, que sí son públicos: los huecos libres son
+	// información de oferta, pero la agenda ocupada dice quién es paciente de
+	// quién, y eso es dato de salud.
+	mux.HandleFunc("GET /api/v1/turnos", RequerirSesion(th.MisTurnos))
+	mux.HandleFunc("DELETE /api/v1/turnos/{id}", RequerirSesion(th.Cancelar))
+	mux.HandleFunc("GET /api/v1/profesionales/{id}/turnos", RequerirSesion(th.DeProfesional))
+	mux.HandleFunc("POST /api/v1/profesionales/{id}/turnos", RequerirSesion(th.Reservar))
 
 	// El orden es de afuera hacia adentro. IDPeticion va primero para que el
 	// log lo tenga; Autenticar va antes que RegistrarPeticiones para que el log

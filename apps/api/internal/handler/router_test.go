@@ -26,11 +26,13 @@ func nuevoStackDePrueba() http.Handler {
 	svc := service.NuevoProfesional(repo)
 	svcAgenda := service.NuevaAgenda(repo, memory.NuevoHorarioSemanal(), memory.NuevoBloqueo())
 	svcAuth := service.NuevaAutenticacion(memory.NuevoUsuario(), memory.NuevaSesion())
+	svcTurnos := service.NuevoTurno(memory.NuevoTurno(), repo, svcAgenda)
 
 	return NuevoRouter(
 		NuevoProfesional(svc),
 		NuevaAgenda(svcAgenda),
 		NuevaAutenticacion(svcAuth, svc, false),
+		NuevoTurno(svcTurnos),
 	)
 }
 

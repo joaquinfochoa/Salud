@@ -45,10 +45,12 @@ func ejecutar() error {
 	repoBloqueos := memory.NuevoBloqueo()
 	repoUsuarios := memory.NuevoUsuario()
 	repoSesiones := memory.NuevaSesion()
+	repoTurnos := memory.NuevoTurno()
 
 	svc := service.NuevoProfesional(repo)
 	svcAgenda := service.NuevaAgenda(repo, repoHorarios, repoBloqueos)
 	svcAuth := service.NuevaAutenticacion(repoUsuarios, repoSesiones)
+	svcTurnos := service.NuevoTurno(repoTurnos, repo, svcAgenda)
 
 	// El seed va después del servicio y escribe a través de él: así queda
 	// sujeto a las mismas reglas que cualquier alta, y esta función sigue
@@ -69,6 +71,7 @@ func ejecutar() error {
 		// La cookie va con Secure salvo en desarrollo: sin TLS el browser la
 		// descarta y el login "no anda" sin ningún error visible.
 		handler.NuevaAutenticacion(svcAuth, svc, !cfg.EsDesarrollo()),
+		handler.NuevoTurno(svcTurnos),
 	)
 
 	srv := &http.Server{
