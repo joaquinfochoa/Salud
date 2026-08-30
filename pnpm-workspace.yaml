@@ -1,0 +1,13 @@
+# Solo apps/. legacy/prototype tiene su propio package.json y se va a borrar
+# cuando apps/web lo reemplace: meterlo acá arrastraría su lockfile de cuatro
+# meses, con siete vulnerabilidades conocidas, a un proyecto que ya está
+# condenado.
+packages:
+  - "apps/*"
+
+# create-next-app declara estos dos: sus scripts de build no corren por defecto
+# en pnpm y hay que autorizarlos explicitamente. Vienen de apps/web pero pnpm
+# los lee del workspace de la raiz.
+allowBuilds:
+  sharp: false
+  unrs-resolver: false
