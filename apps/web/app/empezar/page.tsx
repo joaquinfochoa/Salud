@@ -304,7 +304,11 @@ function Onboarding() {
    */
   const conVistaPrevia = (contenido: React.ReactNode) => (
     <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
-      <div className="grid gap-10 lg:grid-cols-[minmax(0,32rem)_minmax(0,1fr)] lg:gap-16">
+      {/* Lado a lado desde 768px y no desde 1024: con el umbral alto, una
+          ventana de escritorio con zoom del navegador caía en la versión
+          apilada, que es la de teléfono. La vista previa tiene un ancho mínimo
+          propio, así que si no entra, la grilla no se arma. */}
+      <div className="grid gap-10 md:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)] md:gap-10 lg:gap-16">
         {contenido}
         <VistaPreviaPerfil borrador={borrador} foco={FOCO[paso] ?? "nombre"} />
       </div>

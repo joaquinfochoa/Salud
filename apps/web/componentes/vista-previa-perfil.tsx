@@ -53,8 +53,14 @@ export type Borrador = {
  * Cómo va quedando el perfil mientras se completa el alta.
  *
  * Contesta la pregunta que un formulario largo nunca contesta: para qué sirve
- * lo que estoy escribiendo. Cada paso resalta la parte que está llenando, así
- * que la relación entre el campo y el resultado se ve, no se explica.
+ * lo que estoy escribiendo. Cada paso resalta —y agranda— la parte que está
+ * llenando, así que la relación entre el campo y el resultado se ve en vez de
+ * explicarse.
+ *
+ * **Solo en escritorio.** En un teléfono, ponerla debajo del formulario
+ * significa que nunca se ve mientras se escribe, que es justo cuando sirve: el
+ * teclado tapa media pantalla y la tarjeta queda fuera de cuadro. Un elemento
+ * que solo aparece cuando ya no hace falta es peso, no ayuda.
  *
  * **Sin datos inventados.** Lo que falta se muestra como hueco —"Tu nombre",
  * "Tu especialidad"— en color apagado, nunca como si ya existiera. Y no hay
@@ -66,79 +72,89 @@ export function VistaPreviaPerfil({ borrador, foco }: { borrador: Borrador; foco
     .filter(Boolean)
     .join(" ");
   const centavos = enCentavos(borrador.precio);
-
   const dias = ORDEN.filter((d) => borrador.horarios.some((h) => h.diaSemana === d));
+  const modalidades = borrador.modalidades
+    .map((m) => NOMBRE_MODALIDAD[m] ?? m)
+    .join(" · ");
 
   return (
-    <aside aria-label="Vista previa de tu perfil" className="lg:sticky lg:top-8">
+    <aside
+      aria-label="Vista previa de tu perfil"
+      // surgir: entra con la página en vez de aparecer de golpe. El bloque de
+      // prefers-reduced-motion de globals.css ya la desactiva.
+      className="surgir surgir-tarde @container hidden md:sticky md:top-8 md:block"
+    >
       <p className="text-xs font-semibold uppercase tracking-wide text-tinta-suave">
         Así te va a ver un paciente
       </p>
 
-      <div className="mt-3 rounded-2xl border border-borde bg-superficie p-6 shadow-[0_1px_2px_rgba(25,21,64,0.04),0_12px_32px_-12px_rgba(25,21,64,0.10)]">
-        <Parte activa={foco === "nombre"}>
-          <div className="flex items-start gap-4">
-            {/* Iniciales y no una foto: la API no tiene el campo, y un
-                marcador de posición con silueta sugiere que después vas a poder
-                subir una. */}
-            <span
-              aria-hidden="true"
-              className={`grid size-12 shrink-0 place-items-center rounded-full text-sm font-bold ${
-                nombre ? "bg-accent text-accion" : "bg-muted text-apagado"
-              }`}
-            >
-              {nombre ? `${borrador.nombre[0] ?? ""}${borrador.apellido[0] ?? ""}` : "—"}
-            </span>
-            <div className="min-w-0">
-              <p
-                className={`truncate text-lg font-bold tracking-tight ${
-                  nombre ? "" : "text-apagado"
+      <div className="mt-3 overflow-hidden rounded-2xl border border-borde bg-superficie shadow-[0_1px_2px_rgba(25,21,64,0.04),0_16px_40px_-16px_rgba(25,21,64,0.14)]">
+        <div className="p-5">
+          <Parte activa={foco === "nombre"}>
+            <div className="flex items-center gap-3.5">
+              <Redondel nombre={borrador.nombre} apellido={borrador.apellido} />
+              <div className="min-w-0">
+                <p
+                  className={`text-base font-bold leading-tight tracking-tight text-balance ${
+                    nombre ? "" : "text-apagado"
+                  }`}
+                >
+                  {nombre || "Tu nombre"}
+                </p>
+                <p className="mt-0.5 text-sm text-tinta-suave">
+                  <span className={borrador.especialidad ? "" : "text-apagado"}>
+                    {borrador.especialidad
+                      ? (ESPECIALIDADES[borrador.especialidad] ?? borrador.especialidad)
+                      : "Tu especialidad"}
+                  </span>
+                </p>
+              </div>
+            </div>
+          </Parte>
+
+          <Parte activa={foco === "matricula"}>
+            <p className="mt-4 inline-flex items-center gap-2 rounded-md border border-borde px-2.5 py-1">
+              <span
+                className={`text-sm font-semibold tabular-nums ${
+                  borrador.matricula ? "" : "text-apagado"
                 }`}
               >
-                {nombre || "Tu nombre"}
-              </p>
-              <p className="text-sm text-tinta-suave">
-                <span className={borrador.especialidad ? "" : "text-apagado"}>
-                  {borrador.especialidad
-                    ? (ESPECIALIDADES[borrador.especialidad] ?? borrador.especialidad)
-                    : "Tu especialidad"}
-                </span>
-                {" · "}
-                <span className={borrador.zona ? "" : "text-apagado"}>
-                  {borrador.zona || "Tu zona"}
-                </span>
-              </p>
-            </div>
-          </div>
-        </Parte>
+                {borrador.matricula || "Tu matrícula"}
+              </span>
+              <span className="text-xs uppercase tracking-wide text-tinta-suave">
+                matrícula
+              </span>
+            </p>
+          </Parte>
 
-        <Parte activa={foco === "matricula"}>
-          <p className="mt-4 inline-flex items-center gap-2 rounded-md border border-borde px-2.5 py-1">
-            <span
-              className={`text-sm font-semibold tabular-nums ${
-                borrador.matricula ? "" : "text-apagado"
+          <Parte activa={foco === "bio"}>
+            <p
+              className={`mt-4 text-sm leading-relaxed ${
+                borrador.bio.trim() ? "" : "text-apagado"
               }`}
             >
-              {borrador.matricula || "Tu matrícula"}
-            </span>
-            <span className="text-xs uppercase tracking-wide text-tinta-suave">
-              matrícula
-            </span>
-          </p>
-        </Parte>
+              {borrador.bio.trim() ||
+                "Acá va tu descripción: qué atendés y cómo trabajás."}
+            </p>
+          </Parte>
+        </div>
 
-        <Parte activa={foco === "bio"}>
-          <p
-            className={`mt-4 text-sm leading-relaxed ${
-              borrador.bio.trim() ? "" : "text-apagado"
-            }`}
-          >
-            {borrador.bio.trim() ||
-              "Acá va tu descripción: qué atendés y cómo trabajás."}
+        {/* La zona, con su chapita. No es un mapa: el perfil público no muestra
+            uno, porque la API guarda una zona escrita a mano —"CABA", "Vicente
+            López"— y no una dirección ni coordenadas. Dibujar calles acá sería
+            prometer en la vista previa algo que el paciente no va a ver. */}
+        <div
+          className={`flex items-center gap-2.5 border-y border-borde px-5 py-3 transition-colors duration-300 ${
+            foco === "atencion" ? "bg-accent" : "bg-fondo"
+          }`}
+        >
+          <Pin />
+          <p className={`text-sm font-medium ${borrador.zona ? "" : "text-apagado"}`}>
+            {borrador.zona || "Tu zona"}
           </p>
-        </Parte>
+        </div>
 
-        <dl className="mt-5 grid gap-4 border-t border-borde pt-4 sm:grid-cols-2">
+        <dl className="grid gap-4 p-5 @sm:grid-cols-2">
           <Parte activa={foco === "precio"}>
             <Dato etiqueta="Consulta">
               <span className={centavos === null ? "text-apagado" : ""}>
@@ -147,12 +163,10 @@ export function VistaPreviaPerfil({ borrador, foco }: { borrador: Borrador; foco
             </Dato>
           </Parte>
 
-          <Parte activa={foco === "atencion"}>
-            <Dato etiqueta="Modalidad">
-              <span className={borrador.modalidades.length ? "" : "text-apagado"}>
-                {borrador.modalidades.length
-                  ? borrador.modalidades.map((m) => NOMBRE_MODALIDAD[m] ?? m).join(" · ")
-                  : "A definir"}
+          <Parte activa={foco === "agenda"}>
+            <Dato etiqueta="Atiende">
+              <span className={dias.length ? "" : "text-apagado"}>
+                {dias.length ? dias.map((d) => NOMBRE_DIA[d]).join(", ") : "Sin horarios"}
               </span>
             </Dato>
           </Parte>
@@ -167,12 +181,10 @@ export function VistaPreviaPerfil({ borrador, foco }: { borrador: Borrador; foco
             </Dato>
           </Parte>
 
-          <Parte activa={foco === "agenda"}>
-            <Dato etiqueta="Atiende">
-              <span className={dias.length ? "" : "text-apagado"}>
-                {dias.length
-                  ? dias.map((d) => NOMBRE_DIA[d]).join(", ")
-                  : "Todavía sin horarios"}
+          <Parte activa={foco === "atencion"}>
+            <Dato etiqueta="Modalidad">
+              <span className={modalidades ? "" : "text-apagado"}>
+                {modalidades || "A definir"}
               </span>
             </Dato>
           </Parte>
@@ -189,16 +201,71 @@ export function VistaPreviaPerfil({ borrador, foco }: { borrador: Borrador; foco
 }
 
 /**
- * Resalta la parte que el paso actual está llenando.
+ * El redondel del profesional: iniciales cuando hay nombre, un ícono cuando
+ * todavía no.
  *
- * El resaltado no es solo color: el fondo cambia Y la parte se separa del resto
- * con un borde propio, porque el color nunca es la única señal.
+ * El ícono es un SVG acá adentro y no una librería: es un dibujo, no una
+ * dependencia. Cambia de color cuando el nombre aparece, que es el primer
+ * momento del alta en que la tarjeta deja de estar vacía.
+ */
+function Redondel({ nombre, apellido }: { nombre: string; apellido: string }) {
+  const iniciales = `${nombre.trim()[0] ?? ""}${apellido.trim()[0] ?? ""}`.toUpperCase();
+
+  return (
+    <span
+      aria-hidden="true"
+      className={`grid size-12 shrink-0 place-items-center rounded-full text-sm font-bold transition-colors duration-300 ${
+        iniciales ? "bg-accion text-white" : "bg-muted text-apagado"
+      }`}
+    >
+      {iniciales || (
+        <svg viewBox="0 0 24 24" fill="none" className="size-6">
+          <circle cx="12" cy="8.5" r="3.5" fill="currentColor" />
+          <path
+            d="M4.5 20a7.5 7.5 0 0 1 15 0"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          />
+        </svg>
+      )}
+    </span>
+  );
+}
+
+function Pin() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      className="size-4 shrink-0 text-accion"
+    >
+      <path
+        d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="10" r="2.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+/**
+ * Resalta y agranda la parte que el paso actual está llenando.
+ *
+ * Tres señales a la vez —fondo, borde y tamaño— y no solo color: es la regla
+ * que vale en toda la app. `origin-left` hace que crezca desde su borde
+ * izquierdo en vez de empujar el contenido hacia los dos costados.
  */
 function Parte({ activa, children }: { activa: boolean; children: React.ReactNode }) {
   return (
     <div
-      className={`-mx-2 rounded-lg px-2 py-1 transition-colors duration-300 ${
-        activa ? "bg-accent ring-1 ring-accion/25" : ""
+      // scale-[1.02] y no más: con 1.03 el borde derecho del resaltado llegaba
+      // justo al borde de la tarjeta. Medido, no estimado.
+      className={`-mx-2 origin-left rounded-lg px-2 py-1 transition-all duration-300 ease-out ${
+        activa ? "scale-[1.02] bg-accent ring-1 ring-accion/25" : "scale-100"
       }`}
     >
       {children}
