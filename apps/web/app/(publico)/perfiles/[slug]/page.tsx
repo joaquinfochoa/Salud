@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { Calendario } from "@/componentes/calendario";
 import { Hora } from "@/componentes/hora";
 import { armarDias, primerDiaConItems } from "@/lib/dias";
-import { ESPECIALIDADES } from "@/componentes/tarjeta-profesional";
+import { ESPECIALIDADES } from "@/lib/especialidades";
 import { ErrorAPI, pedir, type Profesional } from "@/lib/api";
 import { formatearPrecio } from "@/lib/formato";
 import { huecosDe } from "@/lib/huecos";

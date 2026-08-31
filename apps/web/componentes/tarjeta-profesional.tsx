@@ -1,13 +1,8 @@
 import Link from "next/link";
 import type { Hueco, Profesional } from "@/lib/api";
 import { formatearDia, formatearPrecio } from "@/lib/formato";
+import { ESPECIALIDADES } from "@/lib/especialidades";
 import { Hora } from "./hora";
-
-export const ESPECIALIDADES: Record<string, string> = {
-  psicologia: "Psicología",
-  kinesiologia: "Kinesiología",
-  odontologia: "Odontología",
-};
 
 const MODALIDADES: Record<string, string> = {
   telemedicina: "Videollamada",

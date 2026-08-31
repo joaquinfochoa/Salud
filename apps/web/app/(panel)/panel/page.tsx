@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { FilaTurnoProfesional } from "@/componentes/fila-turno-profesional";
 import { Nudge } from "@/componentes/nudge";
-import { ESPECIALIDADES } from "@/componentes/tarjeta-profesional";
+import { ESPECIALIDADES } from "@/lib/especialidades";
 import {
   pedir,
   type ListaHuecos,

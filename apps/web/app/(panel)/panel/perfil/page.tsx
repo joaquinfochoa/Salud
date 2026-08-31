@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Chips } from "@/componentes/chips";
-import { ESPECIALIDADES } from "@/componentes/tarjeta-profesional";
+import { ESPECIALIDADES } from "@/lib/especialidades";
 import { Campo } from "@/componentes/campo";
 import { ErrorAPI, pedir, type Profesional } from "@/lib/api";
 import { enCentavos, formatearPrecio } from "@/lib/formato";

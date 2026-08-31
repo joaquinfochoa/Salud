@@ -1,4 +1,4 @@
-import { ESPECIALIDADES } from "./tarjeta-profesional";
+import { ESPECIALIDADES } from "@/lib/especialidades";
 
 /**
  * Los tres filtros que la API soporta: especialidad, zona y búsqueda por

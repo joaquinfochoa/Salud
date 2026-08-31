@@ -168,7 +168,7 @@ func parsearFiltro(r *http.Request) (repository.Filtro, error) {
 	if crudo := q.Get("especialidad"); crudo != "" {
 		esp := domain.Especialidad(crudo)
 		if !esp.EsValida() {
-			return f, errParametroInvalido("especialidad", "debe ser psicologia, kinesiologia u odontologia")
+			return f, errParametroInvalido("especialidad", "no es una de las especialidades que acepta la plataforma")
 		}
 		f.Especialidad = &esp
 	}

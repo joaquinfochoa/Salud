@@ -206,7 +206,7 @@ func construir(entrada EntradaProfesional) (Profesional, ErrorValidacion) {
 
 	esp := Especialidad(strings.ToLower(strings.TrimSpace(entrada.Especialidad)))
 	if !esp.EsValida() {
-		verr.agregar("especialidad", "debe ser psicologia, kinesiologia u odontologia")
+		verr.agregar("especialidad", "no es una de las especialidades que acepta la plataforma")
 	} else {
 		p.Especialidad = esp
 	}

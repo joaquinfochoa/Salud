@@ -2,7 +2,7 @@
 
 import type { Especialidad, HorarioSemanal } from "@/lib/api";
 import { enCentavos, formatearPrecio } from "@/lib/formato";
-import { ESPECIALIDADES } from "./tarjeta-profesional";
+import { ESPECIALIDADES } from "@/lib/especialidades";
 
 const NOMBRE_MODALIDAD: Record<string, string> = {
   presencial: "En consultorio",

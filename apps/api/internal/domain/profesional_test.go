@@ -71,7 +71,7 @@ func TestNuevoProfesionalCamposInvalidos(t *testing.T) {
 		{"nombre muy largo", func(entrada *EntradaProfesional) { entrada.Nombre = strings.Repeat("a", 101) }, "nombre"},
 		{"apellido vacio", func(entrada *EntradaProfesional) { entrada.Apellido = "" }, "apellido"},
 		{"matricula invalida", func(entrada *EntradaProfesional) { entrada.Matricula = "XX 123" }, "matricula"},
-		{"especialidad desconocida", func(entrada *EntradaProfesional) { entrada.Especialidad = "cardiologia" }, "especialidad"},
+		{"especialidad desconocida", func(entrada *EntradaProfesional) { entrada.Especialidad = "astrologia" }, "especialidad"},
 		{"bio muy larga", func(entrada *EntradaProfesional) { entrada.Bio = strings.Repeat("a", 2001) }, "bio"},
 		{"precio negativo", func(entrada *EntradaProfesional) { v := int64(-1); entrada.PrecioConsulta = &v }, "precioConsultaCentavos"},
 		{"precio ausente", func(entrada *EntradaProfesional) { entrada.PrecioConsulta = nil }, "precioConsultaCentavos"},

@@ -12,7 +12,7 @@ import {
   type Borrador,
   type Foco,
 } from "@/componentes/vista-previa-perfil";
-import { ESPECIALIDADES } from "@/componentes/tarjeta-profesional";
+import { ESPECIALIDADES } from "@/lib/especialidades";
 import {
   ErrorAPI,
   pedir,

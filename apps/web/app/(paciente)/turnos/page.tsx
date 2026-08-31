@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Hora } from "@/componentes/hora";
-import { ESPECIALIDADES } from "@/componentes/tarjeta-profesional";
+import { ESPECIALIDADES } from "@/lib/especialidades";
 import {
   ErrorAPI,
   pedir,

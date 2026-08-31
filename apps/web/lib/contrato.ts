@@ -1227,8 +1227,16 @@ export interface components {
         ListaTurnosDeProfesional: {
             datos: components["schemas"]["TurnoConPaciente"][];
         };
-        /** @enum {string} */
-        Especialidad: "psicologia" | "kinesiologia" | "odontologia";
+        /**
+         * @description Lista cerrada. Con texto libre "Psicologia", "psicologia" y "Psicologo
+         *     clinico" quedan como tres especialidades distintas y los filtros de
+         *     busqueda dejan de servir.
+         *
+         *     Sin acentos ni enie, como todo identificador del proyecto: el nombre
+         *     para mostrar lo pone el cliente.
+         * @enum {string}
+         */
+        Especialidad: "alergia-e-inmunologia" | "cardiologia" | "clinica-medica" | "dermatologia" | "endocrinologia" | "enfermeria" | "fonoaudiologia" | "gastroenterologia" | "ginecologia" | "kinesiologia" | "neumonologia" | "neurologia" | "nutricion" | "obstetricia" | "odontologia" | "oftalmologia" | "otorrinolaringologia" | "pediatria" | "podologia" | "psicologia" | "psicopedagogia" | "psiquiatria" | "reumatologia" | "terapia-ocupacional" | "traumatologia" | "urologia";
         /** @enum {string} */
         Modalidad: "telemedicina" | "presencial" | "domicilio";
         /**

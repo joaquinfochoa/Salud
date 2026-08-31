@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Hora } from "@/componentes/hora";
-import { ESPECIALIDADES, TarjetaProfesional } from "@/componentes/tarjeta-profesional";
+import { TarjetaProfesional } from "@/componentes/tarjeta-profesional";
+import { ESPECIALIDADES } from "@/lib/especialidades";
 import { pedir, type Hueco, type ListaProfesionales, type Profesional } from "@/lib/api";
 import { armarDias } from "@/lib/dias";
 import { formatearDia } from "@/lib/formato";

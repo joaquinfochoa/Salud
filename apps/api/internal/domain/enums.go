@@ -1,27 +1,72 @@
 package domain
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
-// Especialidad son los tres verticales de lanzamiento definidos en
-// research/data/vertical_scores.csv. Es un enum cerrado a propósito: con texto
-// libre terminás con "Psicología", "psicologia" y "Psicólogo clínico" como tres
-// especialidades distintas, y los filtros dejan de servir.
+// Especialidad es lo que el profesional atiende.
 //
-// Agregar una cuarta es una constante y un caso más en EsValida().
+// Enum cerrado a propósito: con texto libre terminás con "Psicología",
+// "psicologia" y "Psicólogo clínico" como tres especialidades distintas, y los
+// filtros de búsqueda —que son cómo un paciente encuentra a alguien— dejan de
+// servir.
+//
+// La lista dejó de ser "los tres verticales de lanzamiento" cuando se decidió
+// que la plataforma es multi-área: alguien entra por cualquier motivo de
+// consulta y busca a quien lo atienda. Agregar una es una línea en
+// Especialidades; la única condición es que sea una profesión con matrícula
+// que atiende por turno.
+//
+// Los valores no llevan acentos ni ñ, como todo identificador del proyecto: el
+// nombre para mostrar lo pone el front.
 type Especialidad string
 
+// Las tres primeras siguen como constantes porque el seed y los tests las
+// nombran. El resto vive solo en la lista: veinticinco constantes que nadie
+// referencia serían veinticinco líneas de ruido.
 const (
 	EspecialidadPsicologia   Especialidad = "psicologia"
 	EspecialidadKinesiologia Especialidad = "kinesiologia"
 	EspecialidadOdontologia  Especialidad = "odontologia"
 )
 
+// Especialidades es la lista completa, en orden alfabético.
+//
+// Está exportada porque el handler arma su mensaje de error con ella: una
+// lista de valores válidos escrita a mano en otro paquete se desactualiza en
+// cuanto alguien agrega uno acá.
+var Especialidades = []Especialidad{
+	"alergia-e-inmunologia",
+	"cardiologia",
+	"clinica-medica",
+	"dermatologia",
+	"endocrinologia",
+	"enfermeria",
+	"fonoaudiologia",
+	"gastroenterologia",
+	"ginecologia",
+	EspecialidadKinesiologia,
+	"neumonologia",
+	"neurologia",
+	"nutricion",
+	"obstetricia",
+	EspecialidadOdontologia,
+	"oftalmologia",
+	"otorrinolaringologia",
+	"pediatria",
+	"podologia",
+	EspecialidadPsicologia,
+	"psicopedagogia",
+	"psiquiatria",
+	"reumatologia",
+	"terapia-ocupacional",
+	"traumatologia",
+	"urologia",
+}
+
 func (e Especialidad) EsValida() bool {
-	switch e {
-	case EspecialidadPsicologia, EspecialidadKinesiologia, EspecialidadOdontologia:
-		return true
-	}
-	return false
+	return slices.Contains(Especialidades, e)
 }
 
 type Modalidad string

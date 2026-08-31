@@ -6,21 +6,44 @@ import (
 )
 
 func TestEspecialidadEsValida(t *testing.T) {
-	validas := []Especialidad{
-		EspecialidadPsicologia,
-		EspecialidadKinesiologia,
-		EspecialidadOdontologia,
-	}
-	for _, e := range validas {
+	for _, e := range Especialidades {
 		if !e.EsValida() {
 			t.Errorf("Especialidad(%q) debía ser válida", e)
 		}
 	}
 
-	invalidas := []Especialidad{"", "cardiologia", "Psicologia", "PSICOLOGIA"}
+	// La lista dejó de ser tres cuando la plataforma pasó a ser multi-área.
+	// Cardiología es válida ahora, y este test lo fija: si alguien la saca de
+	// Especialidades, un profesional deja de poder registrarse en silencio.
+	for _, e := range []Especialidad{"cardiologia", "nutricion", "pediatria"} {
+		if !e.EsValida() {
+			t.Errorf("Especialidad(%q) debía ser válida", e)
+		}
+	}
+
+	// Lo que sigue sin valer: la mayúscula, el acento y lo que no está.
+	invalidas := []Especialidad{"", "Psicologia", "PSICOLOGIA", "psicología", "astrologia"}
 	for _, e := range invalidas {
 		if e.EsValida() {
 			t.Errorf("Especialidad(%q) no debía ser válida", e)
+		}
+	}
+}
+
+// Sin repetidas y sin acentos ni ñ, que es la regla de todo identificador del
+// proyecto. Una repetida duplicaría la opción en el select del alta.
+func TestEspecialidadesEsUnaListaSana(t *testing.T) {
+	vistas := make(map[Especialidad]bool, len(Especialidades))
+	for _, e := range Especialidades {
+		if vistas[e] {
+			t.Errorf("Especialidad(%q) está repetida", e)
+		}
+		vistas[e] = true
+
+		for _, r := range e {
+			if r > 127 {
+				t.Errorf("Especialidad(%q) tiene un carácter no ASCII: %q", e, r)
+			}
 		}
 	}
 }
