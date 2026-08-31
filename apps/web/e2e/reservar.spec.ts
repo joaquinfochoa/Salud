@@ -121,11 +121,51 @@ test.describe("sin JavaScript", () => {
     const agenda = page.getByRole("list").filter({ has: page.getByRole("link", { name: /^\d{2}:\d{2}$/ }) });
     const primerDia = await page.getByRole("heading", { level: 3 }).first().textContent();
 
-    // El segundo día con horarios de la tira: el primero ya está abierto.
-    const dias = page.getByRole("link", { name: /(Lun|Mar|Mié|Jue|Vie|Sáb|Dom)\s*\d+/ });
+    // El segundo día con horarios de la tira: el primero ya está abierto. Se
+    // buscan por su nombre accesible —"lunes, 31 de agosto"— y no por el texto
+    // visible, que es solo "Lun31".
+    const dias = page.getByRole("link", {
+      name: /^(lunes|martes|miércoles|jueves|viernes|sábado|domingo), \d+ de \w+$/,
+    });
     await dias.nth(1).click();
 
     await expect(page.getByRole("heading", { level: 3 }).first()).not.toHaveText(primerDia ?? "");
     await expect(agenda.getByRole("link").first()).toBeVisible();
   });
+});
+
+/**
+ * Un paciente que vuelve reserva de nuevo sin volver a registrarse.
+ *
+ * Era un callejón sin salida: el formulario le pedía email y contraseña aunque
+ * tuviera la sesión abierta, el registro devolvía 409 y el link a "Entrar" lo
+ * traía de vuelta al mismo formulario. Un paciente que vuelve es el caso
+ * normal de este producto, no el raro.
+ */
+test("un paciente que ya reservó puede reservar otra vez", async ({ page }) => {
+  const email = `vuelve-${Date.now()}@ejemplo.com`;
+
+  await page.goto("/perfiles/martin-gonzalez");
+  await page.getByRole("link", { name: /^\d{2}:\d{2}$/ }).first().click();
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Contraseña").fill("unaclave8");
+  await page.getByLabel("Nombre", { exact: true }).fill("Vuelve");
+  await page.getByLabel("Apellido").fill("Siempre");
+  await page.getByLabel("Celular").fill("11 8400-1234");
+  await page.getByRole("button", { name: /^Reservar \d{2}:\d{2}$/ }).click();
+  await expect(page.locator("main").getByText("Turno reservado")).toBeVisible();
+
+  // Segunda vez, con la sesión ya abierta: el formulario no vuelve a pedir la
+  // cuenta, solo el motivo.
+  await page.goto("/perfiles/martin-gonzalez");
+  await page.getByRole("link", { name: /^\d{2}:\d{2}$/ }).first().click();
+  await expect(page.getByText("Reservás como Vuelve Siempre")).toBeVisible();
+  await expect(page.getByLabel("Contraseña")).toHaveCount(0);
+
+  await page.getByLabel("Motivo de la consulta").fill("control");
+  await page.getByRole("button", { name: /^Reservar \d{2}:\d{2}$/ }).click();
+  await expect(page.locator("main").getByText("Turno reservado")).toBeVisible();
+
+  await page.goto("/turnos");
+  await expect(page.getByRole("listitem")).toHaveCount(2);
 });

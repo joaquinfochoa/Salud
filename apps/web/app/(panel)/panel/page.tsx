@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { DialogoCancelarTurno } from "@/componentes/dialogo-cancelar-turno";
 import { FilaTurnoProfesional } from "@/componentes/fila-turno-profesional";
 import { Nudge } from "@/componentes/nudge";
 import { ESPECIALIDADES } from "@/lib/especialidades";
@@ -25,6 +26,9 @@ type Datos = {
 export default function Hoy() {
   const { usuario, perfil } = usePanel();
   const [datos, setDatos] = useState<Datos | null>(null);
+  const [aCancelar, setACancelar] = useState<TurnoConPaciente | null>(null);
+  const [cancelando, setCancelando] = useState(false);
+  const [recarga, setRecarga] = useState(0);
 
   useEffect(() => {
     let vigente = true;
@@ -57,7 +61,25 @@ export default function Hoy() {
     return () => {
       vigente = false;
     };
-  }, [perfil.id]);
+  }, [perfil.id, recarga]);
+
+  async function cancelarTurno() {
+    if (!aCancelar) return;
+    setCancelando(true);
+    try {
+      await pedir(`/api/v1/turnos/${aCancelar.id}`, { method: "DELETE" });
+      setACancelar(null);
+      // Recargar y no parchear el estado: cancelar cambia los dos KPI además
+      // de la fila, y recalcularlos a mano acá es cómo se desincronizan.
+      setRecarga((n) => n + 1);
+    } catch {
+      // ponytail: sin aviso propio. Esta pantalla es de vistazo y el diálogo
+      // ya se cerró; si falló, el turno sigue ahí y se ve. El aviso completo
+      // está en /panel/agenda, que es donde se gestiona.
+    } finally {
+      setCancelando(false);
+    }
+  }
 
   const ocupacion = calcularOcupacion(datos?.semana ?? [], datos?.huecosLibres ?? 0);
   const activosDeLaSemana = (datos?.semana ?? []).filter((t) => t.estado === "reservado");
@@ -104,10 +126,17 @@ export default function Hoy() {
               // Los que ya pasaron van en gris, como en el prototipo: lo que
               // importa de esta pantalla es lo que falta, no lo que fue.
               pasado={turno.fin < ahora}
+              onCancelar={setACancelar}
             />
           ))}
         </ul>
       )}
+      <DialogoCancelarTurno
+        turno={aCancelar}
+        enviando={cancelando}
+        onCerrar={() => setACancelar(null)}
+        onConfirmar={cancelarTurno}
+      />
     </main>
   );
 }

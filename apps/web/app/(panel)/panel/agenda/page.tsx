@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Calendario } from "@/componentes/calendario";
 import { DialogoBloqueo } from "@/componentes/dialogo-bloqueo";
+import { DialogoCancelarTurno } from "@/componentes/dialogo-cancelar-turno";
 import { FilaTurnoProfesional } from "@/componentes/fila-turno-profesional";
 import {
   pedir,
@@ -22,6 +23,8 @@ export default function Agenda() {
   const [bloqueos, setBloqueos] = useState<ListaBloqueos["datos"]>([]);
   const [pedido, setDia] = useState("");
   const [aviso, setAviso] = useState<string | null>(null);
+  const [aCancelar, setACancelar] = useState<TurnoConPaciente | null>(null);
+  const [cancelando, setCancelando] = useState(false);
 
   const traer = useCallback(async () => {
     const desde = new Date();
@@ -61,6 +64,22 @@ export default function Agenda() {
     setBloqueos(d.bloqueos);
   }
 
+  async function cancelarTurno() {
+    if (!aCancelar) return;
+    setCancelando(true);
+    try {
+      await pedir(`/api/v1/turnos/${aCancelar.id}`, { method: "DELETE" });
+      setACancelar(null);
+      await recargar(
+        `Turno cancelado. ${aCancelar.paciente.nombre} lo va a ver en su app, y el horario volvió a quedar libre.`,
+      );
+    } catch {
+      setAviso("No pudimos cancelar el turno. Probá de nuevo.");
+    } finally {
+      setCancelando(false);
+    }
+  }
+
   async function borrarBloqueo(id: string) {
     await pedir(`/api/v1/profesionales/${perfil.id}/bloqueos/${id}`, { method: "DELETE" });
     await recargar("Bloqueo borrado. Los horarios vuelven a estar disponibles.");
@@ -98,7 +117,11 @@ export default function Agenda() {
                 ) : (
                   <ul className="grid gap-2">
                     {delDia.map((turno) => (
-                      <FilaTurnoProfesional key={turno.id} turno={turno} />
+                      <FilaTurnoProfesional
+                        key={turno.id}
+                        turno={turno}
+                        onCancelar={setACancelar}
+                      />
                     ))}
                   </ul>
                 )}
@@ -130,6 +153,13 @@ export default function Agenda() {
           </Calendario>
         </div>
       )}
+
+      <DialogoCancelarTurno
+        turno={aCancelar}
+        enviando={cancelando}
+        onCerrar={() => setACancelar(null)}
+        onConfirmar={cancelarTurno}
+      />
     </main>
   );
 }

@@ -1,9 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Calendario } from "./calendario";
-import { ErrorAPI, pedir, type Hueco, type Profesional, type Turno } from "@/lib/api";
+import {
+  ErrorAPI,
+  pedir,
+  type Hueco,
+  type Profesional,
+  type Turno,
+  type UsuarioActual,
+} from "@/lib/api";
 import { formatearDia, formatearHora, formatearPrecio } from "@/lib/formato";
 import { armarDias, primerDiaConItems } from "@/lib/dias";
 import { huecosDe } from "@/lib/huecos";
@@ -32,11 +39,35 @@ export function Reservar({
 
   const [huecos, setHuecos] = useState(huecosIniciales);
   const [elegido, setElegido] = useState<Hueco | null>(preseleccionado);
-  const [paso, setPaso] = useState<Paso>(preseleccionado ? "confirmar" : "elegir");
+  const [paso, setPaso] = useState<Paso>(
+    preseleccionado ? "confirmar" : "elegir",
+  );
   const [turno, setTurno] = useState<Turno | null>(null);
   const [aviso, setAviso] = useState<Aviso | null>(null);
   const [errorDeCampo, setErrorDeCampo] = useState<ErrorAPI | null>(null);
   const [enviando, setEnviando] = useState(false);
+
+  /**
+   * Quién está reservando. `undefined` mientras se resuelve.
+   *
+   * Sin esto, alguien que ya reservó una vez no podía reservar de nuevo: el
+   * formulario le volvía a pedir email y contraseña, el registro devolvía 409
+   * y el link a "Entrar" lo traía de vuelta al mismo formulario. Un paciente
+   * que vuelve es el caso normal, no el raro.
+   */
+  const [usuario, setUsuario] = useState<UsuarioActual | null | undefined>(
+    undefined,
+  );
+
+  useEffect(() => {
+    let vigente = true;
+    pedir<UsuarioActual>("/api/v1/usuarios/yo")
+      .then((yo) => vigente && setUsuario(yo))
+      .catch(() => vigente && setUsuario(null));
+    return () => {
+      vigente = false;
+    };
+  }, []);
 
   const rutaActual = `/perfiles/${slug}/reservar${elegido ? `?inicio=${encodeURIComponent(elegido.inicio)}` : ""}`;
 
@@ -56,37 +87,42 @@ export function Reservar({
       motivo: String(formulario.get("motivo") ?? ""),
     };
 
-    // 1. Registrarse. El back deja la sesión abierta en la misma respuesta, así
-    //    que no hace falta un login después.
-    try {
-      await pedir("/api/v1/usuarios", {
-        method: "POST",
-        body: JSON.stringify({
-          email: datos.email,
-          contrasena: datos.contrasena,
-          nombre: datos.nombre,
-          apellido: datos.apellido,
-          telefono: datos.telefono,
-        }),
-      });
-    } catch (e) {
-      setEnviando(false);
-      if (e instanceof ErrorAPI && e.estado === 409) {
-        // El caso más probable de los dos: alguien que ya se registró antes y
-        // no se acuerda. Un link, no un login acá adentro: conservar el hueco a
-        // través de un segundo flujo son ochenta líneas para ahorrar dos
-        // clicks.
-        setAviso({
-          mensaje: "Ya tenés una cuenta con ese email.",
-          accion: { texto: "Entrar", href: `/entrar?volver=${encodeURIComponent(rutaActual)}` },
+    // 1. Registrarse, solo si no hay sesión. El back deja la sesión abierta en
+    //    la misma respuesta, así que no hace falta un login después.
+    if (!usuario) {
+      try {
+        await pedir("/api/v1/usuarios", {
+          method: "POST",
+          body: JSON.stringify({
+            email: datos.email,
+            contrasena: datos.contrasena,
+            nombre: datos.nombre,
+            apellido: datos.apellido,
+            telefono: datos.telefono,
+          }),
         });
-        return;
+      } catch (e) {
+        setEnviando(false);
+        if (e instanceof ErrorAPI && e.estado === 409) {
+          // El caso más probable de los dos: alguien que ya se registró antes y
+          // no se acuerda. Un link, no un login acá adentro: conservar el hueco a
+          // través de un segundo flujo son ochenta líneas para ahorrar dos
+          // clicks.
+          setAviso({
+            mensaje: "Ya tenés una cuenta con ese email.",
+            accion: {
+              texto: "Entrar",
+              href: `/entrar?volver=${encodeURIComponent(rutaActual)}`,
+            },
+          });
+          return;
+        }
+        if (e instanceof ErrorAPI && e.estado === 422) {
+          setErrorDeCampo(e);
+          return;
+        }
+        throw e;
       }
-      if (e instanceof ErrorAPI && e.estado === 422) {
-        setErrorDeCampo(e);
-        return;
-      }
-      throw e;
     }
 
     // 2. Reservar. Ya hay sesión.
@@ -95,7 +131,10 @@ export function Reservar({
         `/api/v1/profesionales/${profesional.id}/turnos`,
         {
           method: "POST",
-          body: JSON.stringify({ inicio: elegido.inicio, motivo: datos.motivo }),
+          body: JSON.stringify({
+            inicio: elegido.inicio,
+            motivo: datos.motivo,
+          }),
         },
       );
       setTurno(creado);
@@ -162,7 +201,10 @@ export function Reservar({
         >
           {aviso.mensaje}{" "}
           {aviso.accion && (
-            <Link href={aviso.accion.href} className="font-bold text-accion underline">
+            <Link
+              href={aviso.accion.href}
+              className="font-bold text-accion underline"
+            >
               {aviso.accion.texto}
             </Link>
           )}
@@ -183,6 +225,7 @@ export function Reservar({
           <Formulario
             elegido={elegido}
             profesional={profesional}
+            usuario={usuario}
             enviando={enviando}
             errorDeCampo={errorDeCampo}
             onVolver={() => {
@@ -198,10 +241,19 @@ export function Reservar({
   );
 }
 
-function Marco({ slug, children }: { slug: string; children: React.ReactNode }) {
+function Marco({
+  slug,
+  children,
+}: {
+  slug: string;
+  children: React.ReactNode;
+}) {
   return (
     <main className="mx-auto w-full max-w-xl px-4 py-10 sm:px-6 sm:py-14">
-      <Link href={`/perfiles/${slug}`} className="text-sm text-tinta-suave hover:text-accion">
+      <Link
+        href={`/perfiles/${slug}`}
+        className="text-sm text-tinta-suave hover:text-accion"
+      >
         ← Volver al perfil
       </Link>
       <div className="mt-6">{children}</div>
@@ -260,6 +312,7 @@ function ElegirHorario({
 function Formulario({
   elegido,
   profesional,
+  usuario,
   enviando,
   errorDeCampo,
   onVolver,
@@ -267,6 +320,7 @@ function Formulario({
 }: {
   elegido: Hueco;
   profesional: Profesional;
+  usuario: UsuarioActual | null | undefined;
   enviando: boolean;
   errorDeCampo: ErrorAPI | null;
   onVolver: () => void;
@@ -280,7 +334,8 @@ function Formulario({
           <span className="text-sm">{formatearDia(elegido.inicio)}</span>
         </div>
         <p className="mt-2 text-sm text-tinta-suave">
-          {formatearPrecio(profesional.precioConsultaCentavos)} · se paga en la consulta
+          {formatearPrecio(profesional.precioConsultaCentavos)} · se paga en la
+          consulta
         </p>
         <button
           type="button"
@@ -295,30 +350,53 @@ function Formulario({
         action={onConfirmar}
         className="mt-6 grid gap-4 rounded-xl border border-borde bg-superficie p-5"
       >
-        <p className="text-sm text-tinta-suave">
-          Creamos tu cuenta con estos datos para que puedas ver y cancelar tus
-          turnos.
-        </p>
+        {usuario ? (
+          // Ya hay sesión: los datos de la cuenta no se piden de nuevo. Pedirlos
+          // era lo que dejaba a un paciente que vuelve sin poder reservar.
+          <p className="text-sm text-tinta-suave">
+            Reservás como{" "}
+            <span className="font-semibold text-tinta">
+              {usuario.nombre} {usuario.apellido}
+            </span>
+            .
+          </p>
+        ) : (
+          <>
+            <p className="text-sm text-tinta-suave">
+              Creamos tu cuenta con estos datos para que puedas ver y cancelar
+              tus turnos.
+            </p>
 
-        <Campo nombre="email" etiqueta="Email" tipo="email" error={errorDeCampo} />
-        <Campo
-          nombre="contrasena"
-          etiqueta="Contraseña"
-          tipo="password"
-          ayuda="Al menos 8 caracteres"
-          error={errorDeCampo}
-        />
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Campo nombre="nombre" etiqueta="Nombre" error={errorDeCampo} />
-          <Campo nombre="apellido" etiqueta="Apellido" error={errorDeCampo} />
-        </div>
-        <Campo
-          nombre="telefono"
-          etiqueta="Celular"
-          tipo="tel"
-          ayuda="Para avisarte si hay un cambio en tu turno. No se muestra en tu perfil."
-          error={errorDeCampo}
-        />
+            <Campo
+              nombre="email"
+              etiqueta="Email"
+              tipo="email"
+              error={errorDeCampo}
+            />
+            <Campo
+              nombre="contrasena"
+              etiqueta="Contraseña"
+              tipo="password"
+              ayuda="Al menos 8 caracteres"
+              error={errorDeCampo}
+            />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Campo nombre="nombre" etiqueta="Nombre" error={errorDeCampo} />
+              <Campo
+                nombre="apellido"
+                etiqueta="Apellido"
+                error={errorDeCampo}
+              />
+            </div>
+            <Campo
+              nombre="telefono"
+              etiqueta="Celular"
+              tipo="tel"
+              ayuda="Para avisarte si hay un cambio en tu turno. No se muestra en tu perfil."
+              error={errorDeCampo}
+            />
+          </>
+        )}
         <Campo
           nombre="motivo"
           etiqueta="Motivo de la consulta"
@@ -332,7 +410,9 @@ function Formulario({
           disabled={enviando}
           className="mt-2 rounded-lg bg-accion px-6 py-3 font-bold text-white transition-colors hover:bg-accion-viva disabled:opacity-60"
         >
-          {enviando ? "Reservando…" : `Reservar ${formatearHora(elegido.inicio)}`}
+          {enviando
+            ? "Reservando…"
+            : `Reservar ${formatearHora(elegido.inicio)}`}
         </button>
       </form>
     </>

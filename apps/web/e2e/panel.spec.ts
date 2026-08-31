@@ -159,3 +159,90 @@ test("el panel no se abre sin sesión", async ({ page }) => {
   await page.goto("/panel");
   await expect(page).toHaveURL("/entrar?volver=%2Fpanel");
 });
+
+/**
+ * Cerrar sesión existía en la API desde la etapa de autenticación y no lo
+ * llamaba nadie en el front: se entraba y no se salía nunca.
+ *
+ * El test comprueba las dos mitades: que la interfaz lo ofrezca, y que la
+ * sesión quede cerrada del lado del servidor. Solo la primera dejaría pasar un
+ * botón que borra la cookie y deja la sesión viva.
+ */
+test("se puede cerrar sesión, y queda cerrada", async ({ page }) => {
+  await registrar(page, "Sale", "Delaapp");
+  await expect(page).toHaveURL("/turnos");
+
+  const encabezado = page.getByRole("navigation", { name: "Principal" });
+  await expect(encabezado.getByRole("link", { name: "Mis turnos" })).toBeVisible();
+
+  await encabezado.getByRole("button", { name: "Cerrar sesión" }).click();
+
+  await expect(page).toHaveURL("/");
+  await expect(encabezado.getByRole("link", { name: "Entrar" })).toBeVisible();
+
+  const estado = await page.evaluate(async () => {
+    const r = await fetch("http://localhost:8080/api/v1/usuarios/yo", {
+      credentials: "include",
+    });
+    return r.status;
+  });
+  expect(estado).toBe(401);
+});
+
+/**
+ * El profesional puede cancelar un turno puntual.
+ *
+ * El servicio ya lo permitía —verificarParte acepta al dueño del perfil— pero
+ * la pantalla no lo ofrecía: la única salida era bloquear el rango entero y
+ * cancelarle a todos los de esa franja.
+ */
+test("el profesional cancela un turno y el paciente lo ve cancelado", async ({ page }) => {
+  // Se registra reservando, que es como llega un paciente de verdad.
+  await page.goto("/perfiles/martin-gonzalez");
+  await page.getByRole("link", { name: /^\d{2}:\d{2}$/ }).first().click();
+  await page.getByLabel("Email").fill(`vera.${Date.now()}@ejemplo.com`);
+  await page.getByLabel("Contraseña").fill("desarrollo123");
+  await page.getByLabel("Nombre", { exact: true }).fill("Vera");
+  await page.getByLabel("Apellido").fill("Cancela");
+  await page.getByLabel("Celular").fill("11 8500-1234");
+  await page.getByLabel("Motivo de la consulta").fill("control");
+  await page.getByRole("button", { name: /^Reservar \d{2}:\d{2}$/ }).click();
+  await expect(page.locator("main").getByText("Turno reservado")).toBeVisible();
+
+  // El profesional lo cancela, confirmando.
+  const pro = await page.context().browser()!.newPage();
+  await pro.goto("/entrar");
+  await pro.getByLabel("Email").fill("martin.gonzalez@ejemplo.com");
+  await pro.getByLabel("Contraseña").fill("desarrollo123");
+  await pro.getByRole("button", { name: "Entrar" }).click();
+  await pro.waitForURL("**/panel");
+  await pro.goto("/panel/agenda");
+
+  // La agenda abre en el primer día CON turnos, que no tiene por qué ser el de
+  // este: el seed ya trae otros. Se navega al día del turno recién reservado.
+  const dia = await page.evaluate(async () => {
+    const r = await fetch("http://localhost:8080/api/v1/turnos", { credentials: "include" });
+    const { datos } = await r.json();
+    return new Intl.DateTimeFormat("es-AR", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      timeZone: "America/Argentina/Buenos_Aires",
+    }).format(new Date(datos[0].inicio));
+  });
+  await pro.getByRole("button", { name: dia }).click();
+
+  const fila = pro.locator("main li").filter({ hasText: "Vera Cancela" }).first();
+  await fila.getByRole("button", { name: "Cancelar" }).click();
+  await expect(pro.getByRole("heading", { name: /¿Cancelar el turno de Vera\?/ })).toBeVisible();
+  await pro.getByRole("button", { name: "Sí, cancelar" }).click();
+  await expect(
+    pro.getByRole("alert").filter({ hasText: "Turno cancelado" }),
+  ).toBeVisible();
+
+  // Y el paciente lo ve del otro lado. Es la mitad que importa: cancelar sin
+  // que la otra persona se entere no es cancelar.
+  await page.goto("/turnos");
+  await expect(page.getByText("Cancelado", { exact: false }).first()).toBeVisible();
+  await pro.close();
+});

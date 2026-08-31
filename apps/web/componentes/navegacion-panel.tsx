@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { CerrarSesion } from "./cerrar-sesion";
 import { Logo } from "./logo";
 
 /**
@@ -26,7 +27,7 @@ export function NavegacionPanel() {
   return (
     <nav
       aria-label="Panel"
-      className="fixed inset-x-0 bottom-0 z-10 border-t border-borde bg-superficie sm:static sm:w-52 sm:shrink-0 sm:border-r sm:border-t-0"
+      className="fixed inset-x-0 bottom-0 z-10 border-t border-borde bg-superficie sm:static sm:flex sm:w-52 sm:shrink-0 sm:flex-col sm:border-r sm:border-t-0"
     >
       {/* El logo solo en escritorio: en móvil esto es la barra de tabs de
           abajo, y ahí no hay lugar ni motivo para la marca. Era el único lugar
@@ -67,6 +68,13 @@ export function NavegacionPanel() {
           );
         })}
       </ul>
+
+      {/* Solo en escritorio, como el logo: en móvil esto son las tabs de abajo.
+          Ahí el lugar de salir es /panel/perfil, que es la pantalla de la
+          cuenta. */}
+      <div className="mt-auto hidden p-3 sm:block">
+        <CerrarSesion className="w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-tinta-suave transition-colors hover:bg-muted hover:text-tinta" />
+      </div>
     </nav>
   );
 }

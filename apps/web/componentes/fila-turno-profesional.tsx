@@ -17,9 +17,12 @@ const MODALIDADES: Record<string, string> = {
 export function FilaTurnoProfesional({
   turno,
   pasado = false,
+  onCancelar,
 }: {
   turno: TurnoConPaciente;
   pasado?: boolean;
+  /** Si viene, la fila ofrece cancelar. Un turno pasado o ya cancelado no. */
+  onCancelar?: (turno: TurnoConPaciente) => void;
 }) {
   const cancelado = turno.estado === "cancelado";
 
@@ -58,6 +61,18 @@ export function FilaTurnoProfesional({
 
       {turno.motivo && (
         <p className="w-full text-sm text-tinta-suave">{turno.motivo}</p>
+      )}
+
+      {onCancelar && !cancelado && !pasado && (
+        // Al final de la fila y sin el color de acento: cancelarle el turno a
+        // alguien no es la acción principal de esta pantalla, es la excepción.
+        <button
+          type="button"
+          onClick={() => onCancelar(turno)}
+          className="ml-auto shrink-0 text-sm font-semibold text-tinta-suave underline hover:text-destructive"
+        >
+          Cancelar
+        </button>
       )}
 
       {cancelado && (

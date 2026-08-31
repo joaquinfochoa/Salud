@@ -71,6 +71,9 @@ export function Calendario<T extends { inicio: string }>({
                   href={hrefDelDia?.(dia.fecha)}
                   onClick={onDia && (() => onDia(dia.fecha))}
                   ariaCurrent={activo}
+                  // Sin esto un lector de pantalla lee "Lun31", que en una
+                  // tira de catorce botones no dice de qué día se trata.
+                  ariaLabel={dia.largo}
                   className={
                     activo
                       ? `${base} border-accion bg-accion text-white`
@@ -104,18 +107,25 @@ function Accion({
   href,
   onClick,
   ariaCurrent,
+  ariaLabel,
   className,
   children,
 }: {
   href?: string;
   onClick?: () => void;
   ariaCurrent?: boolean;
+  ariaLabel?: string;
   className: string;
   children: React.ReactNode;
 }) {
   if (href) {
     return (
-      <Link href={href} aria-current={ariaCurrent ? "true" : undefined} className={className}>
+      <Link
+        href={href}
+        aria-current={ariaCurrent ? "true" : undefined}
+        aria-label={ariaLabel}
+        className={className}
+      >
         {children}
       </Link>
     );
@@ -125,6 +135,7 @@ function Accion({
       type="button"
       onClick={onClick}
       aria-current={ariaCurrent ? "true" : undefined}
+      aria-label={ariaLabel}
       className={className}
     >
       {children}

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { CerrarSesion } from "@/componentes/cerrar-sesion";
 import { Chips } from "@/componentes/chips";
 import { ESPECIALIDADES } from "@/lib/especialidades";
 import { Campo } from "@/componentes/campo";
@@ -199,6 +200,13 @@ export default function Perfil() {
         >
           {guardando ? "Guardando…" : "Guardar cambios"}
         </button>
+      </div>
+
+      {/* En escritorio esto también está en la barra lateral. Acá es el único
+          lugar en móvil, donde la barra son las tabs de abajo y no hay lugar
+          para una quinta. */}
+      <div className="mt-8 border-t border-borde pt-6 sm:hidden">
+        <CerrarSesion className="text-sm font-semibold text-tinta-suave underline hover:text-tinta" />
       </div>
     </main>
   );

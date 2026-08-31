@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "./logo";
+import { Sesion } from "./sesion";
 
 /**
  * La navegación de toda la app.
@@ -55,21 +56,11 @@ export function Encabezado({
             >
               Soy profesional
             </Link>
-            <Link
-              href="/turnos"
-              className="rounded-lg px-3 py-2 text-sm font-semibold text-tinta-suave transition-colors hover:bg-muted hover:text-tinta"
-            >
-              Mis turnos
-            </Link>
-            {/* Una sola puerta de entrada: el login ya deriva solo al panel o a
-              los turnos según tengas perfil profesional o no. Dos botones
-              distintos serían dos caminos al mismo lugar. */}
-            <Link
-              href="/entrar"
-              className="rounded-lg border border-borde px-3 py-2 text-sm font-semibold transition-colors hover:border-accion hover:bg-accent"
-            >
-              Entrar
-            </Link>
+            {/* Quién sos lo resuelve el cliente: el encabezado es un Server
+                Component y la cookie de sesión viaja desde el browser. Antes
+                acá había un "Mis turnos" y un "Entrar" fijos, que le ofrecían
+                entrar a quien ya había entrado. */}
+            <Sesion />
           </div>
         )}
       </nav>
