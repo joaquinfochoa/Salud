@@ -139,19 +139,18 @@ export function VistaPreviaPerfil({ borrador, foco }: { borrador: Borrador; foco
           </Parte>
         </div>
 
-        {/* La zona, con su chapita. No es un mapa: el perfil público no muestra
-            uno, porque la API guarda una zona escrita a mano —"CABA", "Vicente
-            López"— y no una dirección ni coordenadas. Dibujar calles acá sería
-            prometer en la vista previa algo que el paciente no va a ver. */}
         <div
-          className={`flex items-center gap-2.5 border-y border-borde px-5 py-3 transition-colors duration-300 ${
+          className={`flex items-center gap-4 border-y border-borde px-5 py-3.5 transition-colors duration-300 ${
             foco === "atencion" ? "bg-accent" : "bg-fondo"
           }`}
         >
-          <Pin />
-          <p className={`text-sm font-medium ${borrador.zona ? "" : "text-apagado"}`}>
-            {borrador.zona || "Tu zona"}
-          </p>
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            <Pin />
+            <p className={`truncate text-sm font-medium ${borrador.zona ? "" : "text-apagado"}`}>
+              {borrador.zona || "Tu zona"}
+            </p>
+          </div>
+          <Mapita />
         </div>
 
         <dl className="grid gap-4 p-5 @sm:grid-cols-2">
@@ -191,11 +190,6 @@ export function VistaPreviaPerfil({ borrador, foco }: { borrador: Borrador; foco
         </dl>
       </div>
 
-      <p className="mt-3 text-sm text-tinta-suave">
-        {foco === "agenda"
-          ? "Los horarios exactos salen de los bloques que cargues."
-          : "Se actualiza mientras completás."}
-      </p>
     </aside>
   );
 }
@@ -230,6 +224,40 @@ function Redondel({ nombre, apellido }: { nombre: string; apellido: string }) {
         </svg>
       )}
     </span>
+  );
+}
+
+/**
+ * Un mapa genérico, dibujado acá adentro.
+ *
+ * Es decoración, no un dato: la API guarda una zona escrita a mano —"CABA",
+ * "Vicente López"— y no una dirección ni coordenadas, así que estas calles no
+ * son las de ningún lado. Deliberadamente abstracto: sin nombres, sin marcador
+ * sobre un punto, sin norte. Lo que dice dónde atendés es el texto de al lado.
+ *
+ * SVG en el archivo y no una imagen ni un proveedor de mapas: son 12 líneas,
+ * cero dependencias y cero pedidos a un tercero desde una pantalla de salud.
+ */
+function Mapita() {
+  return (
+    <svg
+      viewBox="0 0 64 44"
+      aria-hidden="true"
+      className="h-11 w-16 shrink-0 overflow-hidden rounded-lg border border-borde"
+    >
+      {/* La tierra primero y las calles encima en blanco: al revés se lee como
+          una grilla de fichas, no como un mapa. */}
+      <rect width="64" height="44" className="fill-muted" />
+      <rect x="26" y="24" width="13" height="13" rx="1" className="fill-libre/25" />
+      <path
+        d="M0 20h64M24 0v44M44 0v44M0 34h64"
+        className="stroke-superficie"
+        strokeWidth="3"
+      />
+      {/* La diagonal: en cualquier ciudad hay una, y es lo que termina de
+          separar el dibujo de una grilla. */}
+      <path d="M-4 46 46-4" className="stroke-superficie" strokeWidth="4" />
+    </svg>
   );
 }
 
