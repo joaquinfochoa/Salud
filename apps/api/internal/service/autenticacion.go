@@ -58,6 +58,32 @@ func (a *Autenticacion) Registrar(ctx context.Context, entrada domain.EntradaUsu
 	return u, token, nil
 }
 
+// ActualizarPerfil cambia los datos personales de la propia cuenta.
+//
+// Recibe el id de la sesión y no acepta uno por parámetro: no existe forma de
+// que esto edite la cuenta de otra persona.
+//
+// **Las sesiones abiertas siguen valiendo, incluso al cambiar el email.** El
+// token identifica al usuario por su id, no por su email, así que cambiarlo no
+// invalida nada. Cerrarlas sería lo correcto si esto pudiera cambiar la
+// contraseña —una credencial nueva debería expulsar a quien tuviera la vieja—
+// pero la contraseña no se toca acá, a propósito.
+func (a *Autenticacion) ActualizarPerfil(ctx context.Context, usuarioID uuid.UUID, entrada domain.EntradaPerfil) (domain.Usuario, error) {
+	actual, err := a.usuarios.ObtenerPorID(ctx, usuarioID)
+	if err != nil {
+		return domain.Usuario{}, err
+	}
+
+	nuevo, err := actual.ConPerfil(entrada)
+	if err != nil {
+		return domain.Usuario{}, err
+	}
+	if err := a.usuarios.Actualizar(ctx, nuevo); err != nil {
+		return domain.Usuario{}, err
+	}
+	return nuevo, nil
+}
+
 // IniciarSesion valida las credenciales y abre una sesión.
 //
 // Todos los caminos de fallo devuelven ErrCredencialesInvalidas. Distinguir

@@ -343,3 +343,52 @@ func TestPostConContentTypeIncorrectoDa415(t *testing.T) {
 		t.Errorf("estado = %d, se esperaba 415", resp.StatusCode)
 	}
 }
+
+func TestActualizarPerfilPorHTTP(t *testing.T) {
+	srv := servidorAnonimo(t)
+	conSesion(t, srv, "perfil@ejemplo.com")
+
+	cuerpo := `{"email":"juan.nuevo@ejemplo.com","nombre":"Juan Carlos","apellido":"Pérez","telefono":"011 15 5555-4444"}`
+	resp := ejecutar(t, srv, http.MethodPut, "/api/v1/usuarios/yo", cuerpo)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("estado = %d, se esperaba 200", resp.StatusCode)
+	}
+
+	var u respuestaUsuario
+	if err := json.NewDecoder(resp.Body).Decode(&u); err != nil {
+		t.Fatalf("no se pudo decodificar: %v", err)
+	}
+	if u.Email != "juan.nuevo@ejemplo.com" {
+		t.Errorf("Email = %q", u.Email)
+	}
+	// Normalizado, igual que en el alta.
+	if u.Telefono != "+5491155554444" {
+		t.Errorf("Telefono = %q", u.Telefono)
+	}
+}
+
+// La contraseña no se puede colar por este endpoint: el cuerpo se decodifica en
+// modo estricto, así que un campo de más es 400 y no una credencial cambiada.
+func TestActualizarPerfilRechazaLaContrasena(t *testing.T) {
+	srv := servidorAnonimo(t)
+	conSesion(t, srv, "clave@ejemplo.com")
+
+	cuerpo := `{"email":"clave@ejemplo.com","nombre":"Ana","apellido":"Test","telefono":"11 1234-5678","contrasena":"otraclave"}`
+	if r := ejecutar(t, srv, http.MethodPut, "/api/v1/usuarios/yo", cuerpo); r.StatusCode != http.StatusBadRequest {
+		t.Errorf("estado = %d, se esperaba 400", r.StatusCode)
+	}
+
+	// Y la contraseña original sigue sirviendo.
+	login := `{"email":"clave@ejemplo.com","contrasena":"desarrollo123"}`
+	if r := postear(t, srv, "/api/v1/sesiones", login); r.StatusCode != http.StatusCreated {
+		t.Errorf("la contraseña original dejó de funcionar: %d", r.StatusCode)
+	}
+}
+
+func TestActualizarPerfilSinSesion(t *testing.T) {
+	srv := servidorAnonimo(t)
+	cuerpo := `{"email":"a@b.com","nombre":"A","apellido":"B","telefono":"11 1234-5678"}`
+	if r := ejecutar(t, srv, http.MethodPut, "/api/v1/usuarios/yo", cuerpo); r.StatusCode != http.StatusUnauthorized {
+		t.Errorf("estado = %d, se esperaba 401", r.StatusCode)
+	}
+}

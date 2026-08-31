@@ -114,6 +114,34 @@ func (h *ManejadorAutenticacion) CerrarSesion(w http.ResponseWriter, r *http.Req
 }
 
 // Yo devuelve quién es el usuario de la sesión y si tiene perfil profesional.
+// ActualizarPerfil cambia los datos personales de la propia cuenta.
+//
+// No recibe un id: el usuario sale de la sesión, así que no hay forma de que
+// esto edite la cuenta de otra persona ni siquiera con la petición armada a
+// mano.
+func (h *ManejadorAutenticacion) ActualizarPerfil(w http.ResponseWriter, r *http.Request) {
+	usuarioID, ok := usuarioAutenticado(w, r)
+	if !ok {
+		return
+	}
+
+	var p peticionPerfil
+	if err := decodificarJSON(w, r, &p); err != nil {
+		// Y no escribirError: un cuerpo mal formado o con un campo de más es
+		// culpa de quien lo mandó, no del servidor. Con escribirError esto
+		// devolvía 500, que además de estar mal esconde el motivo.
+		escribirErrorDeDecodificacion(w, r, err)
+		return
+	}
+
+	u, err := h.svc.ActualizarPerfil(r.Context(), usuarioID, p.aEntrada())
+	if err != nil {
+		escribirError(w, r, err)
+		return
+	}
+	escribirJSON(w, http.StatusOK, aRespuestaUsuario(u))
+}
+
 func (h *ManejadorAutenticacion) Yo(w http.ResponseWriter, r *http.Request) {
 	usuarioID, ok := usuarioAutenticado(w, r)
 	if !ok {

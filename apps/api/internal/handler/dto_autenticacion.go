@@ -26,6 +26,26 @@ func (p peticionRegistro) aEntrada() domain.EntradaUsuario {
 	}
 }
 
+// peticionPerfil son los datos personales que alguien puede cambiar de su
+// cuenta. Sin contraseña: cambiarla es otra operación, con otra regla —pedir la
+// actual— y meterla acá haría que un formulario de datos personales pueda
+// reemplazar una credencial.
+type peticionPerfil struct {
+	Email    string `json:"email"`
+	Nombre   string `json:"nombre"`
+	Apellido string `json:"apellido"`
+	Telefono string `json:"telefono"`
+}
+
+func (p peticionPerfil) aEntrada() domain.EntradaPerfil {
+	return domain.EntradaPerfil{
+		Email:    p.Email,
+		Nombre:   p.Nombre,
+		Apellido: p.Apellido,
+		Telefono: p.Telefono,
+	}
+}
+
 type peticionLogin struct {
 	Email      string `json:"email"`
 	Contrasena string `json:"contrasena"`

@@ -139,3 +139,47 @@ func hashearContrasena(plana string) ([]byte, error) {
 	}
 	return bcrypt.GenerateFromPassword([]byte(plana), costoBcrypt)
 }
+
+// EntradaPerfil es lo que una persona puede cambiar de su propia cuenta.
+//
+// No incluye la contraseña: cambiarla es otra operación, con otra regla —hay
+// que pedir la actual— y meterla acá haría que un formulario de datos
+// personales pueda reemplazar una credencial.
+type EntradaPerfil struct {
+	Email    string
+	Nombre   string
+	Apellido string
+	Telefono string
+}
+
+// ConPerfil devuelve una copia con los datos personales cambiados, o un
+// ErrorValidacion con todos los campos que fallaron.
+//
+// El ID, el hash y la fecha de creación no se tocan: son la identidad y la
+// credencial, no datos de perfil. Que esto devuelva un Usuario nuevo en vez de
+// mutar el receptor es lo que hace que un cambio inválido no deje la entidad a
+// medio actualizar.
+func (u Usuario) ConPerfil(entrada EntradaPerfil) (Usuario, error) {
+	var verr ErrorValidacion
+	c := u.Clonar()
+
+	if e, err := ParsearEmail(entrada.Email); err != nil {
+		verr.agregar("email", err.Error())
+	} else {
+		c.Email = e
+	}
+
+	if tel, err := ParsearTelefono(entrada.Telefono); err != nil {
+		verr.agregar("telefono", err.Error())
+	} else {
+		c.Telefono = tel
+	}
+
+	c.Nombre = validarNombre(entrada.Nombre, "nombre", &verr)
+	c.Apellido = validarNombre(entrada.Apellido, "apellido", &verr)
+
+	if verr.tieneErrores() {
+		return Usuario{}, verr
+	}
+	return c, nil
+}

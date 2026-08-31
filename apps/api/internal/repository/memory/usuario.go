@@ -50,6 +50,26 @@ func (r *Usuario) Crear(_ context.Context, u domain.Usuario) error {
 	return nil
 }
 
+func (r *Usuario) Actualizar(_ context.Context, u domain.Usuario) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, existe := r.datos[u.ID]; !existe {
+		return domain.ErrNoEncontrado
+	}
+
+	// El email tiene que seguir siendo único, pero el propio no cuenta como
+	// choque: guardar sin cambiarlo no puede fallar.
+	for id, otro := range r.datos {
+		if id != u.ID && otro.Email == u.Email {
+			return domain.ErrEmailEnUso
+		}
+	}
+
+	r.datos[u.ID] = u.Clonar()
+	return nil
+}
+
 func (r *Usuario) ObtenerPorID(_ context.Context, id uuid.UUID) (domain.Usuario, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

@@ -99,6 +99,43 @@ paths:
               schema: { $ref: '#/components/schemas/UsuarioActual' }
         '401': { $ref: '#/components/responses/NoAutenticado' }
 
+    put:
+      tags: [autenticacion]
+      summary: Cambia los datos personales de la propia cuenta
+      description: |
+        No recibe un id: el usuario sale de la sesion, asi que no hay forma de
+        editar la cuenta de otra persona.
+
+        Sin contrasena. Cambiarla es otra operacion, con otra regla -hay que
+        pedir la actual- y aceptarla aca haria que un formulario de datos
+        personales pueda reemplazar una credencial.
+
+        Cambiar el email cambia con que se entra, y las sesiones abiertas
+        siguen valiendo: el token identifica por id, no por email.
+      security:
+        - sesionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PeticionPerfil' }
+      responses:
+        '200':
+          description: Datos actualizados
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Usuario' }
+        '400': { $ref: '#/components/responses/PeticionInvalida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '409':
+          description: Ya hay otra cuenta con ese email
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problema' }
+        '413': { $ref: '#/components/responses/CuerpoDemasiadoGrande' }
+        '415': { $ref: '#/components/responses/TipoDeContenidoInvalido' }
+        '422': { $ref: '#/components/responses/ValidacionFallida' }
+
   /api/v1/sesiones:
     post:
       tags: [autenticacion]
@@ -710,6 +747,18 @@ components:
       properties:
         email: { type: string, format: email, example: juan@ejemplo.com }
         contrasena: { type: string, format: password }
+
+    PeticionPerfil:
+      type: object
+      required: [email, nombre, apellido, telefono]
+      description: |
+        Los datos personales que alguien puede cambiar de su cuenta. Sin
+        contrasena a proposito.
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        nombre: { type: string, maxLength: 80 }
+        apellido: { type: string, maxLength: 80 }
+        telefono: { type: string, example: 11 1234-5678 }
 
     Usuario:
       type: object

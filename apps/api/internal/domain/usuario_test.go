@@ -219,3 +219,73 @@ func TestUsuarioClonar(t *testing.T) {
 		t.Error("mutar el hash del clon alteró el original")
 	}
 }
+
+func TestConPerfil(t *testing.T) {
+	original, err := NuevoUsuario(entradaUsuarioValida(), time.Now())
+	if err != nil {
+		t.Fatalf("NuevoUsuario: %v", err)
+	}
+
+	cambiado, err := original.ConPerfil(EntradaPerfil{
+		Email:    "  Nuevo@Ejemplo.COM ",
+		Nombre:   "Juana",
+		Apellido: "Pérez",
+		Telefono: "011 15 9999-8888",
+	})
+	if err != nil {
+		t.Fatalf("ConPerfil devolvió error: %v", err)
+	}
+
+	// Lo que cambia, normalizado igual que en el alta.
+	if cambiado.Email != "nuevo@ejemplo.com" {
+		t.Errorf("Email = %q", cambiado.Email)
+	}
+	if cambiado.Telefono != "+5491199998888" {
+		t.Errorf("Telefono = %q", cambiado.Telefono)
+	}
+	if cambiado.Nombre != "Juana" {
+		t.Errorf("Nombre = %q", cambiado.Nombre)
+	}
+
+	// Lo que NO puede cambiar: la identidad y la credencial.
+	if cambiado.ID != original.ID {
+		t.Error("cambió el ID")
+	}
+	if !cambiado.VerificarContrasena("unaclave8") {
+		t.Error("se perdió la contraseña")
+	}
+	if !cambiado.CreadoEn.Equal(original.CreadoEn) {
+		t.Error("cambió la fecha de creación")
+	}
+}
+
+func TestConPerfilInvalidoNoTocaNada(t *testing.T) {
+	original, err := NuevoUsuario(entradaUsuarioValida(), time.Now())
+	if err != nil {
+		t.Fatalf("NuevoUsuario: %v", err)
+	}
+
+	for _, caso := range []struct {
+		nombre, campo string
+		entrada       EntradaPerfil
+	}{
+		{"email invalido", "email", EntradaPerfil{Email: "no-es-un-email", Nombre: "A", Apellido: "B", Telefono: "11 1234-5678"}},
+		{"telefono invalido", "telefono", EntradaPerfil{Email: "a@b.com", Nombre: "A", Apellido: "B", Telefono: "xx"}},
+		{"nombre vacio", "nombre", EntradaPerfil{Email: "a@b.com", Nombre: "", Apellido: "B", Telefono: "11 1234-5678"}},
+	} {
+		t.Run(caso.nombre, func(t *testing.T) {
+			_, err := original.ConPerfil(caso.entrada)
+			var verr ErrorValidacion
+			if !errors.As(err, &verr) {
+				t.Fatalf("se esperaba ErrorValidacion, vino %v", err)
+			}
+			if !strings.Contains(err.Error(), caso.campo) {
+				t.Errorf("el error no menciona %q: %v", caso.campo, err)
+			}
+			// Y el original sigue intacto: ConPerfil devuelve una copia.
+			if original.Email != "juan@ejemplo.com" {
+				t.Error("se modificó el usuario original")
+			}
+		})
+	}
+}

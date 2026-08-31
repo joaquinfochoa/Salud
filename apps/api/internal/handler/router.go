@@ -21,6 +21,7 @@ func NuevoRouter(ph *ManejadorProfesional, ah *ManejadorAgenda, mh *ManejadorAut
 	// plantilla que compita.
 	mux.HandleFunc("POST /api/v1/usuarios", mh.Registrar)
 	mux.HandleFunc("GET /api/v1/usuarios/yo", RequerirSesion(mh.Yo))
+	mux.HandleFunc("PUT /api/v1/usuarios/yo", RequerirSesion(mh.ActualizarPerfil))
 	mux.HandleFunc("POST /api/v1/sesiones", mh.IniciarSesion)
 	mux.HandleFunc("DELETE /api/v1/sesiones/actual", mh.CerrarSesion)
 

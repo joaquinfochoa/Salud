@@ -192,3 +192,91 @@ func TestResolverSesionConTokenInventado(t *testing.T) {
 		t.Error("un token vacío resolvió una sesión")
 	}
 }
+
+func TestActualizarPerfil(t *testing.T) {
+	ctx := context.Background()
+	auth := nuevaAuthDePrueba()
+
+	u, _, err := auth.Registrar(ctx, entradaAuthValida())
+	if err != nil {
+		t.Fatalf("Registrar: %v", err)
+	}
+
+	nuevo, err := auth.ActualizarPerfil(ctx, u.ID, domain.EntradaPerfil{
+		Email:    "juan.nuevo@ejemplo.com",
+		Nombre:   "Juan Carlos",
+		Apellido: "Pérez",
+		Telefono: "011 15 5555-4444",
+	})
+	if err != nil {
+		t.Fatalf("ActualizarPerfil: %v", err)
+	}
+	if nuevo.Email != "juan.nuevo@ejemplo.com" || nuevo.Telefono != "+5491155554444" {
+		t.Errorf("no se guardaron los cambios: %+v", nuevo)
+	}
+
+	// Y se puede entrar con el email nuevo, que es lo que hace que el cambio
+	// sea real y no solo un campo distinto en la respuesta.
+	if _, _, err := auth.IniciarSesion(ctx, "juan.nuevo@ejemplo.com", "unaclave8"); err != nil {
+		t.Errorf("no se puede entrar con el email nuevo: %v", err)
+	}
+	if _, _, err := auth.IniciarSesion(ctx, "juan@ejemplo.com", "unaclave8"); err == nil {
+		t.Error("todavía se puede entrar con el email viejo")
+	}
+}
+
+// El email es con lo que se entra: dos cuentas con el mismo dejarían una
+// inaccesible. Es el mismo 409 que devuelve el registro.
+func TestActualizarPerfilRechazaUnEmailAjeno(t *testing.T) {
+	ctx := context.Background()
+	auth := nuevaAuthDePrueba()
+
+	uno, _, err := auth.Registrar(ctx, entradaAuthValida())
+	if err != nil {
+		t.Fatalf("Registrar: %v", err)
+	}
+	otra := entradaAuthValida()
+	otra.Email = "otra@ejemplo.com"
+	if _, _, err := auth.Registrar(ctx, otra); err != nil {
+		t.Fatalf("Registrar: %v", err)
+	}
+
+	_, err = auth.ActualizarPerfil(ctx, uno.ID, domain.EntradaPerfil{
+		Email:    "otra@ejemplo.com",
+		Nombre:   "Juan",
+		Apellido: "Pérez",
+		Telefono: "11 1234-5678",
+	})
+	if !errors.Is(err, domain.ErrEmailEnUso) {
+		t.Fatalf("se esperaba ErrEmailEnUso, vino %v", err)
+	}
+
+	// Y el usuario quedó como estaba: un rechazo no deja la cuenta a medias.
+	sigue, err := auth.usuarios.ObtenerPorID(ctx, uno.ID)
+	if err != nil {
+		t.Fatalf("ObtenerPorID: %v", err)
+	}
+	if sigue.Email != "juan@ejemplo.com" {
+		t.Errorf("el email quedó en %q", sigue.Email)
+	}
+}
+
+// Guardar sin cambiar el email no puede fallar por "email en uso": el propio no
+// choca consigo mismo.
+func TestActualizarPerfilConElMismoEmail(t *testing.T) {
+	ctx := context.Background()
+	auth := nuevaAuthDePrueba()
+
+	u, _, err := auth.Registrar(ctx, entradaAuthValida())
+	if err != nil {
+		t.Fatalf("Registrar: %v", err)
+	}
+	if _, err := auth.ActualizarPerfil(ctx, u.ID, domain.EntradaPerfil{
+		Email:    "juan@ejemplo.com",
+		Nombre:   "Juan",
+		Apellido: "Pérez",
+		Telefono: "11 1234-5678",
+	}); err != nil {
+		t.Fatalf("ActualizarPerfil con el mismo email: %v", err)
+	}
+}

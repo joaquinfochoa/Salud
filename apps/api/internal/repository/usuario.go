@@ -24,4 +24,9 @@ type Usuario interface {
 	Crear(ctx context.Context, u domain.Usuario) error
 	ObtenerPorID(ctx context.Context, id uuid.UUID) (domain.Usuario, error)
 	ObtenerPorEmail(ctx context.Context, e domain.Email) (domain.Usuario, error)
+
+	// Actualizar pisa un usuario existente. Devuelve ErrEmailEnUso si el email
+	// nuevo ya es de otra persona: el email es con lo que se entra, así que dos
+	// cuentas con el mismo dejan una inaccesible.
+	Actualizar(ctx context.Context, u domain.Usuario) error
 }
