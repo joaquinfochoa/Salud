@@ -69,7 +69,7 @@ export default async function Perfil({
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
-      <Link href="/" className="text-sm text-tinta-suave hover:text-accion">
+      <Link href="/buscar" className="text-sm text-tinta-suave hover:text-accion">
         ← Volver a la búsqueda
       </Link>
 

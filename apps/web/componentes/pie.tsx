@@ -11,7 +11,7 @@ import Link from "next/link";
 export function Pie() {
   return (
     <footer className="mt-auto border-t border-borde bg-superficie">
-      <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
+      <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
         <p className="text-sm">
           <Link href="/profesionales" className="font-semibold hover:text-accion">
             ¿Sos profesional de la salud?

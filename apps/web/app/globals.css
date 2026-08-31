@@ -136,3 +136,23 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* La única animación de la app, y solo en la portada: una entrada corta que
+ * hace que la página se sienta viva sin que nada se mueva mientras se lee. El
+ * bloque de prefers-reduced-motion de arriba ya la desactiva. */
+@keyframes surgir {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+.surgir {
+  animation: surgir 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* La prueba entra después de la promesa: primero se lee qué ofrece, después
+ * aparecen los horarios que lo demuestran. */
+.surgir-tarde {
+  animation-delay: 0.12s;
+}

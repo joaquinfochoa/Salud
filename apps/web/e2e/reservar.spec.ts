@@ -12,7 +12,7 @@ test("un visitante sin cuenta busca, reserva y ve su turno", async ({ page }) =>
   const email = `e2e-${Date.now()}@ejemplo.com`;
 
   await test.step("la búsqueda muestra profesionales con sus horarios", async () => {
-    await page.goto("/");
+    await page.goto("/buscar");
     await expect(page.getByRole("heading", { name: /encontrá tu próximo turno/i })).toBeVisible();
     await expect(page.getByText("González").first()).toBeVisible();
   });
@@ -69,10 +69,11 @@ test("reservar con un email ya registrado ofrece entrar", async ({ page }) => {
   // Next tiene su propio anunciador de rutas con role="alert", así que hay que
   // desambiguar por texto. Se sigue afirmando el rol: el mensaje tiene que ser
   // anunciable por un lector de pantalla, no solo visible.
-  await expect(
-    page.getByRole("alert").filter({ hasText: /ya tenés una cuenta/i }),
-  ).toBeVisible();
-  await expect(page.getByRole("link", { name: "Entrar" })).toBeVisible();
+  const aviso = page.getByRole("alert").filter({ hasText: /ya tenés una cuenta/i });
+  await expect(aviso).toBeVisible();
+  // Acotado al aviso: desde que el encabezado tiene su propio "Entrar", buscarlo
+  // en toda la página encuentra dos.
+  await expect(aviso.getByRole("link", { name: "Entrar" })).toBeVisible();
 });
 
 /**
@@ -81,8 +82,17 @@ test("reservar con un email ya registrado ofrece entrar", async ({ page }) => {
  * página se está renderizando en el cliente y el SEO no existe.
  */
 test("las páginas públicas llegan completas desde el servidor", async ({ request }) => {
+  // La landing: el mensaje Y contenido real. Es la página con más autoridad de
+  // SEO, así que gastarla en marketing sin nada indexable sería tirarla.
   const inicio = await (await request.get("/")).text();
+  expect(inicio).toContain("El horario que ves es el que reservás");
   expect(inicio).toContain("González");
+  expect(inicio).toContain("Cómo funciona");
+  // Y la disponibilidad de la portada son horarios de verdad, no una imagen.
+  expect(inicio).toMatch(/>\d{2}:\d{2}</);
+
+  const buscar = await (await request.get("/buscar")).text();
+  expect(buscar).toContain("González");
 
   const perfil = await (await request.get("/perfiles/martin-gonzalez")).text();
   expect(perfil).toContain("Martín González");
