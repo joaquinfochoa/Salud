@@ -246,3 +246,43 @@ test("el profesional cancela un turno y el paciente lo ve cancelado", async ({ p
   await expect(page.getByText("Cancelado", { exact: false }).first()).toBeVisible();
   await pro.close();
 });
+
+/**
+ * El área del paciente tiene sus propias secciones, y cambiar el email cambia
+ * con qué se entra.
+ *
+ * El email es la identidad de login: si el cambio se guardara sin que se pueda
+ * entrar con el nuevo, la persona quedaría afuera de su cuenta. Por eso el test
+ * cierra sesión y vuelve a entrar en vez de conformarse con el 200.
+ */
+test("el paciente edita su cuenta y entra con el email nuevo", async ({ page }) => {
+  await registrar(page, "Edita", "Sucuenta");
+  await expect(page).toHaveURL("/turnos");
+
+  const secciones = page.getByRole("navigation", { name: "Mi cuenta" });
+  await expect(secciones.getByRole("link", { name: "Mis turnos" })).toBeVisible();
+  await secciones.getByRole("link", { name: "Mi cuenta" }).click();
+  await expect(page).toHaveURL("/cuenta");
+
+  const nuevo = `edita.nuevo.${Date.now()}@ejemplo.com`;
+  await page.getByLabel("Email").fill(nuevo);
+  await page.getByLabel("Celular").fill("011 15 3333-2222");
+  await page.getByRole("button", { name: "Guardar cambios" }).click();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "entrás con tu email nuevo" }),
+  ).toBeVisible();
+
+  // El teléfono vuelve normalizado, no como se tipeó.
+  await expect(page.getByLabel("Celular")).toHaveValue("+5491133332222");
+
+  await page.getByRole("navigation", { name: "Principal" })
+    .getByRole("button", { name: "Cerrar sesión" })
+    .click();
+  await expect(page).toHaveURL("/");
+
+  await page.goto("/entrar");
+  await page.getByLabel("Email").fill(nuevo);
+  await page.getByLabel("Contraseña").fill("desarrollo123");
+  await page.getByRole("button", { name: "Entrar" }).click();
+  await expect(page).toHaveURL("/turnos");
+});

@@ -133,7 +133,56 @@ export interface paths {
                 401: components["responses"]["NoAutenticado"];
             };
         };
-        put?: never;
+        /**
+         * Cambia los datos personales de la propia cuenta
+         * @description No recibe un id: el usuario sale de la sesion, asi que no hay forma de
+         *     editar la cuenta de otra persona.
+         *
+         *     Sin contrasena. Cambiarla es otra operacion, con otra regla -hay que
+         *     pedir la actual- y aceptarla aca haria que un formulario de datos
+         *     personales pueda reemplazar una credencial.
+         *
+         *     Cambiar el email cambia con que se entra, y las sesiones abiertas
+         *     siguen valiendo: el token identifica por id, no por email.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PeticionPerfil"];
+                };
+            };
+            responses: {
+                /** @description Datos actualizados */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Usuario"];
+                    };
+                };
+                400: components["responses"]["PeticionInvalida"];
+                401: components["responses"]["NoAutenticado"];
+                /** @description Ya hay otra cuenta con ese email */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["Problema"];
+                    };
+                };
+                413: components["responses"]["CuerpoDemasiadoGrande"];
+                415: components["responses"]["TipoDeContenidoInvalido"];
+                422: components["responses"]["ValidacionFallida"];
+            };
+        };
         post?: never;
         delete?: never;
         options?: never;
@@ -1081,6 +1130,18 @@ export interface components {
             email: string;
             /** Format: password */
             contrasena: string;
+        };
+        /**
+         * @description Los datos personales que alguien puede cambiar de su cuenta. Sin
+         *     contrasena a proposito.
+         */
+        PeticionPerfil: {
+            /** Format: email */
+            email: string;
+            nombre: string;
+            apellido: string;
+            /** @example 11 1234-5678 */
+            telefono: string;
         };
         /**
          * @description La identidad de login. Nunca incluye el hash de la contraseña ni el

@@ -167,5 +167,8 @@ test("un paciente que ya reservó puede reservar otra vez", async ({ page }) => 
   await expect(page.locator("main").getByText("Turno reservado")).toBeVisible();
 
   await page.goto("/turnos");
-  await expect(page.getByRole("listitem")).toHaveCount(2);
+  // Acotado a main: desde que el área del paciente tiene pestañas, contar
+  // listitem en toda la página contaba la navegación y no los turnos. Pasaba
+  // igual con cero turnos.
+  await expect(page.locator("main").getByRole("listitem")).toHaveCount(2);
 });

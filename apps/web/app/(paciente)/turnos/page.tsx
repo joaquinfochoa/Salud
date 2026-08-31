@@ -90,8 +90,15 @@ export default function MisTurnos() {
     );
   }
 
+  const ahora = new Date().toISOString();
+  // Próximos y pasados no son la misma información. Lo que viene es lo que hay
+  // que hacer; lo que pasó es historia, y mezclarlos obliga a leer fechas para
+  // encontrar el turno de mañana.
+  const proximos = turnos.filter((t) => t.fin > ahora && t.estado === "reservado");
+  const pasados = turnos.filter((t) => t.fin <= ahora || t.estado === "cancelado");
+
   return (
-    <main className="mx-auto w-full max-w-xl px-4 py-10 sm:px-6 sm:py-14">
+    <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
       <h1 className="text-2xl font-black tracking-tight">Mis turnos</h1>
 
       {error && (
@@ -101,23 +108,71 @@ export default function MisTurnos() {
       )}
 
       {turnos.length === 0 ? (
-        <div className="mt-6 rounded-xl border border-borde bg-superficie p-8 text-center">
-          <p className="text-tinta-suave">Todavía no reservaste ningún turno.</p>
+        // Un vacío es una invitación a hacer algo, no un espacio en blanco.
+        <div className="mt-6 rounded-xl border border-borde bg-superficie p-10 text-center">
+          <p className="font-semibold">Todavía no reservaste ningún turno</p>
+          <p className="mt-2 text-sm text-tinta-suave">
+            Buscá por especialidad y zona, y elegí un horario de los que el
+            profesional tiene libres.
+          </p>
           <Link
-            href="/"
-            className="mt-5 inline-block rounded-lg bg-accion px-6 py-3 font-bold text-white transition-colors hover:bg-accion-viva"
+            href="/buscar"
+            className="mt-6 inline-block rounded-lg bg-accion px-6 py-3 font-bold text-white transition-colors hover:bg-accion-viva"
           >
-            Buscar un profesional
+            Buscar un turno
           </Link>
         </div>
       ) : (
-        <ul className="mt-6 grid gap-3">
-          {turnos.map((turno) => (
-            <FilaTurno key={turno.id} turno={turno} onCancelar={() => cancelar(turno)} />
-          ))}
-        </ul>
+        <>
+          <Seccion titulo="Próximos" vacio="No tenés turnos próximos.">
+            {proximos.map((turno) => (
+              <FilaTurno key={turno.id} turno={turno} onCancelar={() => cancelar(turno)} />
+            ))}
+          </Seccion>
+
+          {pasados.length > 0 && (
+            <Seccion titulo="Anteriores">
+              {pasados.map((turno) => (
+                <FilaTurno key={turno.id} turno={turno} onCancelar={() => cancelar(turno)} />
+              ))}
+            </Seccion>
+          )}
+        </>
       )}
     </main>
+  );
+}
+
+function Seccion({
+  titulo,
+  vacio,
+  children,
+}: {
+  titulo: string;
+  vacio?: string;
+  children: React.ReactNode;
+}) {
+  const hay = Array.isArray(children) ? children.length > 0 : Boolean(children);
+
+  return (
+    <section className="mt-8">
+      <h2 className="text-sm font-bold uppercase tracking-wide text-tinta-suave">
+        {titulo}
+      </h2>
+      {hay ? (
+        <ul className="mt-3 grid gap-3">{children}</ul>
+      ) : (
+        vacio && (
+          <p className="mt-3 rounded-xl border border-borde bg-superficie p-6 text-sm text-tinta-suave">
+            {vacio}{" "}
+            <Link href="/buscar" className="font-semibold text-accion underline">
+              Buscar uno
+            </Link>
+            .
+          </p>
+        )
+      )}
+    </section>
   );
 }
 
@@ -132,7 +187,11 @@ function FilaTurno({
   const yaPaso = new Date(turno.inicio) <= new Date();
 
   return (
-    <li className="rounded-xl border border-borde bg-superficie p-5">
+    <li
+      className={`rounded-xl border border-borde bg-superficie p-5 ${
+        yaPaso && !cancelado ? "opacity-60" : ""
+      }`}
+    >
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-baseline gap-3">
