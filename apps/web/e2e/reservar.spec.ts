@@ -37,6 +37,7 @@ test("un visitante sin cuenta busca, reserva y ve su turno", async ({ page }) =>
     await page.getByLabel("Contraseña").fill("unaclave8");
     await page.getByLabel("Nombre", { exact: true }).fill("Ana");
     await page.getByLabel("Apellido").fill("Prueba");
+    await page.getByLabel("Celular").fill("11 6000-1234");
     await page.getByRole("button", { name: /^Reservar \d{2}:\d{2}$/ }).click();
 
     await expect(page.getByText(/turno reservado/i)).toBeVisible();
@@ -64,6 +65,7 @@ test("reservar con un email ya registrado ofrece entrar", async ({ page }) => {
   await page.getByLabel("Contraseña").fill("unaclave8");
   await page.getByLabel("Nombre", { exact: true }).fill("Otro");
   await page.getByLabel("Apellido").fill("Nombre");
+  await page.getByLabel("Celular").fill("11 6000-4321");
   await page.getByRole("button", { name: /^Reservar \d{2}:\d{2}$/ }).click();
 
   // Next tiene su propio anunciador de rutas con role="alert", así que hay que

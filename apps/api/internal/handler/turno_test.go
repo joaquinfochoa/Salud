@@ -349,7 +349,9 @@ func TestElTelefonoDelPacienteNoSeFiltra(t *testing.T) {
 	// tiene el turno, y es cómo avisa si se le cae la mañana.
 	entrarComo(t, srv, "agenda@ejemplo.com")
 	agenda := leerTodo(t, obtener(t, srv, "/api/v1/profesionales/"+profesionalID+"/turnos"))
-	if !strings.Contains(agenda, `"telefono"`) {
+	// El número, no la clave: `"telefono":""` también contiene `"telefono"`, y
+	// una primera versión de este test pasaba con el campo vacío.
+	if !strings.Contains(agenda, "1234-5678") {
 		t.Errorf("la agenda del profesional no trae el teléfono del paciente: %s", agenda)
 	}
 }

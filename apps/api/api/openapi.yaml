@@ -822,14 +822,25 @@ components:
 
     PartePaciente:
       type: object
-      required: [id, nombre, apellido]
+      required: [id, nombre, apellido, telefono]
       description: |
-        Sin email. El profesional necesita saber a quién atiende, no cómo
-        contactarlo por fuera de la plataforma.
+        El telefono SI, el email no. La asimetria es una decision: un
+        profesional que tiene que avisar que se le cayo la manana necesita
+        poder llamar, y el telefono es el canal con el que eso se hace de
+        verdad. El email no agrega nada para eso y amplia la superficie de
+        contacto.
+
+        Solo lo devuelve `GET /profesionales/{id}/turnos`, que exige sesion y
+        verifica que quien pregunta sea el dueno del perfil. No sale en ninguna
+        pagina publica ni en el listado del paciente.
       properties:
         id: { type: string, format: uuid }
         nombre: { type: string }
         apellido: { type: string }
+        telefono:
+          type: string
+          example: "+54 9 11 1234-5678"
+          description: "En forma legible, no E.164 — es para mostrar y para llamar."
 
     TurnoConProfesional:
       allOf:

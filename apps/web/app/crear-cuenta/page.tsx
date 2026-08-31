@@ -39,6 +39,7 @@ function FormularioCrearCuenta() {
           contrasena: String(formulario.get("contrasena") ?? ""),
           nombre: String(formulario.get("nombre") ?? ""),
           apellido: String(formulario.get("apellido") ?? ""),
+          telefono: String(formulario.get("telefono") ?? ""),
         }),
       });
 
@@ -99,6 +100,14 @@ function FormularioCrearCuenta() {
           etiqueta="Email"
           tipo="email"
           autoComplete="email"
+          error={error}
+        />
+        <Campo
+          nombre="telefono"
+          etiqueta="Celular"
+          tipo="tel"
+          autoComplete="tel"
+          ayuda="Para avisarte si hay un cambio en tu turno. No se muestra en tu perfil."
           error={error}
         />
         <Campo

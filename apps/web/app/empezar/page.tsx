@@ -77,6 +77,7 @@ function Onboarding() {
   const [apellido, setApellido] = useState("");
   const [email, setEmail] = useState("");
   const [contrasena, setContrasena] = useState("");
+  const [telefono, setTelefono] = useState("");
   const [matricula, setMatricula] = useState("");
   const [especialidad, setEspecialidad] = useState<Especialidad>("psicologia");
   const [modalidades, setModalidades] = useState<string[]>([]);
@@ -125,7 +126,9 @@ function Onboarding() {
   const numeroVisible = (n: number) => (tieneSesion ? n - 1 : n);
 
   const completo: Record<number, boolean> = {
-    1: Boolean(nombre.trim() && apellido.trim() && email.trim() && contrasena.length >= 8),
+    1: Boolean(
+      nombre.trim() && apellido.trim() && email.trim() && telefono.trim() && contrasena.length >= 8,
+    ),
     2: Boolean(matricula.trim()),
     3: modalidades.length > 0 && Boolean(zona.trim()),
     4: enCentavos(precio) !== null,
@@ -161,7 +164,7 @@ function Onboarding() {
       // El back deja la sesión abierta en la misma respuesta.
       await pedir("/api/v1/usuarios", {
         method: "POST",
-        body: JSON.stringify({ email, contrasena, nombre, apellido }),
+        body: JSON.stringify({ email, contrasena, nombre, apellido, telefono }),
       });
       irA(2);
     } catch (e) {
@@ -331,6 +334,16 @@ function Onboarding() {
           <Campo nombre="apellido" etiqueta="Apellido" valor={apellido} onCambiar={setApellido} autoComplete="family-name" error={error} />
         </div>
         <Campo nombre="email" etiqueta="Email" tipo="email" valor={email} onCambiar={setEmail} autoComplete="email" error={error} />
+        <Campo
+          nombre="telefono"
+          etiqueta="Celular"
+          tipo="tel"
+          valor={telefono}
+          onCambiar={setTelefono}
+          autoComplete="tel"
+          ayuda="Para avisarte si hay un cambio en tu turno. No se muestra en tu perfil."
+          error={error}
+        />
         <Campo
           nombre="contrasena"
           etiqueta="Contraseña"

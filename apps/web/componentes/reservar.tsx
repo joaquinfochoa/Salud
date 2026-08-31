@@ -52,6 +52,7 @@ export function Reservar({
       contrasena: String(formulario.get("contrasena") ?? ""),
       nombre: String(formulario.get("nombre") ?? ""),
       apellido: String(formulario.get("apellido") ?? ""),
+      telefono: String(formulario.get("telefono") ?? ""),
       motivo: String(formulario.get("motivo") ?? ""),
     };
 
@@ -65,6 +66,7 @@ export function Reservar({
           contrasena: datos.contrasena,
           nombre: datos.nombre,
           apellido: datos.apellido,
+          telefono: datos.telefono,
         }),
       });
     } catch (e) {
@@ -310,6 +312,13 @@ function Formulario({
           <Campo nombre="nombre" etiqueta="Nombre" error={errorDeCampo} />
           <Campo nombre="apellido" etiqueta="Apellido" error={errorDeCampo} />
         </div>
+        <Campo
+          nombre="telefono"
+          etiqueta="Celular"
+          tipo="tel"
+          ayuda="Para avisarte si hay un cambio en tu turno. No se muestra en tu perfil."
+          error={errorDeCampo}
+        />
         <Campo
           nombre="motivo"
           etiqueta="Motivo de la consulta"

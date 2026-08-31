@@ -132,6 +132,7 @@ func aRespuestaListaDeProfesional(turnos []service.TurnoConPaciente) respuestaLi
 				ID:       t.Paciente.ID.String(),
 				Nombre:   t.Paciente.Nombre,
 				Apellido: t.Paciente.Apellido,
+				Telefono: t.Paciente.Telefono.ParaMostrar(),
 			},
 		})
 	}

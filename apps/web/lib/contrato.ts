@@ -1056,6 +1056,18 @@ export interface components {
              *     agregar entropía real.
              */
             contrasena: string;
+            /**
+             * @description Acepta las formas que se usan de verdad y las normaliza a E.164:
+             *     "11 1234-5678", "011 15 1234-5678" y "+54 9 11 1234 5678" son el
+             *     mismo numero y quedan guardados igual.
+             *
+             *     El 0 de larga distancia y el 15 de movil no son parte del numero:
+             *     se sacan. Diez digitos pelados, sin ninguno de esos prefijos, se
+             *     toman como movil — el campo pide un celular, y quien quiera dar un
+             *     fijo lo dice con el 0 o con el +54.
+             * @example 11 1234-5678
+             */
+            telefono: string;
             /** @example Juan */
             nombre: string;
             /** @example Pérez */
@@ -1079,6 +1091,14 @@ export interface components {
             id: string;
             /** Format: email */
             email: string;
+            /**
+             * @description En forma canonica E.164. Sale aca porque este esquema responde
+             *     SOBRE VOS —el registro y `/usuarios/yo`—: tu propio telefono lo
+             *     podes ver. El de otra persona sale por otro camino y con otras
+             *     reglas.
+             * @example +5491112345678
+             */
+            telefono: string;
             nombre: string;
             apellido: string;
             /** Format: date-time */
@@ -1160,14 +1180,26 @@ export interface components {
             especialidad: components["schemas"]["Especialidad"];
         };
         /**
-         * @description Sin email. El profesional necesita saber a quién atiende, no cómo
-         *     contactarlo por fuera de la plataforma.
+         * @description El telefono SI, el email no. La asimetria es una decision: un
+         *     profesional que tiene que avisar que se le cayo la manana necesita
+         *     poder llamar, y el telefono es el canal con el que eso se hace de
+         *     verdad. El email no agrega nada para eso y amplia la superficie de
+         *     contacto.
+         *
+         *     Solo lo devuelve `GET /profesionales/{id}/turnos`, que exige sesion y
+         *     verifica que quien pregunta sea el dueno del perfil. No sale en ninguna
+         *     pagina publica ni en el listado del paciente.
          */
         PartePaciente: {
             /** Format: uuid */
             id: string;
             nombre: string;
             apellido: string;
+            /**
+             * @description En forma legible, no E.164 — es para mostrar y para llamar.
+             * @example +54 9 11 1234-5678
+             */
+            telefono: string;
         };
         TurnoConProfesional: components["schemas"]["Turno"] & {
             profesional: components["schemas"]["ParteProfesional"];

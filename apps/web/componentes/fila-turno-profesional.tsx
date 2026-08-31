@@ -41,6 +41,17 @@ export function FilaTurnoProfesional({
         {turno.paciente.nombre} {turno.paciente.apellido}
       </span>
 
+      {/* Un tel: y no texto plano: en el teléfono —que es donde el profesional
+          mira la agenda entre pacientes— llamar tiene que ser un toque, no
+          copiar y pegar. Solo lo ve el dueño del perfil: la API no devuelve
+          este campo en ninguna página pública ni en el listado del paciente. */}
+      <a
+        href={`tel:${turno.paciente.telefono.replace(/[^+\d]/g, "")}`}
+        className="text-sm tabular-nums text-tinta-suave underline decoration-borde underline-offset-2 hover:text-accion hover:decoration-accion"
+      >
+        {turno.paciente.telefono}
+      </a>
+
       <span className="text-sm text-tinta-suave">
         {MODALIDADES[turno.modalidad] ?? turno.modalidad}
       </span>

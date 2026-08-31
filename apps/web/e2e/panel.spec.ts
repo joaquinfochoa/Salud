@@ -29,6 +29,7 @@ async function registrar(page: Page, nombre: string, apellido: string, volver?: 
   await page.getByLabel("Nombre").fill(nombre);
   await page.getByLabel("Apellido").fill(apellido);
   await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Celular").fill("11 5000-1234");
   await page.getByLabel("Contraseña").fill("desarrollo123");
   await page.getByRole("button", { name: "Crear cuenta" }).click();
   return email;
@@ -57,6 +58,7 @@ test("un profesional se da de alta paso a paso y queda reservable", async ({ pag
   await page.getByLabel("Nombre").fill("Renata");
   await page.getByLabel("Apellido").fill("Kine");
   await page.getByLabel("Email").fill(`renata.${Date.now()}@ejemplo.com`);
+  await page.getByLabel("Celular").fill("11 5000-4321");
   await page.getByLabel("Contraseña").fill("desarrollo123");
   await page.getByRole("button", { name: "Crear cuenta" }).click();
 
@@ -140,6 +142,7 @@ test("registrarse con un email que ya existe ofrece entrar", async ({ page }) =>
   await page.getByLabel("Nombre").fill("Repetida");
   await page.getByLabel("Apellido").fill("Cuenta");
   await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Celular").fill("11 5000-1234");
   await page.getByLabel("Contraseña").fill("desarrollo123");
   await page.getByRole("button", { name: "Crear cuenta" }).click();
 
