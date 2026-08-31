@@ -20,6 +20,7 @@ func entradaAuthValida() domain.EntradaUsuario {
 		Contrasena: "unaclave8",
 		Nombre:     "Juan",
 		Apellido:   "Pérez",
+		Telefono:   "11 1234-5678",
 	}
 }
 

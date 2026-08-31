@@ -84,6 +84,7 @@ func sembrar(ctx context.Context, auth *service.Autenticacion, svc *service.Prof
 			Contrasena: contrasenaSemilla,
 			Nombre:     entrada.Nombre,
 			Apellido:   entrada.Apellido,
+			Telefono:   fmt.Sprintf("11 4000-%04d", 1000+i),
 		})
 		if err != nil {
 			return fmt.Errorf("seed: registrando a %s %s: %w", entrada.Nombre, entrada.Apellido, err)

@@ -18,6 +18,7 @@ func usuarioDePrueba(t *testing.T, email string) domain.Usuario {
 		Contrasena: "unaclave8",
 		Nombre:     "Juan",
 		Apellido:   "Pérez",
+		Telefono:   "11 1234-5678",
 	}, time.Now().UTC())
 	if err != nil {
 		t.Fatalf("NuevoUsuario: %v", err)

@@ -43,6 +43,12 @@ type Usuario struct {
 	Apellido string
 	CreadoEn time.Time
 
+	// Telefono es obligatorio. No se muestra en el perfil público ni en
+	// ninguna página abierta: es dato personal bajo Ley 25.326, y hoy su
+	// única razón de ser es poder avisar de un turno cuando existan
+	// notificaciones.
+	Telefono Telefono
+
 	// Hash puede ser nil: un usuario que entra con SSO no tiene contraseña.
 	// Hoy ningún constructor produce ese estado —NuevoUsuario exige
 	// contraseña— pero el campo ya lo admite para que agregar
@@ -61,6 +67,7 @@ type EntradaUsuario struct {
 	Contrasena string
 	Nombre     string
 	Apellido   string
+	Telefono   string
 }
 
 // NuevoUsuario valida y devuelve un usuario consistente, o un ErrorValidacion
@@ -79,6 +86,12 @@ func NuevoUsuario(entrada EntradaUsuario, ahora time.Time) (Usuario, error) {
 		verr.agregar("contrasena", err.Error())
 	} else {
 		u.Hash = hash
+	}
+
+	if tel, err := ParsearTelefono(entrada.Telefono); err != nil {
+		verr.agregar("telefono", err.Error())
+	} else {
+		u.Telefono = tel
 	}
 
 	u.Nombre = validarNombre(entrada.Nombre, "nombre", &verr)

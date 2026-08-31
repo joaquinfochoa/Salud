@@ -42,7 +42,7 @@ func conSesion(t *testing.T, srv *httptest.Server, email string) {
 	}
 	srv.Client().Jar = jar
 
-	cuerpo := `{"email":"` + email + `","contrasena":"desarrollo123","nombre":"Ana","apellido":"Test"}`
+	cuerpo := `{"email":"` + email + `","contrasena":"desarrollo123","nombre":"Ana","apellido":"Test","telefono":"11 1234-5678"}`
 	resp := postear(t, srv, "/api/v1/usuarios", cuerpo)
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("el registro de %s devolvió %d, se esperaba 201", email, resp.StatusCode)

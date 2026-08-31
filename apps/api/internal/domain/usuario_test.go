@@ -22,6 +22,45 @@ func entradaUsuarioValida() EntradaUsuario {
 		Contrasena: "unaclave8",
 		Nombre:     "Juan",
 		Apellido:   "Pérez",
+		Telefono:   "11 1234-5678",
+	}
+}
+
+// El teléfono es obligatorio y se guarda normalizado: es lo que va a usar el
+// día que existan notificaciones, y dos formas de escribir el mismo número
+// tienen que quedar iguales.
+func TestNuevoUsuarioNormalizaElTelefono(t *testing.T) {
+	e := entradaUsuarioValida()
+	e.Telefono = "011 15 1234-5678"
+
+	u, err := NuevoUsuario(e, time.Now())
+	if err != nil {
+		t.Fatalf("NuevoUsuario devolvió error: %v", err)
+	}
+	if u.Telefono != "+5491112345678" {
+		t.Errorf("Telefono = %q, se esperaba %q", u.Telefono, "+5491112345678")
+	}
+}
+
+func TestNuevoUsuarioExigeTelefono(t *testing.T) {
+	for _, caso := range []struct{ nombre, telefono string }{
+		{"vacio", ""},
+		{"con letras", "no tengo"},
+		{"incompleto", "1234"},
+	} {
+		t.Run(caso.nombre, func(t *testing.T) {
+			e := entradaUsuarioValida()
+			e.Telefono = caso.telefono
+
+			_, err := NuevoUsuario(e, time.Now())
+			var verr ErrorValidacion
+			if !errors.As(err, &verr) {
+				t.Fatalf("se esperaba ErrorValidacion, vino %v", err)
+			}
+			if !strings.Contains(err.Error(), "telefono") {
+				t.Errorf("el error no menciona el campo telefono: %v", err)
+			}
+		})
 	}
 }
 

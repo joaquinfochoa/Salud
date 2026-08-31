@@ -597,6 +597,7 @@ func TestListarDeProfesionalTraeAlPaciente(t *testing.T) {
 		Contrasena: "unaclave8",
 		Nombre:     "Ana",
 		Apellido:   "Prueba",
+		Telefono:   "11 5555-1234",
 	})
 	if err != nil {
 		t.Fatalf("Registrar: %v", err)

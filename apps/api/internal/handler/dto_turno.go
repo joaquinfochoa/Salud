@@ -70,12 +70,19 @@ type parteProfesional struct {
 	Especialidad string `json:"especialidad"`
 }
 
-// Sin email: el profesional necesita saber a quién atiende, no cómo contactarlo
-// por fuera de la plataforma.
+// El teléfono SÍ, el email no. La asimetría es una decisión, no un descuido:
+// un profesional que tiene que avisar que se le cayó la mañana necesita poder
+// llamar, y el teléfono es el canal con el que eso se hace de verdad. El email
+// no agrega nada para eso y amplía la superficie de contacto.
+//
+// Solo lo ve el dueño del perfil, y solo de pacientes que reservaron con él:
+// ListarDeProfesional exige sesión y verifica la propiedad del perfil. No sale
+// en ninguna página pública.
 type partePaciente struct {
 	ID       string `json:"id"`
 	Nombre   string `json:"nombre"`
 	Apellido string `json:"apellido"`
+	Telefono string `json:"telefono"`
 }
 
 type respuestaTurnoConProfesional struct {

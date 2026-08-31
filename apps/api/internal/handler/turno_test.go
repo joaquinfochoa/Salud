@@ -2,7 +2,9 @@ package handler
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -312,4 +314,68 @@ func TestElHuecoDesapareceYVuelveAlCancelar(t *testing.T) {
 	if despues := len(huecosDe(t, srv, profesionalID)); despues != antes {
 		t.Errorf("después de cancelar hay %d huecos, se esperaban %d", despues, antes)
 	}
+}
+
+// El teléfono del paciente es dato personal bajo Ley 25.326. La regla es que
+// lo ve el profesional con quien reservó, y nadie más.
+//
+// Este test existe porque la regla vive repartida entre dos DTO, y es
+// exactamente el tipo de cosa que se rompe agregando un campo "para
+// debuggear" y no se nota hasta que alguien la encuentra en el HTML.
+func TestElTelefonoDelPacienteNoSeFiltra(t *testing.T) {
+	srv, profesionalID, hueco := servidorConTurnos(t)
+
+	perfil := decodificarProfesional(t, obtener(t, srv, "/api/v1/profesionales/"+profesionalID))
+
+	conSesion(t, srv, "paciente.telefono@ejemplo.com")
+	if r := reservar(t, srv, profesionalID, hueco); r.StatusCode != http.StatusCreated {
+		t.Fatalf("no se pudo reservar: %d", r.StatusCode)
+	}
+
+	// La página pública del profesional no puede mencionar ningún teléfono: la
+	// ve cualquiera, incluidos los rastreadores.
+	publico := leerTodo(t, obtener(t, srv, "/api/v1/perfiles/"+perfil.Slug))
+	if strings.Contains(publico, "telefono") {
+		t.Errorf("el perfil público menciona un teléfono: %s", publico)
+	}
+
+	// El paciente, mirando SUS turnos, tampoco ve el del profesional.
+	mios := leerTodo(t, obtener(t, srv, "/api/v1/turnos"))
+	if strings.Contains(mios, "telefono") {
+		t.Errorf("el listado del paciente trae un teléfono: %s", mios)
+	}
+
+	// El profesional, en cambio, sí ve el de quien le reservó: es con quien
+	// tiene el turno, y es cómo avisa si se le cae la mañana.
+	entrarComo(t, srv, "agenda@ejemplo.com")
+	agenda := leerTodo(t, obtener(t, srv, "/api/v1/profesionales/"+profesionalID+"/turnos"))
+	if !strings.Contains(agenda, `"telefono"`) {
+		t.Errorf("la agenda del profesional no trae el teléfono del paciente: %s", agenda)
+	}
+}
+
+// entrarComo vuelve a una cuenta que YA existe. conSesion registra una nueva,
+// que para el profesional del servidor de prueba devuelve 409.
+func entrarComo(t *testing.T, srv *httptest.Server, email string) {
+	t.Helper()
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("no se pudo crear el cookie jar: %v", err)
+	}
+	srv.Client().Jar = jar
+
+	cuerpo := `{"email":"` + email + `","contrasena":"desarrollo123"}`
+	if r := postear(t, srv, "/api/v1/sesiones", cuerpo); r.StatusCode != http.StatusCreated {
+		t.Fatalf("login de %s devolvió %d", email, r.StatusCode)
+	}
+}
+
+func leerTodo(t *testing.T, resp *http.Response) string {
+	t.Helper()
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("no se pudo leer el cuerpo: %v", err)
+	}
+	return string(b)
 }

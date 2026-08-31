@@ -674,7 +674,7 @@ components:
   schemas:
     PeticionRegistro:
       type: object
-      required: [email, contrasena, nombre, apellido]
+      required: [email, contrasena, nombre, apellido, telefono]
       properties:
         email: { type: string, format: email, maxLength: 254, example: juan@ejemplo.com }
         contrasena:
@@ -689,6 +689,18 @@ components:
 
             Sin reglas de composición a propósito: alargan el formulario sin
             agregar entropía real.
+        telefono:
+          type: string
+          example: 11 1234-5678
+          description: |
+            Acepta las formas que se usan de verdad y las normaliza a E.164:
+            "11 1234-5678", "011 15 1234-5678" y "+54 9 11 1234 5678" son el
+            mismo numero y quedan guardados igual.
+
+            El 0 de larga distancia y el 15 de movil no son parte del numero:
+            se sacan. Diez digitos pelados, sin ninguno de esos prefijos, se
+            toman como movil — el campo pide un celular, y quien quiera dar un
+            fijo lo dice con el 0 o con el +54.
         nombre: { type: string, maxLength: 100, example: Juan }
         apellido: { type: string, maxLength: 100, example: Pérez }
 
@@ -704,10 +716,18 @@ components:
       description: |
         La identidad de login. Nunca incluye el hash de la contraseña ni el
         token de sesión: el token viaja solo en el `Set-Cookie`.
-      required: [id, email, nombre, apellido, creadoEn]
+      required: [id, email, telefono, nombre, apellido, creadoEn]
       properties:
         id: { type: string, format: uuid }
         email: { type: string, format: email }
+        telefono:
+          type: string
+          example: "+5491112345678"
+          description: |
+            En forma canonica E.164. Sale aca porque este esquema responde
+            SOBRE VOS —el registro y `/usuarios/yo`—: tu propio telefono lo
+            podes ver. El de otra persona sale por otro camino y con otras
+            reglas.
         nombre: { type: string }
         apellido: { type: string }
         creadoEn: { type: string, format: date-time }

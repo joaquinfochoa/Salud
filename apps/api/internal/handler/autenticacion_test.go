@@ -12,7 +12,8 @@ const cuerpoRegistro = `{
   "email": "juan@ejemplo.com",
   "contrasena": "unaclave8",
   "nombre": "Juan",
-  "apellido": "Pérez"
+  "apellido": "Pérez",
+  "telefono": "11 1234-5678"
 }`
 
 func cookieDeSesion(t *testing.T, resp *http.Response) *http.Cookie {
@@ -86,7 +87,8 @@ func TestRegistroInvalidoNombraElCampo(t *testing.T) {
 	  "email": "juan@ejemplo.com",
 	  "contrasena": "corta",
 	  "nombre": "Juan",
-	  "apellido": "Pérez"
+	  "apellido": "Pérez",
+	  "telefono": "11 1234-5678"
 	}`)
 	if resp.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("estado = %d, se esperaba 422", resp.StatusCode)

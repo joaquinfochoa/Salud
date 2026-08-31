@@ -13,6 +13,7 @@ type peticionRegistro struct {
 	Contrasena string `json:"contrasena"`
 	Nombre     string `json:"nombre"`
 	Apellido   string `json:"apellido"`
+	Telefono   string `json:"telefono"`
 }
 
 func (p peticionRegistro) aEntrada() domain.EntradaUsuario {
@@ -21,6 +22,7 @@ func (p peticionRegistro) aEntrada() domain.EntradaUsuario {
 		Contrasena: p.Contrasena,
 		Nombre:     p.Nombre,
 		Apellido:   p.Apellido,
+		Telefono:   p.Telefono,
 	}
 }
 
@@ -32,8 +34,12 @@ type peticionLogin struct {
 // respuestaUsuario no tiene hash, contraseña ni token. No es una omisión: es
 // la regla. El token viaja solo en el Set-Cookie, y el hash no sale nunca.
 type respuestaUsuario struct {
-	ID       string    `json:"id"`
-	Email    string    `json:"email"`
+	ID    string `json:"id"`
+	Email string `json:"email"`
+	// Telefono sale acá porque este DTO responde SOBRE VOS: el registro y
+	// /usuarios/yo. Tu propio teléfono lo podés ver; el de otra persona sale
+	// por otro camino y con otras reglas.
+	Telefono string    `json:"telefono"`
 	Nombre   string    `json:"nombre"`
 	Apellido string    `json:"apellido"`
 	CreadoEn time.Time `json:"creadoEn"`
@@ -43,6 +49,7 @@ func aRespuestaUsuario(u domain.Usuario) respuestaUsuario {
 	return respuestaUsuario{
 		ID:       u.ID.String(),
 		Email:    u.Email.String(),
+		Telefono: u.Telefono.String(),
 		Nombre:   u.Nombre,
 		Apellido: u.Apellido,
 		CreadoEn: u.CreadoEn,
