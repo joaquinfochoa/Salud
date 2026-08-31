@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Logo } from "./logo";
 
 /**
  * Una sola lista de rutas, dos presentaciones: tabs abajo en móvil, barra
@@ -27,6 +28,13 @@ export function NavegacionPanel() {
       aria-label="Panel"
       className="fixed inset-x-0 bottom-0 z-10 border-t border-borde bg-superficie sm:static sm:w-52 sm:shrink-0 sm:border-r sm:border-t-0"
     >
+      {/* El logo solo en escritorio: en móvil esto es la barra de tabs de
+          abajo, y ahí no hay lugar ni motivo para la marca. Era el único lugar
+          de la app donde no aparecía por ningún lado. */}
+      <div className="hidden border-b border-borde px-6 py-4 sm:block">
+        <Logo />
+      </div>
+
       <ul className="flex sm:flex-col sm:gap-1 sm:p-3">
         {RUTAS.map(({ href, texto }) => {
           // Coincidencia exacta y no startsWith: con startsWith, "/panel"
