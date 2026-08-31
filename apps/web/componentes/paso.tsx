@@ -38,7 +38,9 @@ export function Paso({
   children: React.ReactNode;
 }) {
   return (
-    <main className="mx-auto w-full max-w-lg px-4 py-10 sm:px-6 sm:py-16">
+    // Sin <main> ni centrado propio: el marco de dos columnas —pasos a la
+    // izquierda, vista previa a la derecha— lo pone la pantalla que lo usa.
+    <div>
       <div className="flex items-center justify-between gap-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-tinta-suave">
           Paso {numero} de {total}
@@ -111,6 +113,6 @@ export function Paso({
           ← Volver
         </button>
       )}
-    </main>
+    </div>
   );
 }

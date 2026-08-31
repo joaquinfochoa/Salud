@@ -83,11 +83,15 @@ export function EditorSemana({
             {delDia.length === 0 ? (
               <p className="mt-3 text-sm text-tinta-suave">No atendés este día.</p>
             ) : (
-              <ul className="mt-3 grid gap-3">
+              // @container y no breakpoints de ventana: este editor vive en dos
+              // anchos muy distintos —la columna del alta y la pantalla del
+              // panel— y lo que decide si las cuatro columnas entran es el
+              // ancho de la fila, no el del navegador.
+              <ul className="@container mt-3 grid gap-3">
                 {delDia.map(({ h, indice }) => (
                   <li
                     key={indice}
-                    className="grid gap-3 rounded-lg border border-borde p-3 sm:grid-cols-[auto_auto_1fr_auto] sm:items-end"
+                    className="grid gap-3 rounded-lg border border-borde p-3 @sm:grid-cols-2 @3xl:grid-cols-[7rem_7rem_minmax(0,1fr)_minmax(0,1fr)_auto] @3xl:items-end"
                   >
                     <Campo
                       etiqueta="Desde"
@@ -104,30 +108,28 @@ export function EditorSemana({
                       onCambiar={(hasta) => actualizar(indice, { hasta })}
                     />
 
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <Select
-                        etiqueta="Cada"
-                        id={`duracion-${indice}`}
-                        valor={String(h.duracionMin)}
-                        opciones={DURACIONES.map((d) => ({ valor: String(d), texto: `${d} min` }))}
-                        onCambiar={(v) => actualizar(indice, { duracionMin: Number(v) })}
-                      />
-                      <Select
-                        etiqueta="Modalidad"
-                        id={`modalidad-${indice}`}
-                        valor={h.modalidad}
-                        opciones={MODALIDADES}
-                        onCambiar={(v) =>
-                          actualizar(indice, { modalidad: v as HorarioSemanal["modalidad"] })
-                        }
-                      />
-                    </div>
+                    <Select
+                      etiqueta="Cada"
+                      id={`duracion-${indice}`}
+                      valor={String(h.duracionMin)}
+                      opciones={DURACIONES.map((d) => ({ valor: String(d), texto: `${d} min` }))}
+                      onCambiar={(v) => actualizar(indice, { duracionMin: Number(v) })}
+                    />
+                    <Select
+                      etiqueta="Modalidad"
+                      id={`modalidad-${indice}`}
+                      valor={h.modalidad}
+                      opciones={MODALIDADES}
+                      onCambiar={(v) =>
+                        actualizar(indice, { modalidad: v as HorarioSemanal["modalidad"] })
+                      }
+                    />
 
                     <button
                       type="button"
                       aria-label={`Quitar el bloque de ${texto} de ${h.desde} a ${h.hasta}`}
                       onClick={() => onCambiar(horarios.filter((_, i) => i !== indice))}
-                      className="h-11 rounded-lg px-3 text-sm font-semibold text-tinta-suave underline hover:text-tinta"
+                      className="h-11 justify-self-start rounded-lg px-3 text-sm font-semibold text-tinta-suave underline hover:text-tinta @sm:col-span-2 @3xl:col-span-1 @3xl:justify-self-auto"
                     >
                       Quitar
                     </button>
@@ -156,7 +158,10 @@ function Campo({
   onCambiar: (valor: string) => void;
 }) {
   return (
-    <div className="grid gap-1.5">
+    // min-w-0 y w-full: en CSS Grid un item no se encoge por debajo del ancho
+    // intrínseco de su contenido, y un <select> lo toma de su opción más larga.
+    // Sin esto, "Cada" y "Modalidad" se pisan cuando la columna es angosta.
+    <div className="grid min-w-0 gap-1.5">
       <label htmlFor={id} className="text-xs font-semibold uppercase tracking-wide text-tinta-suave">
         {etiqueta}
       </label>
@@ -165,7 +170,7 @@ function Campo({
         type={tipo}
         value={valor}
         onChange={(e) => onCambiar(e.target.value)}
-        className="h-11 rounded-lg border border-borde px-3 tabular-nums"
+        className="h-11 w-full rounded-lg border border-borde px-3 tabular-nums"
       />
     </div>
   );
@@ -185,7 +190,7 @@ function Select({
   onCambiar: (valor: string) => void;
 }) {
   return (
-    <div className="grid gap-1.5">
+    <div className="grid min-w-0 gap-1.5">
       <label htmlFor={id} className="text-xs font-semibold uppercase tracking-wide text-tinta-suave">
         {etiqueta}
       </label>
@@ -193,7 +198,7 @@ function Select({
         id={id}
         value={valor}
         onChange={(e) => onCambiar(e.target.value)}
-        className="h-11 rounded-lg border border-borde bg-superficie px-3"
+        className="h-11 w-full rounded-lg border border-borde bg-superficie px-3"
       >
         {opciones.map((o) => (
           <option key={o.valor} value={o.valor}>

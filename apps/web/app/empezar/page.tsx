@@ -7,6 +7,11 @@ import { Campo } from "@/componentes/campo";
 import { Chips } from "@/componentes/chips";
 import { EditorSemana } from "@/componentes/editor-semana";
 import { Paso } from "@/componentes/paso";
+import {
+  VistaPreviaPerfil,
+  type Borrador,
+  type Foco,
+} from "@/componentes/vista-previa-perfil";
 import { ESPECIALIDADES } from "@/componentes/tarjeta-profesional";
 import {
   ErrorAPI,
@@ -265,8 +270,49 @@ function Onboarding() {
 
   const comun = { total, aviso, enviando };
 
+  const borrador: Borrador = {
+    nombre,
+    apellido,
+    matricula,
+    // Recién a partir del paso que la pide: antes, el select todavía no se vio.
+    especialidad: paso >= 2 ? especialidad : null,
+    modalidades,
+    zona,
+    precio,
+    obrasSociales,
+    bio,
+    horarios,
+  };
+
+  // Qué parte de la vista previa está llenando cada paso. Es lo que ata el
+  // campo con su resultado sin tener que explicarlo.
+  const FOCO: Record<number, Foco> = {
+    1: "nombre",
+    2: "matricula",
+    3: "atencion",
+    4: "precio",
+    5: "bio",
+    6: "agenda",
+  };
+
+  /**
+   * Los pasos a la izquierda, cómo va quedando el perfil a la derecha.
+   *
+   * En móvil se apila y la vista previa queda debajo del formulario: primero se
+   * completa, después se ve el efecto. En escritorio quedan lado a lado y la
+   * vista previa acompaña el scroll.
+   */
+  const conVistaPrevia = (contenido: React.ReactNode) => (
+    <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
+      <div className="grid gap-10 lg:grid-cols-[minmax(0,32rem)_minmax(0,1fr)] lg:gap-16">
+        {contenido}
+        <VistaPreviaPerfil borrador={borrador} foco={FOCO[paso] ?? "nombre"} />
+      </div>
+    </main>
+  );
+
   if (paso === 1) {
-    return (
+    return conVistaPrevia(
       <Paso
         {...comun}
         numero={1}
@@ -296,7 +342,7 @@ function Onboarding() {
   }
 
   if (paso === 2) {
-    return (
+    return conVistaPrevia(
       <Paso
         {...comun}
         numero={numeroVisible(2)}
@@ -336,7 +382,7 @@ function Onboarding() {
   }
 
   if (paso === 3) {
-    return (
+    return conVistaPrevia(
       <Paso
         {...comun}
         numero={numeroVisible(3)}
@@ -366,7 +412,7 @@ function Onboarding() {
   }
 
   if (paso === 4) {
-    return (
+    return conVistaPrevia(
       <Paso
         {...comun}
         numero={numeroVisible(4)}
@@ -403,7 +449,7 @@ function Onboarding() {
   }
 
   if (paso === 5) {
-    return (
+    return conVistaPrevia(
       <Paso
         {...comun}
         numero={numeroVisible(5)}
@@ -432,7 +478,7 @@ function Onboarding() {
   }
 
   if (paso === 6) {
-    return (
+    return conVistaPrevia(
       <Paso
         {...comun}
         numero={numeroVisible(6)}
