@@ -36,7 +36,10 @@ export function TarjetaProfesional({
           <div className="flex min-w-0 items-start gap-4">
             <Iniciales nombre={profesional.nombre} apellido={profesional.apellido} />
             <div className="min-w-0">
-              <h2 className="truncate text-lg font-bold tracking-tight">{nombre}</h2>
+              {/* h3 y no h2: la tarjeta vive dentro de una sección que ya tiene su
+                  h2, y dos niveles iguales le dicen a un lector de pantalla que
+                  el nombre de una persona es un apartado de la página. */}
+              <h3 className="truncate text-lg font-bold tracking-tight">{nombre}</h3>
               <p className="text-sm text-tinta-suave">
                 {ESPECIALIDADES[profesional.especialidad] ?? profesional.especialidad}
                 {" · "}

@@ -46,6 +46,11 @@ export default async function Buscar({ searchParams }: PageProps<"/buscar">) {
         }}
       />
 
+      {/* El encabezado de los resultados. Va oculto a la vista porque el conteo
+          de abajo ya dice lo mismo, pero un lector de pantalla necesita el
+          nivel para que las tarjetas cuelguen de algo. */}
+      <h2 className="sr-only">Resultados</h2>
+
       <p className="mt-8 mb-4 text-sm text-tinta-suave">
         {lista.paginacion.total === 0
           ? "Sin resultados"

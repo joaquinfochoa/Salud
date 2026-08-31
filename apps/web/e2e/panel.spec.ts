@@ -51,7 +51,7 @@ async function registrar(page: Page, nombre: string, apellido: string, volver?: 
  */
 test("un profesional se da de alta paso a paso y queda reservable", async ({ page }) => {
   await page.goto("/profesionales");
-  await page.getByRole("link", { name: "Crear mi perfil" }).first().click();
+  await page.getByRole("link", { name: "Publicar mi agenda" }).first().click();
   await expect(page).toHaveURL("/empezar");
 
   // Paso 1: la cuenta.
@@ -197,13 +197,18 @@ test("se puede cerrar sesión, y queda cerrada", async ({ page }) => {
  * cancelarle a todos los de esa franja.
  */
 test("el profesional cancela un turno y el paciente lo ve cancelado", async ({ page }) => {
+  // El apellido lleva la marca de tiempo, igual que el email. Sin eso, cada
+  // corrida deja otra "Vera Cancela" en la misma agenda y el locator agarra la
+  // de una corrida anterior, que ya está cancelada y no tiene botón.
+  const apellido = `Cancela${Date.now()}`;
+
   // Se registra reservando, que es como llega un paciente de verdad.
   await page.goto("/perfiles/martin-gonzalez");
   await page.getByRole("link", { name: /^\d{2}:\d{2}$/ }).first().click();
   await page.getByLabel("Email").fill(`vera.${Date.now()}@ejemplo.com`);
   await page.getByLabel("Contraseña").fill("desarrollo123");
   await page.getByLabel("Nombre", { exact: true }).fill("Vera");
-  await page.getByLabel("Apellido").fill("Cancela");
+  await page.getByLabel("Apellido").fill(apellido);
   await page.getByLabel("Celular").fill("11 8500-1234");
   await page.getByLabel("Motivo de la consulta").fill("control");
   await page.getByRole("button", { name: /^Reservar \d{2}:\d{2}$/ }).click();
@@ -232,7 +237,7 @@ test("el profesional cancela un turno y el paciente lo ve cancelado", async ({ p
   });
   await pro.getByRole("button", { name: dia }).click();
 
-  const fila = pro.locator("main li").filter({ hasText: "Vera Cancela" }).first();
+  const fila = pro.locator("main li").filter({ hasText: apellido }).first();
   await fila.getByRole("button", { name: "Cancelar" }).click();
   await expect(pro.getByRole("heading", { name: /¿Cancelar el turno de Vera\?/ })).toBeVisible();
   await pro.getByRole("button", { name: "Sí, cancelar" }).click();

@@ -3,11 +3,15 @@ import { Hora } from "@/componentes/hora";
 import { TarjetaProfesional } from "@/componentes/tarjeta-profesional";
 import { ESPECIALIDADES } from "@/lib/especialidades";
 import { pedir, type Hueco, type ListaProfesionales, type Profesional } from "@/lib/api";
-import { armarDias } from "@/lib/dias";
+import { armarDias, type Dia } from "@/lib/dias";
 import { formatearDia } from "@/lib/formato";
 import { huecosDe, proximoHueco } from "@/lib/huecos";
 
 const EN_PORTADA = 4;
+
+// Dos semanas: con una, un profesional que atiende cada quince días deja la
+// portada sin nada que mostrar.
+const DIAS_DE_MUESTRA = 14;
 
 // Sin esto Next prerenderiza la página en el build, y son dos problemas a la
 // vez: la disponibilidad que muestra la portada quedaría congelada en el
@@ -36,14 +40,21 @@ export default async function Inicio() {
   const proximos = await Promise.all(destacados.map((p) => proximoHueco(p.id)));
 
   // Para la muestra de disponibilidad: el primero que efectivamente tenga
-  // horarios. Si ninguno tiene, la sección no se dibuja — antes que inventarla.
+  // horarios EN LA VENTANA QUE SE DIBUJA. No alcanza con que tenga alguno: la
+  // primera versión traía siete días y armaba siete —del 0 al 6—, así que un
+  // profesional cuyo próximo hueco caía justo en el séptimo dejaba la tarjeta
+  // dibujada y vacía.
   const indice = proximos.findIndex((h) => h !== null);
   const enVivo = indice >= 0 ? destacados[indice] : null;
-  const huecos = enVivo ? (await huecosDe(enVivo.id, 7)).slice(0, 30) : [];
+  const dias = enVivo
+    ? armarDias(await huecosDe(enVivo.id, DIAS_DE_MUESTRA), DIAS_DE_MUESTRA).filter(
+        (d) => d.items.length > 0,
+      )
+    : [];
 
   return (
     <main>
-      <Portada profesional={enVivo} huecos={huecos} />
+      <Portada profesional={enVivo} dias={dias} />
 
       <Seccion titulo="Cómo funciona">
         {/* Numerados porque acá el orden SÍ es información: son tres cosas que
@@ -79,6 +90,45 @@ export default async function Inicio() {
         </ul>
       </Seccion>
 
+      <Seccion titulo="Buscá por especialidad">
+        {/* Veintiséis puertas de entrada, y son datos reales: cada una lleva a
+            la búsqueda ya filtrada. Además le dan a Google veintiséis enlaces
+            internos con texto que dice exactamente qué hay del otro lado. */}
+        <ul className="flex flex-wrap gap-2">
+          {Object.entries(ESPECIALIDADES).map(([clave, nombre]) => (
+            <li key={clave}>
+              <Link
+                href={`/buscar?especialidad=${clave}`}
+                className="block rounded-full border border-borde bg-superficie px-4 py-2 text-sm font-semibold transition-colors hover:border-accion hover:bg-accent"
+              >
+                {nombre}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </Seccion>
+
+      <Seccion titulo="Preguntas">
+        <dl className="grid gap-8 sm:grid-cols-2">
+          <Pregunta titulo="¿Tengo que llamar para confirmar?">
+            No. El turno queda confirmado en el momento de reservarlo. Si el
+            profesional lo cancela, lo vas a ver en Mis turnos.
+          </Pregunta>
+          <Pregunta titulo="¿Cómo sé que el profesional es real?">
+            Cada perfil publica su número de matrícula. Es el dato que te
+            permite verificarlo por tu cuenta.
+          </Pregunta>
+          <Pregunta titulo="¿Se paga por acá?">
+            Todavía no. Reservás acá y pagás en la consulta, como siempre. El
+            precio está en el perfil antes de que reserves.
+          </Pregunta>
+          <Pregunta titulo="¿Puedo cancelar?">
+            Sí, desde Mis turnos, y el horario vuelve a quedar libre para otra
+            persona. No hace falta avisar por otro lado.
+          </Pregunta>
+        </dl>
+      </Seccion>
+
       <ParaProfesionales />
     </main>
   );
@@ -94,10 +144,10 @@ export default async function Inicio() {
  */
 function Portada({
   profesional,
-  huecos,
+  dias,
 }: {
   profesional: Profesional | null;
-  huecos: Hueco[];
+  dias: Dia<Hueco>[];
 }) {
   return (
     <section className="border-b border-borde bg-superficie">
@@ -130,8 +180,8 @@ function Portada({
           </div>
         </div>
 
-        {profesional && huecos.length > 0 && (
-          <Disponibilidad profesional={profesional} huecos={huecos} />
+        {profesional && dias.length > 0 && (
+          <Disponibilidad profesional={profesional} dias={dias} />
         )}
       </div>
     </section>
@@ -150,17 +200,15 @@ const HORAS_POR_DIA = 4;
 
 function Disponibilidad({
   profesional,
-  huecos,
+  dias,
 }: {
   profesional: Profesional;
-  huecos: Hueco[];
+  dias: Dia<Hueco>[];
 }) {
   // Dos días y no uno: con un solo día la tarjeta queda flaca cuando ese día
   // tiene pocos horarios libres, y sobre todo no se lee como una agenda, que es
   // exactamente lo que el producto es.
-  const conHuecos = armarDias(huecos, 7)
-    .filter((d) => d.items.length > 0)
-    .slice(0, DIAS_EN_PORTADA);
+  const conHuecos = dias.slice(0, DIAS_EN_PORTADA);
 
   return (
     <div className="surgir surgir-tarde">
@@ -281,6 +329,15 @@ function Seccion({
       </div>
       {children}
     </section>
+  );
+}
+
+function Pregunta({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="font-bold">{titulo}</dt>
+      <dd className="mt-2 max-w-prose leading-relaxed text-tinta-suave">{children}</dd>
+    </div>
   );
 }
 
